@@ -80,7 +80,13 @@ const CollectionResultCard = ({ collection, onClick, imageUrl, previewAlbums }) 
           <img src={imageUrl} alt={collection.name} onError={handleImageError} />
         </div>
         <div className="artist-card-title">
-          <h3>{collection.name}</h3>
+          <h3 style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical'
+          }}>{collection.name}</h3>
           {formatCount(collection.album_count || null, 'album') && (
             <p style={{ fontSize: '0.7rem', color: 'var(--color-text-faint)', margin: '0.125rem 0 0 0' }}>
               {formatCount(collection.album_count || null, 'album')}

@@ -15,6 +15,7 @@ import CoverCollage from '../components/CoverCollage';
 import ContextMenu from '../components/ContextMenu';
 import CardGrid from '../components/CardGrid';
 import { useContextMenu } from '../hooks/useContextMenu';
+import { useIsMobile } from '../hooks/useIsMobile';
 import { useFavoritesStore } from '../stores/favoritesStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { shareLink } from '../utils/shareLink';
@@ -22,6 +23,7 @@ import { shareLink } from '../utils/shareLink';
 export default function Collection() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const { user, isAdmin, isAuthenticated } = useAuthStore();
   const [collectionData, setCollectionData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -93,12 +95,8 @@ export default function Collection() {
 
         {/* Collection Info */}
         <div style={{ flex: 1 }}>
-          <div className="artist-header-title-row" style={{ display: 'flex', alignItems: 'stretch', justifyContent: 'space-between', gap: '1rem', marginBottom: '1rem' }}>
-            <h1 style={{ fontSize: '2.5rem', fontWeight: 'bold', margin: 0, color: 'var(--color-text-primary)' }}>
-              {collection.name}
-            </h1>
-
-            <div className="artist-header-actions" style={{ display: 'flex', gap: '0.5rem' }}>
+          {(() => {
+            const playActions = (
               <PlayActionsMenu
                 onPlay={albums?.length > 0 ? handleShuffleAll : undefined}
                 disabled={shuffleLoading}
@@ -113,12 +111,44 @@ export default function Collection() {
                   isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: () => shareLink({ title: collection.name, text: `${collection.name} collection` }) },
                 ].filter(Boolean)}
               />
-            </div>
-          </div>
+            );
 
-          <p style={{ color: 'var(--color-text-muted)', marginBottom: '1.5rem' }}>
-            {albums?.length || 0} {albums?.length === 1 ? 'album' : 'albums'}
-          </p>
+            const countLabel = `${albums?.length || 0} ${albums?.length === 1 ? 'album' : 'albums'}`;
+
+            return isMobile ? (
+              <>
+                <div className="artist-header-title-row" style={{ display: 'flex', alignItems: 'stretch', justifyContent: 'space-between', gap: '1rem', marginBottom: '1rem' }}>
+                  <h1 style={{ fontSize: '2.5rem', fontWeight: 'bold', margin: 0, color: 'var(--color-text-primary)' }}>
+                    {collection.name}
+                  </h1>
+
+                  <div className="artist-header-actions" style={{ display: 'flex', gap: '0.5rem' }}>
+                    {playActions}
+                  </div>
+                </div>
+
+                <p style={{ color: 'var(--color-text-muted)', marginBottom: '1.5rem' }}>
+                  {countLabel}
+                </p>
+              </>
+            ) : (
+              <>
+                <h1 style={{ fontSize: '2.5rem', fontWeight: 'bold', margin: '0 0 1rem 0', color: 'var(--color-text-primary)' }}>
+                  {collection.name}
+                </h1>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                  <div className="artist-header-actions" style={{ display: 'flex', gap: '0.5rem' }}>
+                    {playActions}
+                  </div>
+
+                  <p style={{ color: 'var(--color-text-muted)', margin: 0 }}>
+                    {countLabel}
+                  </p>
+                </div>
+              </>
+            );
+          })()}
 
           <AboutSection heading="About this collection" summary={summary} />
         </div>

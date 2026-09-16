@@ -101,9 +101,13 @@ export default function Collections() {
                   fontSize: '1rem',
                   fontWeight: '600',
                   color: 'var(--color-text-primary)',
+                  margin: 0,
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap'
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  lineHeight: 1.3
                 }}>
                   {collection.name}
                 </h3>
