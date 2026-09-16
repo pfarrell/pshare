@@ -27,7 +27,7 @@ function buildTrack(t: any, c: Context) {
     title: t.title,
     track_number: t.track_number,
     duration: t.duration_sec,
-    album: t.album_id ? { id: t.album_id, title: t.album_title, artist: { id: t.album_artist_id, name: t.album_artist_name } } : null,
+    album: t.album_id ? { id: t.album_id, title: t.album_title, release_year: t.album_release_year, artist: { id: t.album_artist_id, name: t.album_artist_name } } : null,
     artist: { id: t.track_artist_id ?? t.album_artist_id, name: t.track_artist_name ?? t.album_artist_name },
     image_path: t.album_image_path,
     url: `${streamBase(c)}/stream/${t.id}`,
@@ -44,7 +44,7 @@ export async function fetchTracksForIds(trackIds: number[], c: Context) {
     .leftJoin('artists as track_artist', 'track_artist.id', 'tracks.artist_id')
     .select([
       'tracks.id', 'tracks.title', 'tracks.track_number', 'tracks.duration_sec',
-      'albums.id as album_id', 'albums.title as album_title', 'albums.image_path as album_image_path',
+      'albums.id as album_id', 'albums.title as album_title', 'albums.image_path as album_image_path', 'albums.release_year as album_release_year',
       'album_artist.id as album_artist_id', 'album_artist.name as album_artist_name',
       'track_artist.id as track_artist_id', 'track_artist.name as track_artist_name',
     ])

@@ -158,7 +158,7 @@ collections.post('/:id/tracks/random', async (c) => {
 
   const rows = await sql<any>`
     SELECT t.id, t.title, t.track_number, t.duration_sec,
-           al.id as album_id, al.title as album_title, al.image_path as album_image_path,
+           al.id as album_id, al.title as album_title, al.image_path as album_image_path, al.release_year as album_release_year,
            ar.id as artist_id, ar.name as artist_name,
            track_ar.id as track_artist_id, track_ar.name as track_artist_name
     FROM collection_albums ca
@@ -177,7 +177,7 @@ collections.post('/:id/tracks/random', async (c) => {
     title: t.title,
     track_number: t.track_number,
     duration: t.duration_sec,
-    album: { id: t.album_id, title: t.album_title, artist: { id: t.artist_id, name: t.artist_name } },
+    album: { id: t.album_id, title: t.album_title, release_year: t.album_release_year, artist: { id: t.artist_id, name: t.artist_name } },
     artist: { id: t.track_artist_id ?? t.artist_id, name: t.track_artist_name ?? t.artist_name },
     image_path: t.album_image_path,
     url: `${streamBase(c)}/stream/${t.id}`,

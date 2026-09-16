@@ -56,7 +56,7 @@ albums.get('/:id', async (c) => {
     title: t.title,
     track_number: t.track_number,
     duration: t.duration_sec,
-    album: { id: album.id, title: album.title, artist: { id: artist.id, name: artist.name } },
+    album: { id: album.id, title: album.title, release_year: album.release_year, artist: { id: artist.id, name: artist.name } },
     artist: { id: t.artist_id ?? artist.id, name: t.artist_name ?? artist.name },
     image_path: album.image_path,
     url: `${streamBase(c)}/stream/${t.id}`,

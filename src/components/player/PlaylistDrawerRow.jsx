@@ -40,6 +40,7 @@ const PlaylistDrawerRow = ({
   onTouchStartRow,
   onTouchEndRow,
   onRemove,
+  hoverProps,
 }) => {
   const navigate = useNavigate();
   const closeDrawer = usePlayerStore((s) => s.closeDrawer);
@@ -109,6 +110,7 @@ const PlaylistDrawerRow = ({
       onTouchStart={mobile ? composedTouchStart : undefined}
       onTouchMove={mobile ? composedTouchMove : undefined}
       onTouchEnd={mobile ? composedTouchEnd : undefined}
+      {...hoverProps}
     >
       {imageUrl ? (
         <img className="playlist-track-art" src={imageUrl} alt={track.title} style={{ width: artSize, height: artSize }} />

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import PlaylistDrawer from './PlaylistDrawer';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -331,4 +331,60 @@ test('declining Clear Playlist still closes the drawer', () => {
 
   expect(usePlayerStore.getState().drawerOpen).toBe(false);
   window.confirm.mockRestore();
+});
+
+describe('hover tooltip', () => {
+  test('resting the mouse on a row for 500ms shows a tooltip with that track\'s info', () => {
+    vi.useFakeTimers();
+    renderDrawer();
+    const row = screen.getByText(/Track 3/).closest('.track-item');
+
+    fireEvent.mouseEnter(row, { clientX: 100, clientY: 100 });
+    act(() => { vi.advanceTimersByTime(500); });
+
+    expect(document.querySelector('.playlist-track-tooltip')).toBeInTheDocument();
+    expect(within(document.querySelector('.playlist-track-tooltip')).getByText('Track 3')).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  test('does not show the tooltip before 500ms have elapsed', () => {
+    vi.useFakeTimers();
+    renderDrawer();
+    const row = screen.getByText(/Track 3/).closest('.track-item');
+
+    fireEvent.mouseEnter(row, { clientX: 100, clientY: 100 });
+    act(() => { vi.advanceTimersByTime(300); });
+
+    expect(document.querySelector('.playlist-track-tooltip')).not.toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  test('moving the mouse off the row before 500ms cancels the tooltip', () => {
+    vi.useFakeTimers();
+    renderDrawer();
+    const row = screen.getByText(/Track 3/).closest('.track-item');
+
+    fireEvent.mouseEnter(row, { clientX: 100, clientY: 100 });
+    fireEvent.mouseLeave(row);
+    act(() => { vi.advanceTimersByTime(500); });
+
+    expect(document.querySelector('.playlist-track-tooltip')).not.toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  test('does not attach hover behavior on mobile', () => {
+    const originalInnerWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { value: 500, configurable: true });
+    vi.useFakeTimers();
+
+    renderDrawer();
+    const row = screen.getByText(/Track 3/).closest('.track-item');
+    fireEvent.mouseEnter(row, { clientX: 100, clientY: 100 });
+    act(() => { vi.advanceTimersByTime(500); });
+
+    expect(document.querySelector('.playlist-track-tooltip')).not.toBeInTheDocument();
+
+    vi.useRealTimers();
+    Object.defineProperty(window, 'innerWidth', { value: originalInnerWidth, configurable: true });
+  });
 });

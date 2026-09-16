@@ -3,7 +3,9 @@ import { usePlayerStore } from '../../stores/playerStore';
 import { apiService } from '../../services/api';
 import { isMobileDevice } from '../../utils/device';
 import PlaylistDrawerRow from './PlaylistDrawerRow';
+import PlaylistTrackTooltip from './PlaylistTrackTooltip';
 import { useContextMenu } from '../../hooks/useContextMenu';
+import { useRowHoverTooltip } from '../../hooks/useRowHoverTooltip';
 import ContextMenu from '../ContextMenu';
 
 const PlaylistDrawer = ({ onSaveQueue }) => {
@@ -46,6 +48,9 @@ const PlaylistDrawer = ({ onSaveQueue }) => {
     activeRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [drawerOpen]);
 
+  const mobile = isMobileDevice();
+  const { tooltip, getRowHoverProps } = useRowHoverTooltip({ disabled: mobile });
+
   const bgCtx = useContextMenu({
     shouldIgnore: (e) => Boolean(e.target.closest('.track-item')) || playlist.length === 0,
   });
@@ -66,8 +71,6 @@ const PlaylistDrawer = ({ onSaveQueue }) => {
   };
 
   if (!drawerOpen) return null;
-
-  const mobile = isMobileDevice();
 
   const handleRowActivate = (index) => {
     if (index === currentTrackIndex) {
@@ -141,6 +144,7 @@ const PlaylistDrawer = ({ onSaveQueue }) => {
                 onTouchStartRow={handleTouchStart}
                 onTouchEndRow={handleTouchEnd}
                 onRemove={removeTrackFromPlaylist}
+                hoverProps={getRowHoverProps(track)}
               />
             );
           })}
@@ -170,6 +174,8 @@ const PlaylistDrawer = ({ onSaveQueue }) => {
           </button>
         </ContextMenu>
       </div>
+
+      {tooltip && <PlaylistTrackTooltip track={tooltip.track} x={tooltip.x} y={tooltip.y} />}
     </>
   );
 };

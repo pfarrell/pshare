@@ -35,6 +35,7 @@ const baseProps = (overrides = {}) => ({
   onTouchStartRow: vi.fn(),
   onTouchEndRow: vi.fn(() => vi.fn()),
   onRemove: vi.fn(),
+  hoverProps: {},
   ...overrides,
 });
 
@@ -108,6 +109,22 @@ test('mobile rows are not draggable', () => {
 test('shows the dragging class when isDragged is true', () => {
   renderRow({ isDragged: true });
   expect(screen.getByText(/Track 1/).closest('.track-item')).toHaveClass('dragging');
+});
+
+test('spreads hoverProps onto the row element', () => {
+  const onMouseEnter = vi.fn();
+  const onMouseMove = vi.fn();
+  const onMouseLeave = vi.fn();
+  renderRow({ hoverProps: { onMouseEnter, onMouseMove, onMouseLeave } });
+  const row = screen.getByText(/Track 1/).closest('.track-item');
+
+  fireEvent.mouseEnter(row);
+  fireEvent.mouseMove(row);
+  fireEvent.mouseLeave(row);
+
+  expect(onMouseEnter).toHaveBeenCalled();
+  expect(onMouseMove).toHaveBeenCalled();
+  expect(onMouseLeave).toHaveBeenCalled();
 });
 
 describe('Go to Album / Go to Artist / Go to Playlist menu', () => {
