@@ -3,12 +3,13 @@ import { sql } from 'kysely'
 import { db } from '../db/database.js'
 import type { Variables } from '../types.js'
 import { notesService } from '../services/notesService.js'
-import { createRecallNote, getRecallItem, decryptRecallToken, appendBacklink, stripBacklink } from '../services/recallService.js'
+import { getRecallItem, decryptRecallToken, stripBacklink } from '../services/recallService.js'
 import { getCollectionSummary } from '../services/wikipedia.js'
 import { streamBase } from '../db/streamUrl.js'
 import { requireAuth } from '../middleware/auth.js'
 import { canModify } from '../utils/ownership.js'
 import { downloadToDisk, ImageStorageError } from '../services/imageStorage.js'
+import { createNotesRoutes } from './notesRoutes.js'
 
 const collections = new Hono<{ Variables: Variables }>()
 
@@ -376,55 +377,7 @@ collections.delete('/:id/albums/:albumId', requireAuth, async (c) => {
   return c.json({ success: true })
 })
 
-// POST /collection/:id/notes — requires a connected Recall account; creates a new journal-style note
-collections.post('/:id/notes', async (c) => {
-  const user = c.get('user')
-  if (!user) return c.json({ error: 'Authentication required' }, 401)
 
-  const collectionId = parseInt(c.req.param('id'))
-  const connection = await notesService.getConnection(user.id)
-  if (!connection) return c.json({ error: 'Recall not connected' }, 403)
-
-  const body = await c.req.json()
-  const content = typeof body.content === 'string' ? body.content.trim() : ''
-  if (!content) return c.json({ error: 'content is required' }, 400)
-
-  const collection = await db.selectFrom('collections').selectAll().where('id', '=', collectionId).executeTakeFirst()
-  if (!collection) return c.json({ error: 'Collection not found' }, 404)
-
-  const token = decryptRecallToken(connection.recall_token)
-  let item
-  try {
-    item = await createRecallNote(token, {
-      title: `${collection.name} (collection)`,
-      contentText: appendBacklink(content, `/collection/${collectionId}`),
-      tags: ['bemused'],
-    })
-  } catch (err) {
-    console.error('Failed to create Recall note:', err)
-    return c.json({ error: 'Failed to save note to Recall' }, 502)
-  }
-
-  const note = await notesService.createNote('collection', collectionId, user.id, item.id)
-  return c.json({ id: note.id, recall_item_id: item.id }, 201)
-})
-
-// DELETE /collection/:id/notes/:noteId — unlinks only; the Recall item itself is untouched
-collections.delete('/:id/notes/:noteId', async (c) => {
-  const user = c.get('user')
-  if (!user) return c.json({ error: 'Authentication required' }, 401)
-
-  const noteId = parseInt(c.req.param('noteId'))
-  const note = await notesService.findNoteById(noteId)
-  if (!note) return c.json({ error: 'Not found' }, 404)
-
-  if (note.author_user_id !== user.id && !user.admin) {
-    return c.json({ error: 'Not permitted' }, 403)
-  }
-
-  await notesService.deleteNote(noteId)
-  return c.json({ ok: true })
-})
 
 // PATCH /collection/:id/albums/reorder
 collections.patch('/:id/albums/reorder', requireAuth, async (c) => {
@@ -493,5 +446,13 @@ collections.post('/:id/image', requireAuth, async (c) => {
     return c.json({ error: 'Failed to save image' }, 500)
   }
 })
+
+collections.route('/', createNotesRoutes({
+  kind: 'collection',
+  loadEntityTitle: async (id) => {
+    const collection = await db.selectFrom('collections').select('name').where('id', '=', id).executeTakeFirst()
+    return collection ? `${collection.name} (collection)` : null
+  },
+}))
 
 export default collections

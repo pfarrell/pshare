@@ -5,8 +5,9 @@ import { streamBase } from '../db/streamUrl.js'
 import { albumsService } from '../services/albumsService.js'
 import { countsService } from '../services/countsService.js'
 import { notesService } from '../services/notesService.js'
-import { createRecallNote, getRecallItem, decryptRecallToken, appendBacklink, stripBacklink } from '../services/recallService.js'
+import { getRecallItem, decryptRecallToken, stripBacklink } from '../services/recallService.js'
 import { requireAuth } from '../middleware/auth.js'
+import { createNotesRoutes } from './notesRoutes.js'
 
 const albums = new Hono<{ Variables: Variables }>()
 
@@ -161,55 +162,16 @@ albums.get('/:id/adjacent', async (c) => {
   return c.json({ prev: prev ?? null, next: next ?? null })
 })
 
-// POST /album/:id/notes — requires a connected Recall account; creates a new journal-style note
-albums.post('/:id/notes', async (c) => {
-  const user = c.get('user')
-  if (!user) return c.json({ error: 'Authentication required' }, 401)
 
-  const albumId = parseInt(c.req.param('id'))
-  const connection = await notesService.getConnection(user.id)
-  if (!connection) return c.json({ error: 'Recall not connected' }, 403)
 
-  const body = await c.req.json()
-  const content = typeof body.content === 'string' ? body.content.trim() : ''
-  if (!content) return c.json({ error: 'content is required' }, 400)
-
-  const album = await albumsService.findAlbumById(albumId)
-  if (!album) return c.json({ error: 'Album not found' }, 404)
-  const artist = await albumsService.findArtistById(album.artist_id)
-
-  const token = decryptRecallToken(connection.recall_token)
-  let item
-  try {
-    item = await createRecallNote(token, {
-      title: `${album.title} — ${artist?.name ?? 'Unknown Artist'}`,
-      contentText: appendBacklink(content, `/album/${albumId}`),
-      tags: ['bemused'],
-    })
-  } catch (err) {
-    console.error('Failed to create Recall note:', err)
-    return c.json({ error: 'Failed to save note to Recall' }, 502)
-  }
-
-  const note = await notesService.createNote('album', albumId, user.id, item.id)
-  return c.json({ id: note.id, recall_item_id: item.id }, 201)
-})
-
-// DELETE /album/:id/notes/:noteId — unlinks only; the Recall item itself is untouched
-albums.delete('/:id/notes/:noteId', async (c) => {
-  const user = c.get('user')
-  if (!user) return c.json({ error: 'Authentication required' }, 401)
-
-  const noteId = parseInt(c.req.param('noteId'))
-  const note = await notesService.findNoteById(noteId)
-  if (!note) return c.json({ error: 'Not found' }, 404)
-
-  if (note.author_user_id !== user.id && !user.admin) {
-    return c.json({ error: 'Not permitted' }, 403)
-  }
-
-  await notesService.deleteNote(noteId)
-  return c.json({ ok: true })
-})
+albums.route('/', createNotesRoutes({
+  kind: 'album',
+  loadEntityTitle: async (id) => {
+    const album = await albumsService.findAlbumById(id)
+    if (!album) return null
+    const artist = await albumsService.findArtistById(album.artist_id)
+    return `${album.title} — ${artist?.name ?? 'Unknown Artist'}`
+  },
+}))
 
 export default albums
