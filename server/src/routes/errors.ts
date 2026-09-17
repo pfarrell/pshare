@@ -1,29 +1,18 @@
 import { Hono } from 'hono'
 import { db } from '../db/database.js'
 import { errorLogService } from '../services/errorLogService.js'
+import { paginate } from '../utils/http.js'
 
 const errors = new Hono()
 
 // GET /admin/errors?page=1&limit=25&source=upload
 errors.get('/', async (c) => {
-  const page = Math.max(1, parseInt(c.req.query('page') ?? '1') || 1)
-  const limit = Math.max(1, parseInt(c.req.query('limit') ?? '25') || 1)
   const source = c.req.query('source') || undefined
-  const offset = (page - 1) * limit
-
-  const countResult = await errorLogService.countAll(source)
-  const total = Number(countResult?.count ?? 0)
-  const entries = await errorLogService.listPage(limit, offset, source)
-
-  return c.json({
-    errors: entries,
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    },
+  const { items, pagination } = await paginate(c, {
+    count: async () => Number((await errorLogService.countAll(source))?.count ?? 0),
+    listPage: (limit, offset) => errorLogService.listPage(limit, offset, source),
   })
+  return c.json({ errors: items, pagination })
 })
 
 // DELETE /admin/errors - clear every error_log row.

@@ -6,7 +6,7 @@ import { sql } from 'kysely'
 import type { Variables } from '../types.js'
 import { countsService } from '../services/countsService.js'
 import { requireAuth } from '../middleware/auth.js'
-import { canModify } from '../utils/ownership.js'
+import { loadOwned } from '../utils/http.js'
 import { downloadToDisk, ImageStorageError } from '../services/imageStorage.js'
 
 const playlists = new Hono<{ Variables: Variables }>()
@@ -207,13 +207,9 @@ playlists.get('/surprise', requireAuth, async (c) => {
 })
 
 // POST /playlist/:id/tracks - Add a track to playlist
-playlists.post('/:id/tracks', requireAuth, async (c) => {
-  const playlistId = parseInt(c.req.param('id'))
-  const user = c.get('user')!
-
-  const playlist = await db.selectFrom('playlists').selectAll().where('id', '=', playlistId).executeTakeFirst()
-  if (!playlist) return c.json({ error: 'Not found' }, 404)
-  if (!canModify(user, playlist)) return c.json({ error: 'Not permitted' }, 403)
+playlists.post('/:id/tracks', requireAuth, loadOwned('playlists'), async (c) => {
+  const playlist = c.get('owned')!
+  const playlistId = playlist.id
 
   const { track_id } = await c.req.json()
 
@@ -246,14 +242,10 @@ playlists.post('/:id/tracks', requireAuth, async (c) => {
 })
 
 // DELETE /playlist/:playlistId/tracks/:trackId - Remove a track from playlist
-playlists.delete('/:playlistId/tracks/:trackId', requireAuth, async (c) => {
-  const playlistId = parseInt(c.req.param('playlistId'))
+playlists.delete('/:playlistId/tracks/:trackId', requireAuth, loadOwned('playlists', 'playlistId'), async (c) => {
+  const playlist = c.get('owned')!
+  const playlistId = playlist.id
   const trackId = parseInt(c.req.param('trackId'))
-  const user = c.get('user')!
-
-  const playlist = await db.selectFrom('playlists').selectAll().where('id', '=', playlistId).executeTakeFirst()
-  if (!playlist) return c.json({ error: 'Not found' }, 404)
-  if (!canModify(user, playlist)) return c.json({ error: 'Not permitted' }, 403)
 
   await db
     .deleteFrom('playlist_tracks')
@@ -265,13 +257,9 @@ playlists.delete('/:playlistId/tracks/:trackId', requireAuth, async (c) => {
 })
 
 // PATCH /playlist/:id/tracks/reorder - Update track order
-playlists.patch('/:id/tracks/reorder', requireAuth, async (c) => {
-  const playlistId = parseInt(c.req.param('id'))
-  const user = c.get('user')!
-
-  const playlist = await db.selectFrom('playlists').selectAll().where('id', '=', playlistId).executeTakeFirst()
-  if (!playlist) return c.json({ error: 'Not found' }, 404)
-  if (!canModify(user, playlist)) return c.json({ error: 'Not permitted' }, 403)
+playlists.patch('/:id/tracks/reorder', requireAuth, loadOwned('playlists'), async (c) => {
+  const playlist = c.get('owned')!
+  const playlistId = playlist.id
 
   const { track_orders } = await c.req.json() // Array of { track_id, order }
 
@@ -289,33 +277,23 @@ playlists.patch('/:id/tracks/reorder', requireAuth, async (c) => {
 })
 
 // PUT /playlist/:id - Update playlist metadata
-playlists.put('/:id', requireAuth, async (c) => {
-  const id = parseInt(c.req.param('id'))
-  const user = c.get('user')!
-
-  const playlist = await db.selectFrom('playlists').selectAll().where('id', '=', id).executeTakeFirst()
-  if (!playlist) return c.json({ error: 'Not found' }, 404)
-  if (!canModify(user, playlist)) return c.json({ error: 'Not permitted' }, 403)
+playlists.put('/:id', requireAuth, loadOwned('playlists'), async (c) => {
+  const playlist = c.get('owned')!
 
   const { name, image_path } = await c.req.json()
 
   await db
     .updateTable('playlists')
     .set({ name, image_path })
-    .where('id', '=', id)
+    .where('id', '=', playlist.id)
     .execute()
 
   return c.json({ success: true })
 })
 
 // POST /playlist/:id/image — download and save a playlist image from a URL
-playlists.post('/:id/image', requireAuth, async (c) => {
-  const id = parseInt(c.req.param('id'))
-  const user = c.get('user')!
-
-  const playlist = await db.selectFrom('playlists').selectAll().where('id', '=', id).executeTakeFirst()
-  if (!playlist) return c.json({ error: 'Not found' }, 404)
-  if (!canModify(user, playlist)) return c.json({ error: 'Not permitted' }, 403)
+playlists.post('/:id/image', requireAuth, loadOwned('playlists'), async (c) => {
+  const playlist = c.get('owned')!
 
   const body = await c.req.json()
   const { image_url, image_name } = body
@@ -334,7 +312,7 @@ playlists.post('/:id/image', requireAuth, async (c) => {
         image_path: image_name,
         updated_at: new Date(),
       })
-      .where('id', '=', id)
+      .where('id', '=', playlist.id)
       .returningAll()
       .executeTakeFirst()
 

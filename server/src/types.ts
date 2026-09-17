@@ -10,4 +10,7 @@ export interface User {
 
 export type Variables = {
   user?: User
+  // Set by utils/http.ts loadOwned(): the collection/playlist row the
+  // current user is allowed to modify.
+  owned?: Record<string, any>
 }

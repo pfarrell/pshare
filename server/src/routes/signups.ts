@@ -1,26 +1,16 @@
 import { Hono } from 'hono'
 import { signupLogService } from '../services/signupLogService.js'
+import { paginate } from '../utils/http.js'
 
 const signups = new Hono()
 
 // GET /admin/signups?page=1&limit=25
 signups.get('/', async (c) => {
-  const page = Math.max(1, parseInt(c.req.query('page') ?? '1') || 1)
-  const limit = Math.max(1, parseInt(c.req.query('limit') ?? '25') || 1)
-  const offset = (page - 1) * limit
-
-  const total = await signupLogService.countAll()
-  const entries = await signupLogService.listPage(limit, offset)
-
-  return c.json({
-    signups: entries,
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    },
+  const { items, pagination } = await paginate(c, {
+    count: () => signupLogService.countAll(),
+    listPage: (limit, offset) => signupLogService.listPage(limit, offset),
   })
+  return c.json({ signups: items, pagination })
 })
 
 // GET /admin/signups/unseen-count — powers the badge on the Admin nav link.
