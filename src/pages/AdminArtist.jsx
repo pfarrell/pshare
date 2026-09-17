@@ -9,6 +9,7 @@ import TagsSection from '../components/TagsSection';
 import MusicBrainzPicker from '../components/MusicBrainzPicker';
 import { parseWikipediaSlug } from '../utils/wikipediaSlug';
 import { toFilename } from '../utils/filenames';
+import { formatCount } from '../utils/formatters';
 import toast from 'react-hot-toast';
 
 const AdminArtist = () => {
@@ -920,7 +921,7 @@ const AdminArtist = () => {
                       )}
                       {item.artist && <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginLeft: '0.5rem' }}>by {item.artist.name}</span>}
                       {(relationTypeToAdd === 'related_artist' || relationTypeToAdd === 'member' || relationTypeToAdd === 'member_of') && (
-                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginLeft: '0.5rem' }}>{item.album_count} album{item.album_count !== 1 ? 's' : ''} · ID {item.id}</span>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginLeft: '0.5rem' }}>{formatCount(Number(item.album_count), 'album')} · ID {item.id}</span>
                       )}
                     </div>
                     <button
@@ -1227,7 +1228,7 @@ const AdminArtist = () => {
                       }}
                     />
                     <span style={{ flex: 1, minWidth: 0 }}>{stub.name}</span>
-                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>{stub.album_count} {stub.album_count === 1 ? 'album' : 'albums'}</span>
+                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.7rem' }}>{formatCount(Number(stub.album_count), 'album')}</span>
                     <span style={{ color: 'var(--color-text-faint)', fontSize: '0.75rem' }}>{(stub.similarity * 100).toFixed(0)}%</span>
                   </label>
                 ))}
@@ -1316,7 +1317,7 @@ const AdminArtist = () => {
                 onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-bg-surface)')}
               >
                 <span style={{ fontWeight: '500' }}>{artist.name}</span>
-                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{artist.album_count} album{artist.album_count !== 1 ? 's' : ''} · ID {artist.id}</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{formatCount(Number(artist.album_count), 'album')} · ID {artist.id}</span>
               </div>
             ))}
           </div>
@@ -1388,7 +1389,7 @@ const AdminArtist = () => {
       {showDeleteModal && (
         <ConfirmDeleteModal
           title="Delete artist"
-          message={`Delete "${artistData.name}" and ${ownAlbumCount} album${ownAlbumCount === 1 ? '' : 's'}, ${ownTrackCount} track${ownTrackCount === 1 ? '' : 's'}? This cannot be undone.`}
+          message={`Delete "${artistData.name}" and ${formatCount(ownAlbumCount, 'album')}, ${formatCount(ownTrackCount, 'track')}? This cannot be undone.`}
           onConfirm={confirmDelete}
           onCancel={() => setShowDeleteModal(false)}
         />

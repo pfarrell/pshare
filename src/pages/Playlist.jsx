@@ -14,6 +14,7 @@ import ContextMenu from '../components/ContextMenu';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { useFavoritesStore } from '../stores/favoritesStore';
 import { shareLink } from '../utils/shareLink';
+import { formatCount } from '../utils/formatters';
 
 export default function Playlist() {
   const { id } = useParams();
@@ -145,7 +146,7 @@ export default function Playlist() {
           </div>
 
           <p style={{ color: 'var(--color-text-muted)', marginBottom: '1.5rem' }}>
-            {tracks?.length || 0} {tracks?.length === 1 ? 'track' : 'tracks'}
+            {formatCount(tracks?.length || 0, 'track')}
           </p>
 
           {/* Action Buttons */}

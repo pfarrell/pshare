@@ -19,6 +19,7 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import { useFavoritesStore } from '../stores/favoritesStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { shareLink } from '../utils/shareLink';
+import { formatCount } from '../utils/formatters';
 
 export default function Collection() {
   const { id } = useParams();
@@ -113,7 +114,7 @@ export default function Collection() {
               />
             );
 
-            const countLabel = `${albums?.length || 0} ${albums?.length === 1 ? 'album' : 'albums'}`;
+            const countLabel = formatCount(albums?.length || 0, 'album');
 
             return isMobile ? (
               <>

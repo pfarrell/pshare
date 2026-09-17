@@ -223,3 +223,15 @@ describe('AdminArtist — delete confirmation', () => {
     await waitFor(() => expect(apiService.deleteArtist).toHaveBeenCalledWith('5'));
   });
 });
+
+describe('AdminArtist — count pluralization', () => {
+  test('shows "1 album" (singular) when the API returns album_count as the string "1"', async () => {
+    apiService.searchAdminArtists.mockResolvedValue({ data: [{ id: 999, name: 'Other Artist', album_count: '1' }] });
+    const user = userEvent.setup();
+    renderAdminArtist();
+    const input = await screen.findByPlaceholderText('Search for another artist...');
+    await user.type(input, 'Other');
+    await user.click(within(input.closest('form')).getByRole('button', { name: 'Search' }));
+    expect(await screen.findByText('1 album · ID 999')).toBeInTheDocument();
+  });
+});

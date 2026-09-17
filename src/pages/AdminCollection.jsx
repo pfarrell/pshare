@@ -8,6 +8,7 @@ import { useContextMenu } from '../hooks/useContextMenu';
 import ContextMenu from '../components/ContextMenu';
 import { parseWikipediaSlug } from '../utils/wikipediaSlug';
 import { handleSmallImageError } from '../utils/imageFallback';
+import { formatCount } from '../utils/formatters';
 
 const AUTO_SCROLL_EDGE_PX = 60;
 const AUTO_SCROLL_SPEED_PX = 12;
@@ -872,7 +873,7 @@ export default function AdminCollection() {
         boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)', overflow: 'hidden'
       }}>
         <div style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)', fontWeight: '600' }}>
-          Albums ({albums.length}){stubs.length > 0 && `, ${stubs.length} placeholder${stubs.length === 1 ? '' : 's'}`}
+          Albums ({albums.length}){stubs.length > 0 && `, ${formatCount(stubs.length, 'placeholder')}`}
         </div>
 
         {albums.length === 0 && stubs.length === 0 ? (

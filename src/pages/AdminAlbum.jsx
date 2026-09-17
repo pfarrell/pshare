@@ -10,7 +10,7 @@ import MusicBrainzPicker from '../components/MusicBrainzPicker';
 import TrackArtistPicker from '../components/TrackArtistPicker';
 import ReprocessAlbumModal from '../components/ReprocessAlbumModal';
 import { parseWikipediaSlug } from '../utils/wikipediaSlug';
-import { formatDuration } from '../utils/formatters';
+import { formatDuration, formatCount } from '../utils/formatters';
 import { toFilename } from '../utils/filenames';
 import toast from 'react-hot-toast';
 
@@ -899,7 +899,7 @@ const AdminAlbum = () => {
       {showDeleteModal && (
         <ConfirmDeleteModal
           title="Delete album"
-          message={`Delete "${albumData?.album?.title}" and ${tracks.length} track${tracks.length === 1 ? '' : 's'}? This cannot be undone.`}
+          message={`Delete "${albumData?.album?.title}" and ${formatCount(tracks.length, 'track')}? This cannot be undone.`}
           onConfirm={confirmDelete}
           onCancel={() => setShowDeleteModal(false)}
         />
@@ -969,8 +969,8 @@ const AdminAlbum = () => {
                   </span>
                   <span style={{ fontSize: '0.8rem', color: 'var(--color-warning-text-muted)' }}>
                     {transferMode === 'move'
-                      ? `${item.album_count != null ? `${item.album_count} albums` : ''}`
-                      : `${item.artist?.name}${item.track_count != null ? ` · ${item.track_count} tracks` : ''}`}
+                      ? `${item.album_count != null ? formatCount(Number(item.album_count), 'album') : ''}`
+                      : `${item.artist?.name ?? ''}${item.track_count != null ? ` · ${formatCount(Number(item.track_count), 'track')}` : ''}`}
                   </span>
                 </div>
               );
@@ -989,7 +989,7 @@ const AdminAlbum = () => {
             <p style={{ fontSize: '0.875rem', color: 'var(--color-warning-text)', marginBottom: '0.5rem' }}>
               Destination: <strong>{mergeDestAlbum.title}</strong>
               {mergeDestAlbum.artist?.name && <span> — {mergeDestAlbum.artist.name}</span>}
-              {mergeDestAlbum.track_count != null && <span> ({mergeDestAlbum.track_count} tracks)</span>}
+              {mergeDestAlbum.track_count != null && <span> ({formatCount(Number(mergeDestAlbum.track_count), 'track')})</span>}
             </p>
             <label style={{ display: 'block', fontSize: '0.875rem', color: 'var(--color-warning-text)', marginBottom: '0.25rem' }}>
               Track number offset (0 = no change):
