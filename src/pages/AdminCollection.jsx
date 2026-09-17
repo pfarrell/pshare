@@ -6,7 +6,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import { useContextMenu } from '../hooks/useContextMenu';
 import ContextMenu from '../components/ContextMenu';
-import { parseWikipediaSlug } from '../utils/wikipediaSlug';
+import WikipediaSlugInput from '../components/admin/WikipediaSlugInput';
 import { handleSmallImageError } from '../utils/imageFallback';
 import { formatCount } from '../utils/formatters';
 
@@ -598,24 +598,13 @@ export default function AdminCollection() {
           <label htmlFor="collection-wikipedia" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
             Wikipedia
           </label>
-          <input
+          <WikipediaSlugInput
             id="collection-wikipedia"
-            type="text"
             value={collectionData?.wikipedia || ''}
-            onChange={(e) => setCollectionData({ ...collectionData, wikipedia: e.target.value })}
-            onPaste={(e) => {
-              const text = e.clipboardData.getData('text');
-              const parsed = parseWikipediaSlug(text);
-              if (parsed !== text) {
-                e.preventDefault();
-                setCollectionData({ ...collectionData, wikipedia: parsed });
-              }
-            }}
+            onChange={(wikipedia) => setCollectionData({ ...collectionData, wikipedia })}
             placeholder="e.g., Kind_of_Blue or a full wikipedia.org URL"
-            style={{
-              width: '100%', padding: '0.5rem', border: '1px solid var(--color-border-strong)',
-              borderRadius: '4px', fontSize: '1rem',
-            }}
+            className={undefined}
+            style={{ width: '100%', padding: '0.5rem', border: '1px solid var(--color-border-strong)', borderRadius: '4px', fontSize: '1rem' }}
           />
           <small style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
             The part after wikipedia.org/wiki/. Leave blank to skip Wikipedia lookup for this collection.

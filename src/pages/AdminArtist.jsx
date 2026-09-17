@@ -11,7 +11,7 @@ import MusicBrainzPicker from '../components/MusicBrainzPicker';
 import AdminPanel from '../components/admin/AdminPanel';
 import AdminField from '../components/admin/AdminField';
 import EntityImageGallery from '../components/admin/EntityImageGallery';
-import { parseWikipediaSlug } from '../utils/wikipediaSlug';
+import WikipediaSlugInput from '../components/admin/WikipediaSlugInput';
 import { toFilename } from '../utils/filenames';
 import { formatCount } from '../utils/formatters';
 import toast from 'react-hot-toast';
@@ -497,24 +497,11 @@ const AdminArtist = () => {
         </div>
 
         <AdminField label="Wikipedia Slug" htmlFor="artist-wikipedia" help="The part after wikipedia.org/wiki/">
-          <input
+          <WikipediaSlugInput
             id="artist-wikipedia"
-            type="text"
             value={wikipedia}
-            onChange={(e) => setWikipedia(e.target.value)}
-            onPaste={(e) => {
-              const text = e.clipboardData.getData('text');
-              const parsed = parseWikipediaSlug(text);
-              if (parsed !== text) {
-                e.preventDefault();
-                setWikipedia(parsed);
-              }
-            }}
+            onChange={setWikipedia}
             placeholder="e.g., The_Beatles or a full wikipedia.org URL"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck="false"
-            className="admin-input"
           />
         </AdminField>
 
