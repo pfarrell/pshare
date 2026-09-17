@@ -19,7 +19,6 @@ import AlbumAdditionalArtistsSection from './admin/album/AlbumAdditionalArtistsS
 import AlbumTracksTable from './admin/album/AlbumTracksTable';
 import { formatCount } from '../utils/formatters';
 import { toFilename } from '../utils/filenames';
-import toast from 'react-hot-toast';
 
 const AdminAlbum = () => {
   const { id } = useParams();

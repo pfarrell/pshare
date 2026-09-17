@@ -1,7 +1,7 @@
 // src/pages/Playlist.jsx
 import { useEffect, useState } from 'react';
 import ImageLightbox from '../components/ImageLightbox';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { usePlayerStore } from '../stores/playerStore';
 import { useAuthStore } from '../stores/authStore';
@@ -19,7 +19,6 @@ import { formatCount } from '../utils/formatters';
 
 export default function Playlist() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const setPageTracks = usePlayerStore((s) => s.setPageTracks);
   const { user, isAdmin, isAuthenticated } = useAuthStore();
