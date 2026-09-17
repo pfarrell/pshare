@@ -2528,3 +2528,5 @@
   color: #c00;
   border-radius: 4px;
 }
+
+.entity-search-result:hover { background-color: var(--color-bg-surface-muted); }
