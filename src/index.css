@@ -2489,6 +2489,9 @@
 .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
 .btn-lg { padding: 0.75rem 1.5rem; font-size: 1rem; }
 
+.admin-form-actions { display: flex; gap: 1rem; margin-top: 2rem; flex-wrap: wrap; }
+.admin-form-actions-delete { margin-left: auto; }
+
 .admin-field { margin-bottom: 1.5rem; }
 .admin-label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
 .admin-input {

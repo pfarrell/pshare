@@ -14,6 +14,7 @@ import AdminPanel from '../components/admin/AdminPanel';
 import AdminField from '../components/admin/AdminField';
 import EntityImageGallery from '../components/admin/EntityImageGallery';
 import WikipediaSlugInput from '../components/admin/WikipediaSlugInput';
+import AdminFormActions from '../components/admin/AdminFormActions';
 import { formatDuration, formatCount } from '../utils/formatters';
 import { toFilename } from '../utils/filenames';
 import toast from 'react-hot-toast';
@@ -571,59 +572,7 @@ const AdminAlbum = () => {
           />
         </div>
 
-        <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem', flexWrap: 'wrap' }}>
-          <button
-            type="submit"
-            disabled={saving}
-            style={{
-              padding: '0.75rem 1.5rem',
-              backgroundColor: '#3b82f6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              fontSize: '1rem',
-              cursor: saving ? 'not-allowed' : 'pointer',
-              opacity: saving ? 0.6 : 1,
-            }}
-          >
-            {saving ? 'Saving...' : 'Save'}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleCancel}
-            disabled={saving}
-            style={{
-              padding: '0.75rem 1.5rem',
-              backgroundColor: 'var(--color-text-muted)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              fontSize: '1rem',
-              cursor: saving ? 'not-allowed' : 'pointer',
-            }}
-          >
-            Cancel
-          </button>
-
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={saving}
-            style={{
-              padding: '0.75rem 1.5rem',
-              backgroundColor: '#ef4444',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              fontSize: '1rem',
-              cursor: saving ? 'not-allowed' : 'pointer',
-              marginLeft: 'auto',
-            }}
-          >
-            Delete Album
-          </button>
-        </div>
+        <AdminFormActions saving={saving} onCancel={handleCancel} onDelete={handleDelete} deleteLabel="Delete Album" />
       </form>
 
       <button

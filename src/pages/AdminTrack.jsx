@@ -7,6 +7,7 @@ import Loading from '../components/Loading';
 import TrackArtistPicker from '../components/TrackArtistPicker';
 import MusicBrainzPicker from '../components/MusicBrainzPicker';
 import MusicBrainzModal from '../components/MusicBrainzModal';
+import AdminFormActions from '../components/admin/AdminFormActions';
 import { formatDuration } from '../utils/formatters';
 import toast from 'react-hot-toast';
 
@@ -254,9 +255,7 @@ const AdminTrack = () => {
           />
         </div>
 
-        <button type="submit" disabled={saving} style={{ padding: '0.5rem 1.5rem', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: saving ? 'not-allowed' : 'pointer' }}>
-          {saving ? 'Saving...' : 'Save'}
-        </button>
+        <AdminFormActions saving={saving} />
       </form>
 
       <div style={{ marginTop: '2rem', padding: '1rem', backgroundColor: 'var(--color-bg-surface)', borderRadius: '4px', fontSize: '0.875rem' }}>
