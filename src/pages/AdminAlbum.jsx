@@ -11,9 +11,8 @@ import TrackArtistPicker from '../components/TrackArtistPicker';
 import ReprocessAlbumModal from '../components/ReprocessAlbumModal';
 import { parseWikipediaSlug } from '../utils/wikipediaSlug';
 import { formatDuration } from '../utils/formatters';
+import { toFilename } from '../utils/filenames';
 import toast from 'react-hot-toast';
-
-const toFilename = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 
 const AdminAlbum = () => {
   const { id } = useParams();

@@ -8,9 +8,8 @@ import ConfirmDeleteModal from '../components/ConfirmDeleteModal';
 import TagsSection from '../components/TagsSection';
 import MusicBrainzPicker from '../components/MusicBrainzPicker';
 import { parseWikipediaSlug } from '../utils/wikipediaSlug';
+import { toFilename } from '../utils/filenames';
 import toast from 'react-hot-toast';
-
-const toFilename = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 
 const AdminArtist = () => {
   const { id } = useParams();
