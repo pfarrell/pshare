@@ -11,7 +11,7 @@ import { useViewModeStore } from '../stores/viewModeStore';
 import { apiService } from '../services/api';
 import { usePlayerStore } from '../stores/playerStore';
 import { useAuthStore } from '../stores/authStore';
-import { useFavoritesStore } from '../stores/favoritesStore';
+import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
 import { formatCount, getAlbumYear } from '../utils/formatters';
 import { handleSmallImageError } from '../utils/imageFallback';
 
@@ -25,8 +25,7 @@ const AlbumCard = ({ album, artist, onClick, imageUrl, hideArtist = false, colle
   const setPlaylist = usePlayerStore((s) => s.setPlaylist);
   const setCollectionContext = usePlayerStore((s) => s.setCollectionContext);
   const { isAuthenticated } = useAuthStore();
-  const isFavorite = useFavoritesStore((s) => s.isFavorite('album', album.id));
-  const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
+  const favorite = useFavoriteToggle('album', album, { track_count: album.track_count, artist });
   const onThisArtist = useIsCurrentPage(artist?.id ? `/artist/${artist.id}` : null);
   const showGoToArtist = artist?.id && !onThisArtist;
   const ctxMenu = useContextMenu({
@@ -74,16 +73,6 @@ const AlbumCard = ({ album, artist, onClick, imageUrl, hideArtist = false, colle
     tagCollectionContext();
   });
 
-  const handleToggleFavorite = () => {
-    toggleFavorite('album', album.id, {
-      id: album.id,
-      title: album.title,
-      image_path: album.image_path,
-      track_count: album.track_count,
-      artist: artist ? { id: artist.id, name: artist.name } : null,
-    });
-  };
-
   const trackCount = formatCount(album.track_count || null, 'track');
   const trackCountSuffix = trackCount ? ` (${trackCount})` : '';
   const yearText = getAlbumYear(album.release_year);
@@ -100,9 +89,9 @@ const AlbumCard = ({ album, artist, onClick, imageUrl, hideArtist = false, colle
     isAuthenticated && { key: 'collection', icon: '▣', label: 'Add to Collection', onClick: () => setShowCollectionModal(true) },
     isAuthenticated && {
       key: 'favorite',
-      icon: isFavorite ? '★' : '☆',
-      label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
-      onClick: handleToggleFavorite,
+      icon: favorite.icon,
+      label: favorite.label,
+      onClick: favorite.toggle,
     },
   ];
 

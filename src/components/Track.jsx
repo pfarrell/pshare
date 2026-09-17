@@ -2,8 +2,8 @@
 import { useState } from 'react';
 import { usePlayerStore } from '../stores/playerStore';
 import { useAuthStore } from '../stores/authStore';
-import { useFavoritesStore } from '../stores/favoritesStore';
 import { apiService } from '../services/api';
+import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
 import { formatDuration } from '../utils/formatters';
 import { useNavigate } from 'react-router-dom';
 import { useContextMenu } from '../hooks/useContextMenu';
@@ -25,8 +25,7 @@ const Track = ({ track, index, trackCount, includeMeta = false, isPlaying = fals
   const setPlaylist = usePlayerStore((s) => s.setPlaylist);
   const playTrackAtIndex = usePlayerStore((s) => s.playTrackAtIndex);
   const { isAuthenticated } = useAuthStore();
-  const isFavorite = useFavoritesStore((s) => s.isFavorite('track', track.id));
-  const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
+  const favorite = useFavoriteToggle('track', track);
   const downloadsEnabled = import.meta.env.VITE_ENABLE_DOWNLOADS !== 'false';
   const isMobile = useIsMobile();
   const navigate = useNavigate();
@@ -154,15 +153,7 @@ const Track = ({ track, index, trackCount, includeMeta = false, isPlaying = fals
       e.preventDefault();
       e.stopPropagation();
     }
-    toggleFavorite('track', track.id, {
-      id: track.id,
-      title: track.title,
-      track_number: track.track_number,
-      duration: track.duration,
-      artist: track.artist,
-      album: track.album,
-      download_url: track.download_url,
-    });
+    favorite.toggle();
     ctxMenu.close();
   };
 
@@ -207,8 +198,8 @@ const Track = ({ track, index, trackCount, includeMeta = false, isPlaying = fals
     isAuthenticated && { key: 'notes', icon: '📝', label: 'Notes', onClick: handleShowNotes },
     isAuthenticated && {
       key: 'favorite',
-      icon: isFavorite ? '★' : '☆',
-      label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
+      icon: favorite.icon,
+      label: favorite.label,
       onClick: handleToggleFavorite,
     },
     downloadsEnabled && isAuthenticated && track.download_url && !isMobile && { key: 'download', icon: '⬇', label: 'Download', onClick: handleDownload },

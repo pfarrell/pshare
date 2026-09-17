@@ -4,7 +4,7 @@ import { formatCount } from '../utils/formatters';
 import { apiService } from '../services/api';
 import { usePlayerStore } from '../stores/playerStore';
 import { useAuthStore } from '../stores/authStore';
-import { useFavoritesStore } from '../stores/favoritesStore';
+import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
 import ResultRow from './ResultRow';
 import ContextMenu from './ContextMenu';
 import CoverCollage from './CoverCollage';
@@ -24,8 +24,7 @@ const PlaylistResultCard = ({ playlist, onClick, imageUrl, previewAlbums }) => {
   const addTracks = usePlayerStore((s) => s.addTracks);
   const setPlaylist = usePlayerStore((s) => s.setPlaylist);
   const { isAuthenticated } = useAuthStore();
-  const isFavorite = useFavoritesStore((s) => s.isFavorite('playlist', playlist.id));
-  const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
+  const favorite = useFavoriteToggle('playlist', playlist);
   const ctxMenu = useContextMenu({
     shouldIgnore: (e) => !isAuthenticated || e.target.closest('[data-result-row-play]'),
   });
@@ -62,15 +61,6 @@ const PlaylistResultCard = ({ playlist, onClick, imageUrl, previewAlbums }) => {
     addTracks(tracks, false, { flashActivity: true });
   });
 
-  const handleToggleFavorite = () => {
-    toggleFavorite('playlist', playlist.id, {
-      id: playlist.id,
-      name: playlist.name,
-      image_path: playlist.image_path,
-      track_count: playlist.track_count,
-    });
-  };
-
   const menu = (
     <ContextMenu
       open={ctxMenu.open}
@@ -80,9 +70,9 @@ const PlaylistResultCard = ({ playlist, onClick, imageUrl, previewAlbums }) => {
       onClose={ctxMenu.close}
       actions={[{
         key: 'favorite',
-        icon: isFavorite ? '★' : '☆',
-        label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
-        onClick: handleToggleFavorite,
+        icon: favorite.icon,
+        label: favorite.label,
+        onClick: favorite.toggle,
       }]}
       testId="playlist-card-menu-backdrop"
     />

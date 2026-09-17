@@ -5,8 +5,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { usePlayerStore } from '../stores/playerStore';
 import { useAuthStore } from '../stores/authStore';
-import { useFavoritesStore } from '../stores/favoritesStore';
 import { useContextMenu } from '../hooks/useContextMenu';
+import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useFetch } from '../hooks/useFetch';
 import PlayButton from '../components/PlayButton';
@@ -31,7 +31,6 @@ const TrackPage = () => {
   const addTrack = usePlayerStore((s) => s.addTrack);
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const setPageTracks = usePlayerStore((s) => s.setPageTracks);
-  const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
   const downloadsEnabled = import.meta.env.VITE_ENABLE_DOWNLOADS !== 'false';
   const isMobile = useIsMobile();
   const { data: track, loading, error } = useFetch(
@@ -41,7 +40,7 @@ const TrackPage = () => {
   const [showImageModal, setShowImageModal] = useState(false);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [showNotesModal, setShowNotesModal] = useState(false);
-  const isFavorite = useFavoritesStore((s) => (track ? s.isFavorite('track', track.id) : false));
+  const favorite = useFavoriteToggle('track', track);
   // Nothing in this menu applies to a logged-out visitor (Favorite/Add to
   // Playlist/Notes/Download all need an account, Edit needs admin, which
   // implies an account too) — suppress the long-press entirely rather than
@@ -80,19 +79,6 @@ const TrackPage = () => {
     }
   };
 
-  const handleToggleFavorite = () => {
-    if (!track) return;
-    toggleFavorite('track', track.id, {
-      id: track.id,
-      title: track.title,
-      track_number: track.track_number,
-      duration: track.duration,
-      artist: track.artist,
-      album: track.album,
-      download_url: track.download_url,
-    });
-  };
-
   if (loading) {
     return <Loading message="Loading track" />;
   }
@@ -109,9 +95,9 @@ const TrackPage = () => {
     isAuthenticated && { key: 'notes', icon: '📝', label: 'Notes', onClick: () => setShowNotesModal(true) },
     isAuthenticated && {
       key: 'favorite',
-      icon: isFavorite ? '★' : '☆',
-      label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
-      onClick: handleToggleFavorite,
+      icon: favorite.icon,
+      label: favorite.label,
+      onClick: favorite.toggle,
     },
     downloadsEnabled && isAuthenticated && track.download_url && !isMobile && {
       key: 'download', icon: '⬇', label: 'Download', onClick: () => { window.location.href = track.download_url; },

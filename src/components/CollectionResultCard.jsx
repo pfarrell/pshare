@@ -6,8 +6,8 @@ import CoverCollage from './CoverCollage';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useAuthStore } from '../stores/authStore';
-import { useFavoritesStore } from '../stores/favoritesStore';
 import { useViewModeStore } from '../stores/viewModeStore';
+import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
 import { handleSmallImageError } from '../utils/imageFallback';
 
 // previewAlbums is only passed by the Collections list page (its API response
@@ -18,13 +18,8 @@ const CollectionResultCard = ({ collection, onClick, imageUrl, previewAlbums }) 
   const isMobile = useIsMobile();
   const viewMode = useViewModeStore((s) => s.mode);
   const { isAuthenticated } = useAuthStore();
-  const isFavorite = useFavoritesStore((s) => s.isFavorite('collection', collection.id));
-  const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
+  const favorite = useFavoriteToggle('collection', collection);
   const ctxMenu = useContextMenu({ shouldIgnore: () => !isAuthenticated });
-
-  const handleToggleFavorite = () => {
-    toggleFavorite('collection', collection.id, { id: collection.id, name: collection.name, image_path: collection.image_path, album_count: collection.album_count });
-  };
 
   const menu = (
     <ContextMenu
@@ -35,9 +30,9 @@ const CollectionResultCard = ({ collection, onClick, imageUrl, previewAlbums }) 
       onClose={ctxMenu.close}
       actions={[{
         key: 'favorite',
-        icon: isFavorite ? '★' : '☆',
-        label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
-        onClick: handleToggleFavorite,
+        icon: favorite.icon,
+        label: favorite.label,
+        onClick: favorite.toggle,
       }]}
       testId="collection-card-menu-backdrop"
     />

@@ -5,23 +5,18 @@ import ContextMenu from './ContextMenu';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useAuthStore } from '../stores/authStore';
-import { useFavoritesStore } from '../stores/favoritesStore';
 import { useViewModeStore } from '../stores/viewModeStore';
+import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
 import { handleSmallImageError } from '../utils/imageFallback';
 
 const ArtistCard = ({ artist, onClick, imageUrl }) => {
   const isMobile = useIsMobile();
   const viewMode = useViewModeStore((s) => s.mode);
   const { isAuthenticated } = useAuthStore();
-  const isFavorite = useFavoritesStore((s) => s.isFavorite('artist', artist.id));
-  const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
+  const favorite = useFavoriteToggle('artist', artist);
   // Favorite is the only menu item for artists today, so suppress the
   // gesture entirely when logged out rather than opening an empty menu.
   const ctxMenu = useContextMenu({ shouldIgnore: () => !isAuthenticated });
-
-  const handleToggleFavorite = () => {
-    toggleFavorite('artist', artist.id, { id: artist.id, name: artist.name, image_path: artist.image_path });
-  };
 
   const menu = (
     <ContextMenu
@@ -32,9 +27,9 @@ const ArtistCard = ({ artist, onClick, imageUrl }) => {
       onClose={ctxMenu.close}
       actions={[{
         key: 'favorite',
-        icon: isFavorite ? '★' : '☆',
-        label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
-        onClick: handleToggleFavorite,
+        icon: favorite.icon,
+        label: favorite.label,
+        onClick: favorite.toggle,
       }]}
       testId="artist-card-menu-backdrop"
     />

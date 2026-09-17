@@ -16,9 +16,9 @@ import PlayActionsMenu from '../components/PlayActionsMenu';
 import AddToCollectionModal from '../components/AddToCollectionModal';
 import ContextMenu from '../components/ContextMenu';
 import { useContextMenu } from '../hooks/useContextMenu';
-import { useFavoritesStore } from '../stores/favoritesStore';
 import { useOvertoneAction } from '../hooks/useOvertoneAction';
 import { useFetch } from '../hooks/useFetch';
+import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
 import { shareLink } from '../utils/shareLink';
 
 const Album = () => {
@@ -39,8 +39,7 @@ const Album = () => {
   const [showAlbumModal, setShowAlbumModal] = useState(false);
   const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [adjacentAlbums, setAdjacentAlbums] = useState({ prev: null, next: null });
-  const isFavorite = useFavoritesStore((s) => s.isFavorite('album', parseInt(id)));
-  const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
+  const favorite = useFavoriteToggle('album', albumData?.album ?? null, { track_count: albumData?.tracks?.length, artist: albumData?.artist ?? null });
   const { overflowAction: overtoneAction, modal: overtoneModal } = useOvertoneAction(albumData?.album?.musicbrainz_id, 'release');
   // Edit/Add to Collection/Favorite/Share are all account-gated, so unless
   // Overtone applies (musicbrainz_id present — no login needed for that one),
@@ -109,18 +108,6 @@ const Album = () => {
     }
   };
 
-  const handleToggleFavorite = () => {
-    if (!albumData?.album) return;
-    toggleFavorite('album', album.id, {
-      id: album.id,
-      title: album.title,
-      image_path: album.image_path,
-      track_count: tracks?.length,
-      artist: artist ? { id: artist.id, name: artist.name } : null,
-    });
-    ctxMenu.close();
-  };
-
   const handleMadeSingle = (trackId) => {
     setAlbumData((d) => ({ ...d, tracks: d.tracks.filter((t) => t.id !== trackId) }));
   };
@@ -153,9 +140,9 @@ const Album = () => {
     isAuthenticated && { key: 'collection', icon: '▣', label: 'Add to Collection', onClick: () => setShowCollectionModal(true) },
     isAuthenticated && {
       key: 'favorite',
-      icon: isFavorite ? '★' : '☆',
-      label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
-      onClick: handleToggleFavorite,
+      icon: favorite.icon,
+      label: favorite.label,
+      onClick: favorite.toggle,
     },
     overtoneAction,
     isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: () => shareLink({ title: album.title, text: `${album.title} by ${artist.name}` }) },

@@ -17,8 +17,8 @@ import PlayActionsMenu from '../components/PlayActionsMenu';
 import ContextMenu from '../components/ContextMenu';
 import CardGrid from '../components/CardGrid';
 import { useContextMenu } from '../hooks/useContextMenu';
-import { useFavoritesStore } from '../stores/favoritesStore';
 import { useOvertoneAction } from '../hooks/useOvertoneAction';
+import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
 import { useFetch } from '../hooks/useFetch';
 import { shareLink } from '../utils/shareLink';
 import { useIsMobile } from '../hooks/useIsMobile';
@@ -36,8 +36,7 @@ const Artist = () => {
   const [showAllSimilar, setShowAllSimilar] = useState(false);
   const isMobile = useIsMobile();
   const [showArtistModal, setShowArtistModal] = useState(false);
-  const isFavorite = useFavoritesStore((s) => s.isFavorite('artist', parseInt(id)));
-  const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
+  const favorite = useFavoriteToggle('artist', artistData?.artist ?? null);
   const startScopeShuffle = usePlayerStore((s) => s.startScopeShuffle);
   const [shuffleLoading, setShuffleLoading] = useState(false);
   const { overflowAction: overtoneAction, modal: overtoneModal } = useOvertoneAction(artistData?.artist?.musicbrainz_id);
@@ -46,16 +45,6 @@ const Artist = () => {
   // visitor's long-press would open an empty menu. Suppress it entirely in
   // that case rather than popping up nothing.
   const ctxMenu = useContextMenu({ shouldIgnore: (e) => (!isAuthenticated && !overtoneAction) || e.target.tagName === 'A' || !!e.target.closest('button') });
-
-  const handleToggleFavorite = () => {
-    if (!artistData?.artist) return;
-    toggleFavorite('artist', artistData.artist.id, {
-      id: artistData.artist.id,
-      name: artistData.artist.name,
-      image_path: artistData.artist.image_path,
-    });
-    ctxMenu.close();
-  };
 
   const handleShuffleArtist = async () => {
     setShuffleLoading(true);
@@ -86,9 +75,9 @@ const Artist = () => {
     isAdmin && { key: 'edit', icon: '✎', label: 'Edit', onClick: () => navigate(`/admin/artist/${id}`) },
     isAuthenticated && {
       key: 'favorite',
-      icon: isFavorite ? '★' : '☆',
-      label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
-      onClick: handleToggleFavorite,
+      icon: favorite.icon,
+      label: favorite.label,
+      onClick: favorite.toggle,
     },
     overtoneAction,
     isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: () => shareLink({ title: artist.name, text: artist.name }) },

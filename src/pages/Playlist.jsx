@@ -12,8 +12,8 @@ import PlayActionsMenu from '../components/PlayActionsMenu';
 import CoverCollage from '../components/CoverCollage';
 import ContextMenu from '../components/ContextMenu';
 import { useContextMenu } from '../hooks/useContextMenu';
-import { useFavoritesStore } from '../stores/favoritesStore';
 import { useFetch } from '../hooks/useFetch';
+import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
 import { shareLink } from '../utils/shareLink';
 import { formatCount } from '../utils/formatters';
 
@@ -39,16 +39,8 @@ export default function Playlist() {
     [id]
   );
   const [showImageModal, setShowImageModal] = useState(false);
-  const isFavorite = useFavoritesStore((s) => s.isFavorite('playlist', parseInt(id)));
-  const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
+  const favorite = useFavoriteToggle('playlist', playlistData?.playlist ?? null, { track_count: playlistData?.tracks?.length });
   const ctxMenu = useContextMenu({ shouldIgnore: (e) => !isAuthenticated || e.target.tagName === 'A' || !!e.target.closest('button') });
-
-  const handleToggleFavorite = () => {
-    if (!playlistData?.playlist) return;
-    const { playlist: p } = playlistData;
-    toggleFavorite('playlist', p.id, { id: p.id, name: p.name, image_path: p.image_path, track_count: playlistData.tracks?.length });
-    ctxMenu.close();
-  };
 
   useEffect(() => {
     // Lets the footer play button fall back to "Play Now" behavior when the playlist is
@@ -89,9 +81,9 @@ export default function Playlist() {
     canEdit && { key: 'edit', icon: '✎', label: 'Edit', onClick: () => navigate(`/admin/playlist/${id}`) },
     isAuthenticated && {
       key: 'favorite',
-      icon: isFavorite ? '★' : '☆',
-      label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
-      onClick: handleToggleFavorite,
+      icon: favorite.icon,
+      label: favorite.label,
+      onClick: favorite.toggle,
     },
     isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: () => shareLink({ title: playlist.name, text: `${playlist.name} playlist` }) },
   ].filter(Boolean);

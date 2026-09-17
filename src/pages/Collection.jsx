@@ -16,8 +16,8 @@ import ContextMenu from '../components/ContextMenu';
 import CardGrid from '../components/CardGrid';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { useIsMobile } from '../hooks/useIsMobile';
-import { useFavoritesStore } from '../stores/favoritesStore';
 import { usePlayerStore } from '../stores/playerStore';
+import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
 import { useFetch } from '../hooks/useFetch';
 import { shareLink } from '../utils/shareLink';
 import { formatCount } from '../utils/formatters';
@@ -32,8 +32,7 @@ export default function Collection() {
     [id]
   );
   const [showImageModal, setShowImageModal] = useState(false);
-  const isFavorite = useFavoritesStore((s) => s.isFavorite('collection', parseInt(id)));
-  const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
+  const favorite = useFavoriteToggle('collection', collectionData?.collection ?? null, { album_count: collectionData?.albums?.length });
   const startScopeShuffle = usePlayerStore((s) => s.startScopeShuffle);
   const [shuffleLoading, setShuffleLoading] = useState(false);
   const ctxMenu = useContextMenu({ shouldIgnore: (e) => !isAuthenticated || e.target.tagName === 'A' || !!e.target.closest('button') });
@@ -47,13 +46,6 @@ export default function Collection() {
     }
   };
 
-  const handleToggleFavorite = () => {
-    if (!collectionData?.collection) return;
-    const { collection: c } = collectionData;
-    toggleFavorite('collection', c.id, { id: c.id, name: c.name, image_path: c.image_path, album_count: collectionData.albums?.length });
-    ctxMenu.close();
-  };
-
   if (loading) return <Loading />;
   if (error) return <Retry message={error.message} onRetry={loadCollection} />;
   if (!collectionData) return <div>Collection not found</div>;
@@ -65,9 +57,9 @@ export default function Collection() {
     canEdit && { key: 'edit', icon: '✎', label: 'Edit', onClick: () => navigate(`/admin/collection/${id}`) },
     isAuthenticated && {
       key: 'favorite',
-      icon: isFavorite ? '★' : '☆',
-      label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
-      onClick: handleToggleFavorite,
+      icon: favorite.icon,
+      label: favorite.label,
+      onClick: favorite.toggle,
     },
     isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: () => shareLink({ title: collection.name, text: `${collection.name} collection` }) },
   ].filter(Boolean);
