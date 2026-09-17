@@ -23,6 +23,11 @@
   --color-warning-row-border: #fde68a;
   --color-warning-text: #856404;
   --color-warning-text-muted: #92400e;
+  --z-modal: 1000;
+  --z-menu-backdrop: 1150;
+  --z-menu: 1200;
+  --z-modal-over-drawer: 1250;
+  --z-modal-top: 2000;
 }
 
 [data-theme="dark"] {
@@ -1181,6 +1186,42 @@
   text-align: left;
   max-height: 100%;
   overflow: visible;
+}
+
+/* =================================
+   MODALS (components/Modal.jsx)
+   ================================= */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  box-sizing: border-box;
+  z-index: var(--z-modal);
+}
+
+.modal-backdrop--drawer { z-index: var(--z-modal-over-drawer); }
+.modal-backdrop--top { z-index: var(--z-modal-top); }
+
+.modal-panel {
+  background-color: var(--color-bg-surface);
+  border-radius: 8px;
+  padding: 1.5rem;
+  width: 100%;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  box-sizing: border-box;
+}
+
+.modal-panel--sm { max-width: 400px; }
+
+.modal-panel--md {
+  max-width: 500px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
 }
 
 /* =================================
