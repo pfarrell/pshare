@@ -1,8 +1,9 @@
 // src/pages/AdminErrors.jsx
-import { useEffect, useState } from 'react';
 import { apiService } from '../services/api';
 import Loading from '../components/Loading';
 import Retry from '../components/Retry';
+import { usePaginatedList } from '../hooks/usePaginatedList';
+import Pagination from '../components/admin/Pagination';
 
 const SOURCE_COLORS = {
   upload: { bg: '#fee2e2', color: '#991b1b' },
@@ -18,29 +19,9 @@ const SOURCE_COLORS = {
 const getSourceColors = (source) => SOURCE_COLORS[source] || { bg: 'var(--color-border)', color: 'var(--color-text-secondary)' };
 
 export default function AdminErrors() {
-  const [errors, setErrors] = useState([]);
-  const [pagination, setPagination] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
-
-  const loadErrors = async (page = 1) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await apiService.getErrors(page, 25);
-      setErrors(response.data.errors);
-      setPagination(response.data.pagination);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadErrors(currentPage);
-  }, [currentPage]);
+  const { items: errors, setItems: setErrors, pagination, page: currentPage, goToPage, loading, error, reload } = usePaginatedList(
+    (page) => apiService.getErrors(page, 25).then((response) => ({ items: response.data.errors, pagination: response.data.pagination }))
+  );
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -58,14 +39,9 @@ export default function AdminErrors() {
     }
   };
 
-  const handlePageChange = (newPage) => {
-    if (newPage < 1 || (pagination && newPage > pagination.totalPages)) return;
-    setCurrentPage(newPage);
-    window.scrollTo(0, 0);
-  };
 
   if (loading && !errors.length) return <Loading message="Loading errors" />;
-  if (error) return <Retry error={error} />;
+  if (error) return <Retry message={error.message} onRetry={reload} />;
 
   return (
     <div style={{ padding: '2rem', backgroundColor: 'var(--color-bg-surface-muted)', minHeight: '100%' }}>
@@ -125,42 +101,7 @@ export default function AdminErrors() {
         </div>
       </div>
 
-      {pagination && pagination.totalPages > 1 && (
-        <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
-          <button
-            onClick={() => handlePageChange(currentPage - 1)}
-            disabled={currentPage === 1}
-            style={{ padding: '0.5rem 1rem', backgroundColor: currentPage === 1 ? 'var(--color-border)' : '#3b82f6', color: currentPage === 1 ? 'var(--color-text-faint)' : 'white', border: 'none', borderRadius: '4px', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontSize: '0.875rem', fontWeight: '500' }}
-          >
-            Previous
-          </button>
-          <div style={{ display: 'flex', gap: '0.25rem' }}>
-            {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
-              let pageNum;
-              if (pagination.totalPages <= 5) pageNum = i + 1;
-              else if (currentPage <= 3) pageNum = i + 1;
-              else if (currentPage >= pagination.totalPages - 2) pageNum = pagination.totalPages - 4 + i;
-              else pageNum = currentPage - 2 + i;
-              return (
-                <button
-                  key={pageNum}
-                  onClick={() => handlePageChange(pageNum)}
-                  style={{ padding: '0.5rem 0.75rem', backgroundColor: currentPage === pageNum ? '#3b82f6' : 'var(--color-bg-surface)', color: currentPage === pageNum ? 'white' : 'var(--color-text-secondary)', border: '1px solid var(--color-border-strong)', borderRadius: '4px', cursor: 'pointer', fontSize: '0.875rem', fontWeight: currentPage === pageNum ? '600' : '400' }}
-                >
-                  {pageNum}
-                </button>
-              );
-            })}
-          </div>
-          <button
-            onClick={() => handlePageChange(currentPage + 1)}
-            disabled={currentPage === pagination.totalPages}
-            style={{ padding: '0.5rem 1rem', backgroundColor: currentPage === pagination.totalPages ? 'var(--color-border)' : '#3b82f6', color: currentPage === pagination.totalPages ? 'var(--color-text-faint)' : 'white', border: 'none', borderRadius: '4px', cursor: currentPage === pagination.totalPages ? 'not-allowed' : 'pointer', fontSize: '0.875rem', fontWeight: '500' }}
-          >
-            Next
-          </button>
-        </div>
-      )}
+      <Pagination page={currentPage} totalPages={pagination?.totalPages} onPageChange={goToPage} />
     </div>
   );
 }
