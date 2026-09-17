@@ -105,3 +105,24 @@ describe('useUnsavedChangesGuard', () => {
     expect(useUnsavedChangesStore.getState().save).toBeNull();
   });
 });
+
+describe('useUnsavedChangesGuard under a router basename', () => {
+  test('link intercept navigates to the link target, not basename+basename+target', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const save = vi.fn().mockResolvedValue();
+    const BasenameHarness = () => {
+      useUnsavedChangesGuard({ isDirty: true, save, basename: '/pshare/app/' });
+      return <Link to="/elsewhere">elsewhere</Link>;
+    };
+    render(
+      <MemoryRouter basename="/pshare/app" initialEntries={['/pshare/app/edit']}>
+        <Routes>
+          <Route path="/edit" element={<BasenameHarness />} />
+          <Route path="/elsewhere" element={<div>Elsewhere page</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+    await userEvent.click(screen.getByText('elsewhere'));
+    expect(await screen.findByText('Elsewhere page')).toBeInTheDocument();
+  });
+});

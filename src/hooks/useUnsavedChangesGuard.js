@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUnsavedChangesStore } from '../stores/unsavedChangesStore';
+import { toRouterPath } from '../utils/routerPath';
 
 export const UNSAVED_CHANGES_PROMPT = 'You have unsaved changes. Click OK to save and leave, or Cancel to stay on this page.';
 
@@ -9,7 +10,7 @@ export const UNSAVED_CHANGES_PROMPT = 'You have unsaved changes. Click OK to sav
 // in-app link clicks, registration with Layout's pull-to-refresh prompt, and
 // navigateAway() for the page's own Back/Cancel controls. Every save path
 // goes through `save`, so there is exactly one payload definition per page.
-export const useUnsavedChangesGuard = ({ isDirty, save, onSaveError, backLinkClass = 'admin-back-link' }) => {
+export const useUnsavedChangesGuard = ({ isDirty, save, onSaveError, backLinkClass = 'admin-back-link', basename }) => {
   const navigate = useNavigate();
   const onSaveErrorRef = useRef(onSaveError);
   useEffect(() => { onSaveErrorRef.current = onSaveError; });
@@ -50,13 +51,13 @@ export const useUnsavedChangesGuard = ({ isDirty, save, onSaveError, backLinkCla
 
       if (!window.confirm(UNSAVED_CHANGES_PROMPT)) return;
       if (await trySave()) {
-        setTimeout(() => navigate(href), 0);
+        setTimeout(() => navigate(toRouterPath(href, basename)), 0);
       }
     };
     // Capture phase so this runs before react-router's <Link> handler.
     document.addEventListener('click', handleClick, true);
     return () => document.removeEventListener('click', handleClick, true);
-  }, [isDirty, trySave, navigate, backLinkClass]);
+  }, [isDirty, trySave, navigate, backLinkClass, basename]);
 
   useEffect(() => {
     useUnsavedChangesStore.getState().setUnsavedChanges(isDirty, save);
