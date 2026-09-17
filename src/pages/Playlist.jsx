@@ -13,8 +13,7 @@ import CoverCollage from '../components/CoverCollage';
 import ContextMenu from '../components/ContextMenu';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { useFetch } from '../hooks/useFetch';
-import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
-import { shareLink } from '../utils/shareLink';
+import { useEntityHeaderActions } from '../hooks/useEntityHeaderActions';
 import { formatCount } from '../utils/formatters';
 
 export default function Playlist() {
@@ -39,8 +38,16 @@ export default function Playlist() {
     [id]
   );
   const [showImageModal, setShowImageModal] = useState(false);
-  const favorite = useFavoriteToggle('playlist', playlistData?.playlist ?? null, { track_count: playlistData?.tracks?.length });
-  const ctxMenu = useContextMenu({ shouldIgnore: (e) => !isAuthenticated || e.target.tagName === 'A' || !!e.target.closest('button') });
+  const canEdit = isAdmin || (user && playlistData?.playlist?.user_id === user.id);
+  const { actions: headerActions, shouldIgnore } = useEntityHeaderActions({
+    kind: 'playlist',
+    entity: playlistData?.playlist ?? null,
+    favoriteExtras: { track_count: playlistData?.tracks?.length },
+    canEdit,
+    isAuthenticated,
+    share: playlistData?.playlist ? { title: playlistData.playlist.name, text: `${playlistData.playlist.name} playlist` } : null,
+  });
+  const ctxMenu = useContextMenu({ shouldIgnore });
 
   useEffect(() => {
     // Lets the footer play button fall back to "Play Now" behavior when the playlist is
@@ -74,19 +81,6 @@ export default function Playlist() {
   if (!playlistData) return <div>Playlist not found</div>;
 
   const { playlist, tracks } = playlistData;
-  // Show edit button if user is admin OR if user owns the playlist
-  const canEdit = isAdmin || (user && playlist.user_id === user.id);
-
-  const headerActions = [
-    canEdit && { key: 'edit', icon: '✎', label: 'Edit', onClick: () => navigate(`/admin/playlist/${id}`) },
-    isAuthenticated && {
-      key: 'favorite',
-      icon: favorite.icon,
-      label: favorite.label,
-      onClick: favorite.toggle,
-    },
-    isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: () => shareLink({ title: playlist.name, text: `${playlist.name} playlist` }) },
-  ].filter(Boolean);
 
   // Distinct albums (by id, in track order) among this playlist's tracks that
   // have a cover — feeds the collage fallback when the playlist has no custom image.

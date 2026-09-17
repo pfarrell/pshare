@@ -18,9 +18,8 @@ import ContextMenu from '../components/ContextMenu';
 import CardGrid from '../components/CardGrid';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { useOvertoneAction } from '../hooks/useOvertoneAction';
-import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
 import { useFetch } from '../hooks/useFetch';
-import { shareLink } from '../utils/shareLink';
+import { useEntityHeaderActions } from '../hooks/useEntityHeaderActions';
 import { useIsMobile } from '../hooks/useIsMobile';
 
 const Artist = () => {
@@ -36,15 +35,18 @@ const Artist = () => {
   const [showAllSimilar, setShowAllSimilar] = useState(false);
   const isMobile = useIsMobile();
   const [showArtistModal, setShowArtistModal] = useState(false);
-  const favorite = useFavoriteToggle('artist', artistData?.artist ?? null);
   const startScopeShuffle = usePlayerStore((s) => s.startScopeShuffle);
   const [shuffleLoading, setShuffleLoading] = useState(false);
   const { overflowAction: overtoneAction, modal: overtoneModal } = useOvertoneAction(artistData?.artist?.musicbrainz_id);
-  // Edit/Favorite/Share are all account-gated, so unless Overtone applies
-  // (musicbrainz_id present — no login needed for that one), a logged-out
-  // visitor's long-press would open an empty menu. Suppress it entirely in
-  // that case rather than popping up nothing.
-  const ctxMenu = useContextMenu({ shouldIgnore: (e) => (!isAuthenticated && !overtoneAction) || e.target.tagName === 'A' || !!e.target.closest('button') });
+  const { actions: headerActions, shouldIgnore } = useEntityHeaderActions({
+    kind: 'artist',
+    entity: artistData?.artist ?? null,
+    canEdit: isAdmin,
+    isAuthenticated,
+    overtoneAction,
+    share: artistData?.artist ? { title: artistData.artist.name, text: artistData.artist.name } : null,
+  });
+  const ctxMenu = useContextMenu({ shouldIgnore });
 
   const handleShuffleArtist = async () => {
     setShuffleLoading(true);
@@ -70,18 +72,6 @@ const Artist = () => {
   }
 
   const { artist, summary, albums, singles, appears_on, performances, related_artists, members, group_albums, similar_artists } = artistData;
-
-  const headerActions = [
-    isAdmin && { key: 'edit', icon: '✎', label: 'Edit', onClick: () => navigate(`/admin/artist/${id}`) },
-    isAuthenticated && {
-      key: 'favorite',
-      icon: favorite.icon,
-      label: favorite.label,
-      onClick: favorite.toggle,
-    },
-    overtoneAction,
-    isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: () => shareLink({ title: artist.name, text: artist.name }) },
-  ].filter(Boolean);
 
   const handlePlaySingles = () => {
     if (singles?.length) {

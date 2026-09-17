@@ -17,9 +17,8 @@ import CardGrid from '../components/CardGrid';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { usePlayerStore } from '../stores/playerStore';
-import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
 import { useFetch } from '../hooks/useFetch';
-import { shareLink } from '../utils/shareLink';
+import { useEntityHeaderActions } from '../hooks/useEntityHeaderActions';
 import { formatCount } from '../utils/formatters';
 
 export default function Collection() {
@@ -32,10 +31,18 @@ export default function Collection() {
     [id]
   );
   const [showImageModal, setShowImageModal] = useState(false);
-  const favorite = useFavoriteToggle('collection', collectionData?.collection ?? null, { album_count: collectionData?.albums?.length });
   const startScopeShuffle = usePlayerStore((s) => s.startScopeShuffle);
   const [shuffleLoading, setShuffleLoading] = useState(false);
-  const ctxMenu = useContextMenu({ shouldIgnore: (e) => !isAuthenticated || e.target.tagName === 'A' || !!e.target.closest('button') });
+  const canEdit = isAdmin || (user && collectionData?.collection?.user_id === user.id);
+  const { actions: headerActions, shouldIgnore } = useEntityHeaderActions({
+    kind: 'collection',
+    entity: collectionData?.collection ?? null,
+    favoriteExtras: { album_count: collectionData?.albums?.length },
+    canEdit,
+    isAuthenticated,
+    share: collectionData?.collection ? { title: collectionData.collection.name, text: `${collectionData.collection.name} collection` } : null,
+  });
+  const ctxMenu = useContextMenu({ shouldIgnore });
 
   const handleShuffleAll = async () => {
     setShuffleLoading(true);
@@ -51,18 +58,6 @@ export default function Collection() {
   if (!collectionData) return <div>Collection not found</div>;
 
   const { collection, albums, stubs, notes, summary } = collectionData;
-  const canEdit = isAdmin || (user && collection.user_id === user.id);
-
-  const headerActions = [
-    canEdit && { key: 'edit', icon: '✎', label: 'Edit', onClick: () => navigate(`/admin/collection/${id}`) },
-    isAuthenticated && {
-      key: 'favorite',
-      icon: favorite.icon,
-      label: favorite.label,
-      onClick: favorite.toggle,
-    },
-    isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: () => shareLink({ title: collection.name, text: `${collection.name} collection` }) },
-  ].filter(Boolean);
 
   return (
     <div style={{ padding: '.5rem', maxWidth: '1400px', margin: '0 auto' }}>

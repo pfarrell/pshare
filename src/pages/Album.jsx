@@ -18,8 +18,7 @@ import ContextMenu from '../components/ContextMenu';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { useOvertoneAction } from '../hooks/useOvertoneAction';
 import { useFetch } from '../hooks/useFetch';
-import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
-import { shareLink } from '../utils/shareLink';
+import { useEntityHeaderActions } from '../hooks/useEntityHeaderActions';
 
 const Album = () => {
   const { id } = useParams();
@@ -39,13 +38,18 @@ const Album = () => {
   const [showAlbumModal, setShowAlbumModal] = useState(false);
   const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [adjacentAlbums, setAdjacentAlbums] = useState({ prev: null, next: null });
-  const favorite = useFavoriteToggle('album', albumData?.album ?? null, { track_count: albumData?.tracks?.length, artist: albumData?.artist ?? null });
   const { overflowAction: overtoneAction, modal: overtoneModal } = useOvertoneAction(albumData?.album?.musicbrainz_id, 'release');
-  // Edit/Add to Collection/Favorite/Share are all account-gated, so unless
-  // Overtone applies (musicbrainz_id present — no login needed for that one),
-  // a logged-out visitor's long-press would open an empty menu. Suppress it
-  // entirely in that case rather than popping up nothing.
-  const ctxMenu = useContextMenu({ shouldIgnore: (e) => (!isAuthenticated && !overtoneAction) || e.target.tagName === 'A' || !!e.target.closest('button') });
+  const { actions: headerActions, shouldIgnore } = useEntityHeaderActions({
+    kind: 'album',
+    entity: albumData?.album ?? null,
+    favoriteExtras: { track_count: albumData?.tracks?.length, artist: albumData?.artist ?? null },
+    canEdit: isAdmin,
+    isAuthenticated,
+    overtoneAction,
+    share: albumData?.album ? { title: albumData.album.title, text: `${albumData.album.title} by ${albumData?.artist?.name ?? ''}` } : null,
+    extras: [isAuthenticated && { key: 'collection', icon: '▣', label: 'Add to Collection', onClick: () => setShowCollectionModal(true) }],
+  });
+  const ctxMenu = useContextMenu({ shouldIgnore });
 
   useEffect(() => {
     let cancelled = false;
@@ -134,19 +138,6 @@ const Album = () => {
   const featuringArtists = album.is_compilation
     ? (compilation_artists || [])
     : (secondary_artists || []).filter((sa) => sa.role !== 'collaborator');
-
-  const headerActions = [
-    isAdmin && { key: 'edit', icon: '✎', label: 'Edit', onClick: () => navigate(`/admin/album/${id}`) },
-    isAuthenticated && { key: 'collection', icon: '▣', label: 'Add to Collection', onClick: () => setShowCollectionModal(true) },
-    isAuthenticated && {
-      key: 'favorite',
-      icon: favorite.icon,
-      label: favorite.label,
-      onClick: favorite.toggle,
-    },
-    overtoneAction,
-    isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: () => shareLink({ title: album.title, text: `${album.title} by ${artist.name}` }) },
-  ].filter(Boolean);
 
   return (
     <div style={{ padding: '.5rem', maxWidth: '1400px', margin: '0 auto' }}>

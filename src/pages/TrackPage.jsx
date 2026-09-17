@@ -6,7 +6,7 @@ import { apiService } from '../services/api';
 import { usePlayerStore } from '../stores/playerStore';
 import { useAuthStore } from '../stores/authStore';
 import { useContextMenu } from '../hooks/useContextMenu';
-import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
+import { useEntityHeaderActions } from '../hooks/useEntityHeaderActions';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useFetch } from '../hooks/useFetch';
 import PlayButton from '../components/PlayButton';
@@ -15,7 +15,6 @@ import PageError from '../components/PageError';
 import ContextMenu from '../components/ContextMenu';
 import AddToPlaylistModal from '../components/AddToPlaylistModal';
 import TrackNotesModal from '../components/TrackNotesModal';
-import { shareLink } from '../utils/shareLink';
 
 // Matches the basename App.jsx's <Router> uses — needed here because
 // login/signup's return_to is a raw browser redirect (window.location.href),
@@ -40,12 +39,23 @@ const TrackPage = () => {
   const [showImageModal, setShowImageModal] = useState(false);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [showNotesModal, setShowNotesModal] = useState(false);
-  const favorite = useFavoriteToggle('track', track);
-  // Nothing in this menu applies to a logged-out visitor (Favorite/Add to
-  // Playlist/Notes/Download all need an account, Edit needs admin, which
-  // implies an account too) — suppress the long-press entirely rather than
-  // opening an empty menu, matching Playlist.jsx/Collection.jsx.
-  const ctxMenu = useContextMenu({ shouldIgnore: (e) => !isAuthenticated || e.target.tagName === 'A' || !!e.target.closest('button') });
+  const { actions: headerActions, shouldIgnore } = useEntityHeaderActions({
+    kind: 'track',
+    entity: track,
+    canEdit: isAdmin,
+    isAuthenticated,
+    share: track ? { title: track.title, text: track.artist?.name ? `${track.title} by ${track.artist.name}` : track.title } : null,
+    extras: [
+      isAuthenticated && { key: 'playlist', icon: '📋', label: 'Add to Playlist', onClick: () => setShowPlaylistModal(true) },
+      isAuthenticated && { key: 'notes', icon: '📝', label: 'Notes', onClick: () => setShowNotesModal(true) },
+    ],
+    afterFavorite: [
+      downloadsEnabled && isAuthenticated && track?.download_url && !isMobile && {
+        key: 'download', icon: '⬇', label: 'Download', onClick: () => { window.location.href = track.download_url; },
+      },
+    ],
+  });
+  const ctxMenu = useContextMenu({ shouldIgnore });
 
   useEffect(() => {
     // Lets the footer play button fall back to "Play Now" behavior when the
@@ -57,14 +67,6 @@ const TrackPage = () => {
   const handlePlayNow = () => {
     if (!track) return;
     addTrack(track, { flashActivity: true }); // store auto-starts playback if idle
-  };
-
-  const handleShare = () => {
-    if (!track) return;
-    shareLink({
-      title: track.title,
-      text: track.artist?.name ? `${track.title} by ${track.artist.name}` : track.title,
-    });
   };
 
   // A logged-out visitor can view and play the shared track itself (the
@@ -88,22 +90,6 @@ const TrackPage = () => {
   }
 
   const isPlaying = Boolean(currentTrack && currentTrack.id === track.id);
-
-  const headerActions = [
-    isAdmin && { key: 'edit', icon: '✎', label: 'Edit', onClick: () => navigate(`/admin/track/${id}`) },
-    isAuthenticated && { key: 'playlist', icon: '📋', label: 'Add to Playlist', onClick: () => setShowPlaylistModal(true) },
-    isAuthenticated && { key: 'notes', icon: '📝', label: 'Notes', onClick: () => setShowNotesModal(true) },
-    isAuthenticated && {
-      key: 'favorite',
-      icon: favorite.icon,
-      label: favorite.label,
-      onClick: favorite.toggle,
-    },
-    downloadsEnabled && isAuthenticated && track.download_url && !isMobile && {
-      key: 'download', icon: '⬇', label: 'Download', onClick: () => { window.location.href = track.download_url; },
-    },
-    isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: handleShare },
-  ].filter(Boolean);
 
   return (
     <div style={{ padding: '.5rem', maxWidth: '1400px', margin: '0 auto' }}>
