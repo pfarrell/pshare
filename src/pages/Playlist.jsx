@@ -13,6 +13,7 @@ import CoverCollage from '../components/CoverCollage';
 import ContextMenu from '../components/ContextMenu';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { useFavoritesStore } from '../stores/favoritesStore';
+import { useFetch } from '../hooks/useFetch';
 import { shareLink } from '../utils/shareLink';
 import { formatCount } from '../utils/formatters';
 
@@ -24,9 +25,19 @@ export default function Playlist() {
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const setPageTracks = usePlayerStore((s) => s.setPageTracks);
   const { user, isAdmin, isAuthenticated } = useAuthStore();
-  const [playlistData, setPlaylistData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { data: playlistData, loading, error, reload: loadPlaylist } = useFetch(
+    () => apiService.getPlaylist(id).then((response) => {
+      const { playlist, tracks } = response.data;
+      return {
+        ...response.data,
+        tracks: (tracks || []).map((track) => ({
+          ...track,
+          source_playlist: { id: playlist.id, name: playlist.name },
+        })),
+      };
+    }),
+    [id]
+  );
   const [showImageModal, setShowImageModal] = useState(false);
   const isFavorite = useFavoritesStore((s) => s.isFavorite('playlist', parseInt(id)));
   const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
@@ -40,35 +51,11 @@ export default function Playlist() {
   };
 
   useEffect(() => {
-    loadPlaylist();
-  }, [id]);
-
-  useEffect(() => {
     // Lets the footer play button fall back to "Play Now" behavior when the playlist is
     // empty, instead of trying to resume a track that was never loaded.
     setPageTracks(playlistData?.tracks || []);
     return () => setPageTracks([]);
   }, [playlistData, setPageTracks]);
-
-  const loadPlaylist = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await apiService.getPlaylist(id);
-      const { playlist, tracks } = response.data;
-      setPlaylistData({
-        ...response.data,
-        tracks: (tracks || []).map((track) => ({
-          ...track,
-          source_playlist: { id: playlist.id, name: playlist.name },
-        })),
-      });
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handlePlayAll = () => {
     if (!playlistData?.tracks?.length) return;
@@ -91,7 +78,7 @@ export default function Playlist() {
   };
 
   if (loading) return <Loading />;
-  if (error) return <Retry message={error} onRetry={loadPlaylist} />;
+  if (error) return <Retry message={error.message} onRetry={loadPlaylist} />;
   if (!playlistData) return <div>Playlist not found</div>;
 
   const { playlist, tracks } = playlistData;

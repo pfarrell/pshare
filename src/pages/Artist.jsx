@@ -1,5 +1,5 @@
 // src/pages/Artist.jsx
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useState } from 'react';
 import ImageLightbox from '../components/ImageLightbox';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
@@ -19,6 +19,7 @@ import CardGrid from '../components/CardGrid';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { useFavoritesStore } from '../stores/favoritesStore';
 import { useOvertoneAction } from '../hooks/useOvertoneAction';
+import { useFetch } from '../hooks/useFetch';
 import { shareLink } from '../utils/shareLink';
 import { useIsMobile } from '../hooks/useIsMobile';
 
@@ -28,9 +29,10 @@ const Artist = () => {
   const { isAdmin, isAuthenticated } = useAuthStore();
   const addTracks = usePlayerStore((s) => s.addTracks);
   const currentTrack = usePlayerStore((s) => s.currentTrack);
-  const [artistData, setArtistData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { data: artistData, loading, error } = useFetch(
+    () => apiService.getArtist(id).then((response) => response.data),
+    [id]
+  );
   const [showAllSimilar, setShowAllSimilar] = useState(false);
   const isMobile = useIsMobile();
   const [showArtistModal, setShowArtistModal] = useState(false);
@@ -64,26 +66,6 @@ const Artist = () => {
     }
   };
 
-  useEffect(() => {
-    const fetchArtistData = async () => {
-      try {
-        setLoading(true);
-        const response = await apiService.getArtist(id);
-        console.log('Artist API Response:', response.data);
-        setArtistData(response.data);
-      } catch (error) {
-        console.error('Error fetching artist data:', error);
-        setError('Failed to load artist');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (id) {
-      fetchArtistData();
-    }
-  }, [id]);
-
   const handleAlbumClick = (album) => {
     navigate(`/album/${album.id}`);
   };
@@ -95,7 +77,7 @@ const Artist = () => {
   }
 
   if (error || !artistData || !artistData.artist) {
-    return <PageError message={error || 'Artist not found'} />;
+    return <PageError message={error ? 'Failed to load artist' : 'Artist not found'} />;
   }
 
   const { artist, summary, albums, singles, appears_on, performances, related_artists, members, group_albums, similar_artists } = artistData;

@@ -8,6 +8,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useFavoritesStore } from '../stores/favoritesStore';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { useFetch } from '../hooks/useFetch';
 import PlayButton from '../components/PlayButton';
 import Loading from '../components/Loading';
 import PageError from '../components/PageError';
@@ -33,9 +34,10 @@ const TrackPage = () => {
   const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
   const downloadsEnabled = import.meta.env.VITE_ENABLE_DOWNLOADS !== 'false';
   const isMobile = useIsMobile();
-  const [track, setTrack] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { data: track, loading, error } = useFetch(
+    () => apiService.getTrack(id).then((response) => response.data.track),
+    [id]
+  );
   const [showImageModal, setShowImageModal] = useState(false);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [showNotesModal, setShowNotesModal] = useState(false);
@@ -45,24 +47,6 @@ const TrackPage = () => {
   // implies an account too) — suppress the long-press entirely rather than
   // opening an empty menu, matching Playlist.jsx/Collection.jsx.
   const ctxMenu = useContextMenu({ shouldIgnore: (e) => !isAuthenticated || e.target.tagName === 'A' || !!e.target.closest('button') });
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    apiService.getTrack(id)
-      .then((response) => {
-        if (!cancelled) setTrack(response.data.track);
-      })
-      .catch((err) => {
-        console.error('Error fetching track data:', err);
-        if (!cancelled) setError('Failed to load track');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [id]);
 
   useEffect(() => {
     // Lets the footer play button fall back to "Play Now" behavior when the
@@ -141,7 +125,7 @@ const TrackPage = () => {
   }
 
   if (error || !track) {
-    return <PageError message={error || 'Track not found'} />;
+    return <PageError message={error ? 'Failed to load track' : 'Track not found'} />;
   }
 
   const isPlaying = Boolean(currentTrack && currentTrack.id === track.id);

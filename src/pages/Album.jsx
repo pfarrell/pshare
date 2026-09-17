@@ -18,6 +18,7 @@ import ContextMenu from '../components/ContextMenu';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { useFavoritesStore } from '../stores/favoritesStore';
 import { useOvertoneAction } from '../hooks/useOvertoneAction';
+import { useFetch } from '../hooks/useFetch';
 import { shareLink } from '../utils/shareLink';
 
 const Album = () => {
@@ -31,10 +32,10 @@ const Album = () => {
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const setPageTracks = usePlayerStore((s) => s.setPageTracks);
   const { isAdmin, isAuthenticated } = useAuthStore();
-  const [albumData, setAlbumData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const { data: albumData, setData: setAlbumData, loading, error, reload } = useFetch(
+    () => apiService.getAlbum(id).then((response) => response.data),
+    [id]
+  );
   const [showAlbumModal, setShowAlbumModal] = useState(false);
   const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [adjacentAlbums, setAdjacentAlbums] = useState({ prev: null, next: null });
@@ -46,26 +47,6 @@ const Album = () => {
   // a logged-out visitor's long-press would open an empty menu. Suppress it
   // entirely in that case rather than popping up nothing.
   const ctxMenu = useContextMenu({ shouldIgnore: (e) => (!isAuthenticated && !overtoneAction) || e.target.tagName === 'A' || !!e.target.closest('button') });
-
-  useEffect(() => {
-    const fetchAlbumData = async () => {
-      try {
-        setLoading(true);
-        const response = await apiService.getAlbum(id);
-        console.log('Album API Response:', response.data);
-        setAlbumData(response.data);
-      } catch (error) {
-        console.error('Error fetching album data:', error);
-        setError('Failed to load album');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (id) {
-      fetchAlbumData();
-    }
-  }, [id, refreshKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,10 +71,6 @@ const Album = () => {
     setPageTracks(albumData?.tracks || []);
     return () => setPageTracks([]);
   }, [albumData, setPageTracks]);
-
-  const reload = () => {
-    setRefreshKey(refreshKey + 1)
-  }
 
   // Whenever this album is played from a collection, tag the queue with that
   // context so usePlayerEngine can auto-advance into the collection's next
@@ -158,7 +135,7 @@ const Album = () => {
   }
 
   if (error || !albumData?.album) {
-    return <PageError message={error || 'Album not found'} />;
+    return <PageError message={error ? 'Failed to load album' : 'Album not found'} />;
   }
 
   const { artist, album, tracks, summary, secondary_artists, compilation_artists, collections, notes } = albumData;

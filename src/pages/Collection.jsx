@@ -1,5 +1,5 @@
 // src/pages/Collection.jsx
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import ImageLightbox from '../components/ImageLightbox';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
@@ -18,6 +18,7 @@ import { useContextMenu } from '../hooks/useContextMenu';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useFavoritesStore } from '../stores/favoritesStore';
 import { usePlayerStore } from '../stores/playerStore';
+import { useFetch } from '../hooks/useFetch';
 import { shareLink } from '../utils/shareLink';
 import { formatCount } from '../utils/formatters';
 
@@ -26,9 +27,10 @@ export default function Collection() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { user, isAdmin, isAuthenticated } = useAuthStore();
-  const [collectionData, setCollectionData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { data: collectionData, loading, error, reload: loadCollection } = useFetch(
+    () => apiService.getCollection(id).then((response) => response.data),
+    [id]
+  );
   const [showImageModal, setShowImageModal] = useState(false);
   const isFavorite = useFavoritesStore((s) => s.isFavorite('collection', parseInt(id)));
   const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
@@ -52,25 +54,8 @@ export default function Collection() {
     ctxMenu.close();
   };
 
-  useEffect(() => {
-    loadCollection();
-  }, [id]);
-
-  const loadCollection = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await apiService.getCollection(id);
-      setCollectionData(response.data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   if (loading) return <Loading />;
-  if (error) return <Retry message={error} onRetry={loadCollection} />;
+  if (error) return <Retry message={error.message} onRetry={loadCollection} />;
   if (!collectionData) return <div>Collection not found</div>;
 
   const { collection, albums, stubs, notes, summary } = collectionData;
