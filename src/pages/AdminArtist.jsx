@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
-import { useUnsavedChangesStore } from '../stores/unsavedChangesStore';
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import Loading from '../components/Loading';
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal';
 import TagsSection from '../components/TagsSection';
@@ -134,19 +134,6 @@ const AdminArtist = () => {
     setHasUnsavedChanges(hasChanges);
   }, [name, imagePath, wikipedia, musicbrainzId, artistData]);
 
-  // Warn user before leaving page with unsaved changes (browser navigation)
-  useEffect(() => {
-    const handleBeforeUnload = (e) => {
-      if (hasUnsavedChanges) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasUnsavedChanges]);
-
   // Just the API call, no navigation — shared by the form submit, the
   // link-click guard below, and the pull-to-refresh save prompt in Layout
   // (registered via unsavedChangesStore below).
@@ -160,52 +147,14 @@ const AdminArtist = () => {
     setHasUnsavedChanges(false);
   }, [id, name, imagePath, wikipedia, musicbrainzId]);
 
-  // Intercept all link clicks to check for unsaved changes
-  useEffect(() => {
-    const handleClick = async (e) => {
-      // Only intercept if we have unsaved changes
-      if (!hasUnsavedChanges) return;
-
-      // Check if the click is on a link (or inside a link)
-      const link = e.target.closest('a');
-      if (!link) return;
-
-      // Check if it's an internal navigation link (not the back link we control)
-      const href = link.getAttribute('href');
-      if (!href || href.startsWith('http') || href.startsWith('#')) return;
-
-      // Don't intercept our own back link
-      if (link.classList.contains('admin-back-link')) return;
-
-      // Prevent the default navigation
-      e.preventDefault();
-      e.stopPropagation();
-
-      // Ask user what to do
-      const choice = window.confirm('You have unsaved changes. Click OK to save and leave, or Cancel to stay on this page.');
-
-      if (choice) {
-        // User clicked OK - save and navigate
-        try {
-          await saveArtist();
-          // Navigate to the link destination
-          setTimeout(() => navigate(href), 0);
-        } catch (error) {
-          console.error('Error saving artist:', error);
-          setError(error.response?.data?.error || 'Failed to save artist');
-        }
-      }
-    };
-
-    // Add click listener to the document
-    document.addEventListener('click', handleClick, true);
-    return () => document.removeEventListener('click', handleClick, true);
-  }, [hasUnsavedChanges, saveArtist, navigate]);
-
-  useEffect(() => {
-    useUnsavedChangesStore.getState().setUnsavedChanges(hasUnsavedChanges, saveArtist);
-    return () => useUnsavedChangesStore.getState().clear();
-  }, [hasUnsavedChanges, saveArtist]);
+  const { navigateAway } = useUnsavedChangesGuard({
+    isDirty: hasUnsavedChanges,
+    save: saveArtist,
+    onSaveError: (error) => {
+      console.error('Error saving artist:', error);
+      setError(error.response?.data?.error || 'Failed to save artist');
+    },
+  });
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -350,40 +299,13 @@ const AdminArtist = () => {
     navigate('/');
   };
 
-  const handleNavigateAway = async (destination) => {
-    if (hasUnsavedChanges) {
-      const choice = window.confirm('You have unsaved changes. Click OK to save and leave, or Cancel to stay on this page.');
-
-      if (choice) {
-        // User clicked OK - save and navigate
-        try {
-          await apiService.updateArtist(id, {
-            name,
-            image_path: imagePath,
-            wikipedia,
-            musicbrainz_id: musicbrainzId,
-          });
-          setHasUnsavedChanges(false);
-          navigate(destination);
-        } catch (error) {
-          console.error('Error saving artist:', error);
-          setError(error.response?.data?.error || 'Failed to save artist');
-        }
-      }
-      // If Cancel, do nothing (stay on page)
-    } else {
-      // No unsaved changes, just navigate
-      navigate(destination);
-    }
-  };
-
   const handleCancel = () => {
-    handleNavigateAway(`/artist/${id}`);
+    navigateAway(`/artist/${id}`);
   };
 
   const handleNavigateBack = (e) => {
     e.preventDefault();
-    handleNavigateAway(`/artist/${id}`);
+    navigateAway(`/artist/${id}`);
   };
 
   const handleRemoveAlbumFromArtist = async (albumId) => {
