@@ -1,6 +1,6 @@
 // src/components/UnsavedChangesModal.jsx
 import { useState } from 'react';
-import { createPortal } from 'react-dom';
+import Modal from './Modal';
 
 // Shown by Layout when a pull-to-refresh is triggered while the current
 // admin page has unsaved edits (see stores/unsavedChangesStore). Offers a
@@ -15,30 +15,15 @@ const UnsavedChangesModal = ({ onSave, onDiscard, onCancel }) => {
     setError(null);
     try {
       await onSave();
+      setSaving(false);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to save — try again');
       setSaving(false);
     }
   };
 
-  return createPortal(
-    <div
-      data-testid="unsaved-changes-modal-backdrop"
-      style={{
-        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: 2000, padding: '1rem',
-      }}
-      onClick={(e) => { if (e.target === e.currentTarget && !saving) onCancel(); }}
-    >
-      <div
-        style={{
-          backgroundColor: 'var(--color-bg-surface)', borderRadius: '8px', padding: '1.5rem',
-          maxWidth: '400px', width: '100%',
-          boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
-        }}
-      >
+  return (
+    <Modal onClose={saving ? undefined : onCancel} layer="top" testId="unsaved-changes-modal-backdrop">
         <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', color: 'var(--color-text-primary)' }}>Unsaved changes</h2>
         <p style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
           You have unsaved changes on this page. Refreshing will lose them unless you save first.
@@ -81,9 +66,7 @@ const UnsavedChangesModal = ({ onSave, onDiscard, onCancel }) => {
             Cancel
           </button>
         </div>
-      </div>
-    </div>,
-    document.body
+    </Modal>
   );
 };
 

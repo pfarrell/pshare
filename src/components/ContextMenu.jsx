@@ -71,14 +71,14 @@ const ContextMenu = ({ open, position, openedViaTouch = false, onDismiss, onSwal
     <>
       <div
         data-testid={testId}
-        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1150 }}
+        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 'var(--z-menu-backdrop)' }}
         onClick={onDismiss}
         onTouchStart={onSwallowTouch}
         onTouchEnd={onDismiss}
       />
       <div
         className="track-dropdown"
-        style={{ position: 'fixed', left: `${left}px`, top: `${top}px`, zIndex: 1200 }}
+        style={{ position: 'fixed', left: `${left}px`, top: `${top}px`, zIndex: 'var(--z-menu)' }}
         onClickCapture={guardEarlyTap}
         onTouchEndCapture={guardEarlyTap}
       >

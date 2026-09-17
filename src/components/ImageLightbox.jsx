@@ -7,7 +7,7 @@ const ImageLightbox = ({ imageUrl, alt, title, subtitle, onClose }) => {
     <div
       onClick={onClose}
       style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
+        position: 'fixed', inset: 0, zIndex: 'var(--z-modal)',
         backgroundColor: 'rgba(0,0,0,0.85)',
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
