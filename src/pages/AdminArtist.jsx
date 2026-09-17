@@ -10,6 +10,7 @@ import TagsSection from '../components/TagsSection';
 import MusicBrainzPicker from '../components/MusicBrainzPicker';
 import AdminPanel from '../components/admin/AdminPanel';
 import AdminField from '../components/admin/AdminField';
+import EntityImageGallery from '../components/admin/EntityImageGallery';
 import { parseWikipediaSlug } from '../utils/wikipediaSlug';
 import { toFilename } from '../utils/filenames';
 import { formatCount } from '../utils/formatters';
@@ -32,12 +33,6 @@ const AdminArtist = () => {
 
   // Track if form has unsaved changes
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-
-  // Image gallery state
-  const [images, setImages] = useState([]);
-  const [newImageUrl, setNewImageUrl] = useState('');
-  const [newImageName, setNewImageName] = useState('');
-  const [addingImage, setAddingImage] = useState(false);
 
   // Merge with another artist state
   const [ownAlbumCount, setOwnAlbumCount] = useState(0);
@@ -81,12 +76,9 @@ const AdminArtist = () => {
         setOwnTrackCount((response.data.albums || []).reduce((sum, a) => sum + (a.track_count ?? 0), 0));
         setName(artist.name || '');
         setImagePath(artist.image_path || '');
-        setNewImageName(toFilename(artist.name || '') + '.jpg');
         setWikipedia(artist.wikipedia || '');
         setMusicbrainzId(artist.musicbrainz_id || '');
         setMbidStatus(artist.mbid_status || '');
-        const imagesRes = await apiService.getArtistImages(id);
-        setImages(imagesRes.data);
       } catch (error) {
         console.error('Error fetching artist data:', error);
         setError('Failed to load artist');
@@ -491,121 +483,12 @@ const AdminArtist = () => {
           )}
         </AdminField>
 
-        {/* Image Gallery */}
-        <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'var(--color-bg-surface)', borderRadius: '4px', border: '1px solid var(--color-border)' }}>
-          <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', marginBottom: '1rem' }}>Images</h3>
-
-          {images.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'nowrap', gap: '12px', marginBottom: '16px', overflowX: 'auto', paddingBottom: '8px' }}>
-              {images.map(img => (
-                <div key={img.id} style={{
-                  border: img.is_primary ? '2px solid #4ade80' : '2px solid var(--color-text-secondary)',
-                  borderRadius: '8px',
-                  padding: '8px',
-                  width: '120px',
-                }}>
-                  <img
-                    src={apiService.getImageUrl(img.path, 'artist_page')}
-                    alt=""
-                    style={{ width: '100%', height: '100px', objectFit: 'cover', borderRadius: '4px' }}
-                  />
-                  <div style={{ fontSize: '11px', color: 'var(--color-text-faint)', marginTop: '4px' }}>{img.source}</div>
-                  {img.status === 'proposed' && (
-                    <div style={{ fontSize: '11px', color: '#facc15' }}>proposed</div>
-                  )}
-                  <div style={{ display: 'flex', gap: '4px', marginTop: '6px' }}>
-                    {!img.is_primary && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await apiService.setArtistImagePrimary(id, img.id);
-                          const res = await apiService.getArtistImages(id);
-                          setImages(res.data);
-                          setImagePath(img.path);
-                        }}
-                        style={{ fontSize: '11px', padding: '2px 6px' }}
-                      >
-                        Set Primary
-                      </button>
-                    )}
-                    {img.is_primary && (
-                      <span style={{ fontSize: '11px', color: '#4ade80' }}>✓ Primary</span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (!confirm('Delete this image?')) return;
-                        await apiService.deleteArtistImage(id, img.id);
-                        setImages(images.filter(i => i.id !== img.id));
-                      }}
-                      style={{ fontSize: '11px', padding: '2px 6px', color: '#f87171' }}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            <div style={{ flex: '1 1 200px', minWidth: 0 }}>
-              <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 'bold', fontSize: '0.875rem' }}>Image URL</label>
-              <input
-                type="text"
-                value={newImageUrl}
-                onChange={e => setNewImageUrl(e.target.value)}
-                placeholder="https://..."
-                style={{ width: '100%', boxSizing: 'border-box', padding: '0.5rem', fontSize: '1rem', border: '1px solid var(--color-border)', borderRadius: '4px' }}
-              />
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 'bold', fontSize: '0.875rem' }}>File name</label>
-              <input
-                type="text"
-                value={newImageName}
-                onChange={e => setNewImageName(e.target.value)}
-                placeholder="artist_123.jpg"
-                style={{ padding: '0.5rem', fontSize: '1rem', border: '1px solid var(--color-border)', borderRadius: '4px' }}
-              />
-            </div>
-            <button
-              type="button"
-              onClick={async () => {
-                if (!newImageUrl || !newImageName) return;
-                setAddingImage(true);
-                try {
-                  const setPrimary = images.length === 0;
-                  await apiService.addArtistImage(id, newImageUrl, newImageName, setPrimary);
-                  const res = await apiService.getArtistImages(id);
-                  setImages(res.data);
-                  if (setPrimary) setImagePath(newImageName);
-                  setNewImageUrl('');
-                  setNewImageName(toFilename(name) + '.jpg');
-                  toast.success('Image added');
-                } catch (err) {
-                  const msg = err?.response?.data?.error || err?.message || 'Failed to add image';
-                  toast.error(msg);
-                } finally {
-                  setAddingImage(false);
-                }
-              }}
-              disabled={addingImage || !newImageUrl || !newImageName}
-              style={{
-                padding: '0.5rem 1rem',
-                backgroundColor: '#10b981',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '0.875rem',
-                cursor: (addingImage || !newImageUrl || !newImageName) ? 'not-allowed' : 'pointer',
-                opacity: (addingImage || !newImageUrl || !newImageName) ? 0.6 : 1,
-              }}
-            >
-              {addingImage ? 'Adding...' : 'Add Image'}
-            </button>
-          </div>
-        </div>
+        <EntityImageGallery
+          kind="artist"
+          entityId={id}
+          defaultFilename={`${toFilename(name)}.jpg`}
+          onPrimaryChange={setImagePath}
+        />
 
         {/* Tags */}
         <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'var(--color-bg-surface)', borderRadius: '4px', border: '1px solid var(--color-border)' }}>

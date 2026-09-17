@@ -9,7 +9,6 @@ vi.mock('../components/TagsSection', () => ({ default: () => null }));
 vi.mock('../services/api', () => ({
   apiService: {
     getArtist: vi.fn(),
-    getArtistImages: vi.fn(),
     getArtistSecondaryAlbums: vi.fn(),
     getRelatedArtists: vi.fn(),
     searchAdminArtists: vi.fn(),
@@ -18,6 +17,10 @@ vi.mock('../services/api', () => ({
     createArtist: vi.fn(),
     updateArtist: vi.fn(),
     deleteArtist: vi.fn(),
+    getImageUrl: vi.fn(() => ''),
+    entityImages: {
+      artist: { list: vi.fn(), add: vi.fn(), setPrimary: vi.fn(), remove: vi.fn() },
+    },
   },
 }));
 
@@ -43,7 +46,7 @@ beforeEach(() => {
       albums: [{ id: 1, track_count: 10 }, { id: 2, track_count: 4 }],
     },
   });
-  apiService.getArtistImages.mockResolvedValue({ data: [] });
+  apiService.entityImages.artist.list.mockResolvedValue({ data: [] });
   apiService.getArtistSecondaryAlbums.mockResolvedValue({ data: [] });
   apiService.getRelatedArtists.mockResolvedValue({ data: [] });
   vi.spyOn(window, 'confirm').mockReturnValue(true);
