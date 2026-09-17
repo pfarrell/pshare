@@ -3,6 +3,7 @@ import { db, pool } from '../db/database.js'
 import { sql } from 'kysely'
 import { SINGLES_ALBUM_TITLE } from '../constants/singles.js'
 import { mergeArtistInto } from '../services/artistMergeService.js'
+import { deleteAlbumsCascade } from '../services/entityDeleteService.js'
 import {
   lookupAlbumMBID,
   lookupArtistMBID,
@@ -271,25 +272,6 @@ admin.put('/album/:id', async (c) => {
   }
 })
 
-// A media_files row can be shared by tracks outside the artist/album being
-// deleted (the same recording appearing on another release) — only delete
-// rows no longer referenced by any remaining track, so a shared file
-// survives. This is the graceful-skip layer; the media_files FK's
-// ON DELETE RESTRICT is the hard backstop underneath it for any path that
-// doesn't call this first. Call this AFTER deleting the tracks in the
-// artist/album being removed, so "no longer referenced" correctly means
-// "not referenced by some other, surviving track."
-async function deletableMediaFileIds(candidateIds: number[]): Promise<number[]> {
-  if (candidateIds.length === 0) return []
-  const stillReferenced = await db
-    .selectFrom('tracks')
-    .select('media_file_id')
-    .where('media_file_id', 'in', candidateIds)
-    .execute()
-  const stillReferencedIds = new Set(stillReferenced.map(t => t.media_file_id))
-  return candidateIds.filter(id => !stillReferencedIds.has(id))
-}
-
 // DELETE /admin/artist/:id — delete an artist and cascade to albums, tracks, media_files
 admin.delete('/artist/:id', async (c) => {
   const id = parseInt(c.req.param('id'))
@@ -298,32 +280,11 @@ admin.delete('/artist/:id', async (c) => {
     const artist = await db.selectFrom('artists').select('id').where('id', '=', id).executeTakeFirst()
     if (!artist) return c.json({ error: 'Artist not found' }, 404)
 
-    // Collect all albums for this artist
-    const albums = await db.selectFrom('albums').select('id').where('artist_id', '=', id).execute()
-    const albumIds = albums.map(a => a.id)
-
-    if (albumIds.length > 0) {
-      // Collect media_file IDs from tracks in those albums, then delete them
-      const tracks = await db
-        .selectFrom('tracks')
-        .select(['id', 'media_file_id'])
-        .where('album_id', 'in', albumIds)
-        .execute()
-      const mediaFileIds = tracks.map(t => t.media_file_id).filter((id): id is number => id != null)
-
-      if (tracks.length > 0) {
-        await db.deleteFrom('tracks').where('album_id', 'in', albumIds).execute()
-      }
-      if (mediaFileIds.length > 0) {
-        const deletable = await deletableMediaFileIds(mediaFileIds)
-        if (deletable.length > 0) {
-          await db.deleteFrom('media_files').where('id', 'in', deletable).execute()
-        }
-      }
-      await db.deleteFrom('albums').where('id', 'in', albumIds).execute()
-    }
-
-    const deleted = await db.deleteFrom('artists').where('id', '=', id).returningAll().executeTakeFirst()
+    const deleted = await db.transaction().execute(async (trx) => {
+      const albums = await trx.selectFrom('albums').select('id').where('artist_id', '=', id).execute()
+      await deleteAlbumsCascade(albums.map((a) => a.id), trx)
+      return trx.deleteFrom('artists').where('id', '=', id).returningAll().executeTakeFirst()
+    })
     return c.json({ success: true, deleted })
   } catch (error) {
     console.error('Error deleting artist:', error)
@@ -336,28 +297,11 @@ admin.delete('/album/:id', async (c) => {
   const id = parseInt(c.req.param('id'))
 
   try {
-    const album = await db.selectFrom('albums').select('id').where('id', '=', id).executeTakeFirst()
+    const album = await db.selectFrom('albums').selectAll().where('id', '=', id).executeTakeFirst()
     if (!album) return c.json({ error: 'Album not found' }, 404)
 
-    const tracks = await db
-      .selectFrom('tracks')
-      .select(['id', 'media_file_id'])
-      .where('album_id', '=', id)
-      .execute()
-    const mediaFileIds = tracks.map(t => t.media_file_id).filter((id): id is number => id != null)
-
-    if (tracks.length > 0) {
-      await db.deleteFrom('tracks').where('album_id', '=', id).execute()
-    }
-    if (mediaFileIds.length > 0) {
-      const deletable = await deletableMediaFileIds(mediaFileIds)
-      if (deletable.length > 0) {
-        await db.deleteFrom('media_files').where('id', 'in', deletable).execute()
-      }
-    }
-
-    const deleted = await db.deleteFrom('albums').where('id', '=', id).returningAll().executeTakeFirst()
-    return c.json({ success: true, deleted })
+    await db.transaction().execute((trx) => deleteAlbumsCascade([id], trx))
+    return c.json({ success: true, deleted: album })
   } catch (error) {
     console.error('Error deleting album:', error)
     return c.json({ error: 'Failed to delete album' }, 500)
