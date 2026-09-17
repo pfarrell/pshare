@@ -8,6 +8,8 @@ import PageError from '../components/PageError';
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal';
 import TagsSection from '../components/TagsSection';
 import MusicBrainzPicker from '../components/MusicBrainzPicker';
+import AdminPanel from '../components/admin/AdminPanel';
+import AdminField from '../components/admin/AdminField';
 import { parseWikipediaSlug } from '../utils/wikipediaSlug';
 import { toFilename } from '../utils/filenames';
 import { formatCount } from '../utils/formatters';
@@ -457,54 +459,28 @@ const AdminArtist = () => {
       </div>
       <h1 style={{ marginBottom: '2rem', fontSize: '2rem' }}>Edit Artist</h1>
 
-      {error && (
-        <div style={{
-          padding: '1rem',
-          marginBottom: '1rem',
-          backgroundColor: '#fee',
-          color: '#c00',
-          borderRadius: '4px'
-        }}>
-          {error}
-        </div>
-      )}
+      {error && <div className="admin-error-banner">{error}</div>}
 
       <form onSubmit={handleSave}>
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-            Name *
-          </label>
+        <AdminField label="Name *" htmlFor="artist-name">
           <input
+            id="artist-name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
-            style={{
-              width: '100%',
-              padding: '0.5rem',
-              fontSize: '1rem',
-              border: '1px solid var(--color-border)',
-              borderRadius: '4px',
-            }}
+            className="admin-input"
           />
-        </div>
+        </AdminField>
 
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-            Image Path
-          </label>
+        <AdminField label="Image Path" htmlFor="artist-image-path">
           <input
+            id="artist-image-path"
             type="text"
             value={imagePath}
             onChange={(e) => setImagePath(e.target.value)}
             placeholder="e.g., beatles.jpg"
-            style={{
-              width: '100%',
-              padding: '0.5rem',
-              fontSize: '1rem',
-              border: '1px solid var(--color-border)',
-              borderRadius: '4px',
-            }}
+            className="admin-input"
           />
           {imagePath && (
             <img
@@ -513,7 +489,7 @@ const AdminArtist = () => {
               style={{ marginTop: '0.5rem', maxWidth: '200px', borderRadius: '4px' }}
             />
           )}
-        </div>
+        </AdminField>
 
         {/* Image Gallery */}
         <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'var(--color-bg-surface)', borderRadius: '4px', border: '1px solid var(--color-border)' }}>
@@ -637,11 +613,9 @@ const AdminArtist = () => {
           <TagsSection entityType="artist" entityId={parseInt(id)} isLoggedIn={true} />
         </div>
 
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-            Wikipedia Slug
-          </label>
+        <AdminField label="Wikipedia Slug" htmlFor="artist-wikipedia" help="The part after wikipedia.org/wiki/">
           <input
+            id="artist-wikipedia"
             type="text"
             value={wikipedia}
             onChange={(e) => setWikipedia(e.target.value)}
@@ -657,18 +631,9 @@ const AdminArtist = () => {
             autoCorrect="off"
             autoCapitalize="off"
             spellCheck="false"
-            style={{
-              width: '100%',
-              padding: '0.5rem',
-              fontSize: '1rem',
-              border: '1px solid var(--color-border)',
-              borderRadius: '4px',
-            }}
+            className="admin-input"
           />
-          <small style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
-            The part after wikipedia.org/wiki/
-          </small>
-        </div>
+        </AdminField>
 
         <div style={{ marginBottom: '1.5rem' }}>
           <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
@@ -740,35 +705,23 @@ const AdminArtist = () => {
       </form>
 
       {/* Relations Section */}
-      <div style={{
-        marginTop: '3rem',
-        padding: '1.5rem',
-        backgroundColor: '#f0fdf4',
-        borderRadius: '4px',
-        border: '1px solid #86efac'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: 0, color: '#166534' }}>
-            Relations
-          </h3>
-          {!showAddRelationSection && (
-            <button
-              type="button"
-              onClick={() => setShowAddRelationSection(true)}
-              style={{
-                padding: '0.5rem 1rem',
-                backgroundColor: '#16a34a',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '0.875rem',
-                cursor: 'pointer',
-              }}
-            >
-              + Add Relation
-            </button>
-          )}
-        </div>
+      <AdminPanel tone="relations" title="Relations" actions={!showAddRelationSection && (
+        <button
+          type="button"
+          onClick={() => setShowAddRelationSection(true)}
+          style={{
+            padding: '0.5rem 1rem',
+            backgroundColor: '#16a34a',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            fontSize: '0.875rem',
+            cursor: 'pointer',
+          }}
+        >
+          + Add Relation
+        </button>
+      )}>
 
         {/* Add Relation Form */}
         {showAddRelationSection && (
@@ -781,7 +734,7 @@ const AdminArtist = () => {
                   setAddRelationResults([]);
                   setAddRelationQuery('');
                 }}
-                style={{ padding: '0.5rem', fontSize: '0.875rem', border: '1px solid #86efac', borderRadius: '4px', backgroundColor: 'var(--color-bg-surface)' }}
+                style={{ padding: '0.5rem', fontSize: '0.875rem', border: '1px solid var(--color-success-border)', borderRadius: '4px', backgroundColor: 'var(--color-bg-surface)' }}
               >
                 <option value="similar_artist">Similar Artist (Manual)</option>
                 <option value="related_artist">Related Artist</option>
@@ -793,7 +746,7 @@ const AdminArtist = () => {
                 <select
                   value={addRelationRole}
                   onChange={(e) => setAddRelationRole(e.target.value)}
-                  style={{ padding: '0.5rem', fontSize: '0.875rem', border: '1px solid #86efac', borderRadius: '4px', backgroundColor: 'var(--color-bg-surface)' }}
+                  style={{ padding: '0.5rem', fontSize: '0.875rem', border: '1px solid var(--color-success-border)', borderRadius: '4px', backgroundColor: 'var(--color-bg-surface)' }}
                 >
                   <option value="featured">Featured</option>
                   <option value="collaborator">Collaborator</option>
@@ -817,7 +770,7 @@ const AdminArtist = () => {
                   onChange={(e) => setAddRelationQuery(e.target.value)}
                   placeholder={relationTypeToAdd === 'appears_on' ? 'Search album title...' : 'Search artist name...'}
                   autoFocus
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '0.5rem', fontSize: '0.875rem', border: '1px solid #86efac', borderRadius: '4px' }}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '0.5rem', fontSize: '0.875rem', border: '1px solid var(--color-success-border)', borderRadius: '4px' }}
                 />
               </div>
               <button
@@ -829,7 +782,7 @@ const AdminArtist = () => {
               </button>
             </form>
             {addRelationResults.length > 0 && (
-              <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid #86efac', borderRadius: '4px', backgroundColor: 'var(--color-bg-surface)', marginBottom: '0.75rem' }}>
+              <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid var(--color-success-border)', borderRadius: '4px', backgroundColor: 'var(--color-bg-surface)', marginBottom: '0.75rem' }}>
                 {addRelationResults.map(item => (
                   <div key={item.id} style={{ padding: '0.6rem 0.75rem', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
@@ -853,7 +806,7 @@ const AdminArtist = () => {
                 ))}
               </div>
             )}
-            <hr style={{ border: 'none', borderTop: '1px solid #86efac', margin: '0 0 0.75rem 0' }} />
+            <hr style={{ border: 'none', borderTop: '1px solid var(--color-success-border)', margin: '0 0 0.75rem 0' }} />
           </div>
         )}
 
@@ -867,7 +820,7 @@ const AdminArtist = () => {
           if (allSimilar.length === 0) return null;
           return (
             <div style={{ marginBottom: '1rem' }}>
-              <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#166534', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: '600', color: "var(--color-success-text)", marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 Similar Artists
                 {hiddenCount > 0 && (
                   <button
@@ -880,8 +833,8 @@ const AdminArtist = () => {
                 )}
               </div>
               {visibleSimilar.map(ra => (
-                <div key={ra.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid #bbf7d0', opacity: ra.is_hidden ? 0.45 : 1 }}>
-                  <span style={{ fontWeight: '500', color: ra.is_hidden ? 'var(--color-text-faint)' : '#7c3aed', cursor: 'pointer', textDecoration: ra.is_hidden ? 'line-through' : 'none' }} onClick={() => navigate(`/artist/${ra.id}`)}>
+                <div key={ra.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid var(--color-success-row-border)', opacity: ra.is_hidden ? 0.45 : 1 }}>
+                  <span style={{ fontWeight: '500', color: ra.is_hidden ? 'var(--color-text-faint)' : "var(--color-link-accent)", cursor: 'pointer', textDecoration: ra.is_hidden ? 'line-through' : 'none' }} onClick={() => navigate(`/artist/${ra.id}`)}>
                     {ra.name}
                     {ra.similarity != null && <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginLeft: '0.4rem' }}>{(ra.similarity * 100).toFixed(0)}%</span>}
                     {ra.source !== 'manual' && <span style={{ fontSize: '0.65rem', color: 'var(--color-text-secondary)', marginLeft: '0.3rem' }}>({ra.source})</span>}
@@ -891,7 +844,7 @@ const AdminArtist = () => {
                       type="button"
                       onClick={() => handleToggleForceShow(ra.id, ra.force_show)}
                       title={ra.force_show ? 'Unpin (remove force-show)' : 'Pin (always include in similar artists)'}
-                      style={{ padding: '0.25rem 0.5rem', backgroundColor: ra.force_show ? '#7c3aed' : 'var(--color-text-secondary)', color: ra.force_show ? 'white' : 'var(--color-bg-surface)', border: 'none', borderRadius: '4px', fontSize: '0.75rem', cursor: 'pointer' }}
+                      style={{ padding: '0.25rem 0.5rem', backgroundColor: ra.force_show ? "var(--color-link-accent)" : 'var(--color-text-secondary)', color: ra.force_show ? 'white' : 'var(--color-bg-surface)', border: 'none', borderRadius: '4px', fontSize: '0.75rem', cursor: 'pointer' }}
                     >
                       {ra.force_show ? 'Pinned' : 'Pin'}
                     </button>
@@ -921,7 +874,7 @@ const AdminArtist = () => {
         {/* Members */}
         {relatedArtists.filter(r => r.kind === 'member').length > 0 && (
           <div style={{ marginBottom: '1rem' }}>
-            <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#166534', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: '600', color: "var(--color-success-text)", marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Members
             </div>
             {relatedArtists.filter(r => r.kind === 'member').map(ra => (
@@ -930,10 +883,10 @@ const AdminArtist = () => {
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 padding: '0.5rem 0',
-                borderBottom: '1px solid #bbf7d0'
+                borderBottom: '1px solid var(--color-success-row-border)'
               }}>
                 <span
-                  style={{ fontWeight: '500', color: '#7c3aed', cursor: 'pointer' }}
+                  style={{ fontWeight: '500', color: "var(--color-link-accent)", cursor: 'pointer' }}
                   onClick={() => navigate(`/artist/${ra.id}`)}
                 >
                   {ra.name}
@@ -961,7 +914,7 @@ const AdminArtist = () => {
         {/* Member Of */}
         {relatedArtists.filter(r => r.kind === 'member_of').length > 0 && (
           <div style={{ marginBottom: '1rem' }}>
-            <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#166534', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: '600', color: "var(--color-success-text)", marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Member Of
             </div>
             {relatedArtists.filter(r => r.kind === 'member_of').map(ra => (
@@ -970,10 +923,10 @@ const AdminArtist = () => {
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 padding: '0.5rem 0',
-                borderBottom: '1px solid #bbf7d0'
+                borderBottom: '1px solid var(--color-success-row-border)'
               }}>
                 <span
-                  style={{ fontWeight: '500', color: '#7c3aed', cursor: 'pointer' }}
+                  style={{ fontWeight: '500', color: "var(--color-link-accent)", cursor: 'pointer' }}
                   onClick={() => navigate(`/artist/${ra.id}`)}
                 >
                   {ra.name}
@@ -1001,7 +954,7 @@ const AdminArtist = () => {
         {/* Related Artists */}
         {relatedArtists.filter(r => r.kind === 'related').length > 0 && (
           <div style={{ marginBottom: '1rem' }}>
-            <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#166534', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: '600', color: "var(--color-success-text)", marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Related Artists
             </div>
             {relatedArtists.filter(r => r.kind === 'related').map(ra => (
@@ -1010,10 +963,10 @@ const AdminArtist = () => {
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 padding: '0.5rem 0',
-                borderBottom: '1px solid #bbf7d0'
+                borderBottom: '1px solid var(--color-success-row-border)'
               }}>
                 <span
-                  style={{ fontWeight: '500', color: '#7c3aed', cursor: 'pointer' }}
+                  style={{ fontWeight: '500', color: "var(--color-link-accent)", cursor: 'pointer' }}
                   onClick={() => navigate(`/artist/${ra.id}`)}
                 >
                   {ra.name}
@@ -1041,7 +994,7 @@ const AdminArtist = () => {
         {/* Appears On Albums */}
         {appearsOnAlbums.length > 0 && (
           <div style={{ marginBottom: '1rem' }}>
-            <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#166534', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: '600', color: "var(--color-success-text)", marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Appears On
             </div>
             {appearsOnAlbums.map(a => (
@@ -1050,11 +1003,11 @@ const AdminArtist = () => {
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 padding: '0.5rem 0',
-                borderBottom: '1px solid #bbf7d0'
+                borderBottom: '1px solid var(--color-success-row-border)'
               }}>
                 <span style={{ fontWeight: '500' }}>
                   <span
-                    style={{ color: '#7c3aed', cursor: 'pointer' }}
+                    style={{ color: "var(--color-link-accent)", cursor: 'pointer' }}
                     onClick={() => navigate(`/album/${a.album_id}`)}
                   >{a.title}</span>
                   {a.release_year && <span style={{ fontWeight: 'normal', color: 'var(--color-text-muted)', marginLeft: '0.5rem' }}>({a.release_year})</span>}
@@ -1063,9 +1016,9 @@ const AdminArtist = () => {
                   <span style={{
                     fontSize: '0.75rem',
                     padding: '0.2rem 0.5rem',
-                    backgroundColor: '#dcfce7',
+                    backgroundColor: "var(--color-success-pill-bg)",
                     borderRadius: '9999px',
-                    color: '#166534'
+                    color: "var(--color-success-text)"
                   }}>{a.role}</span>
                   <button
                     type="button"
@@ -1090,19 +1043,10 @@ const AdminArtist = () => {
 
         </div>
 
-      </div>
+      </AdminPanel>
 
       {/* Merge With Another Artist Section */}
-      <div style={{
-        marginTop: '3rem',
-        padding: '1.5rem',
-        backgroundColor: 'var(--color-warning-bg)',
-        borderRadius: '4px',
-        border: '1px solid var(--color-warning-border)'
-      }}>
-        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '1rem', color: 'var(--color-warning-text)' }}>
-          Merge With Another Artist
-        </h3>
+      <AdminPanel tone="warning" title="Merge With Another Artist">
         <p style={{ marginBottom: '1rem', color: 'var(--color-warning-text)', fontSize: '0.875rem' }}>
           Use this to fix duplicate or misspelled artists (e.g. from bad ID3 tags). One artist is always deleted; its albums, tracks, and credits move to the other.
         </p>
@@ -1302,7 +1246,7 @@ const AdminArtist = () => {
             </button>
           </div>
         )}
-      </div>
+      </AdminPanel>
 
       {showDeleteModal && (
         <ConfirmDeleteModal

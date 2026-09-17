@@ -10,6 +10,8 @@ import TagsSection from '../components/TagsSection';
 import MusicBrainzPicker from '../components/MusicBrainzPicker';
 import TrackArtistPicker from '../components/TrackArtistPicker';
 import ReprocessAlbumModal from '../components/ReprocessAlbumModal';
+import AdminPanel from '../components/admin/AdminPanel';
+import AdminField from '../components/admin/AdminField';
 import { parseWikipediaSlug } from '../utils/wikipediaSlug';
 import { formatDuration, formatCount } from '../utils/formatters';
 import { toFilename } from '../utils/filenames';
@@ -459,37 +461,19 @@ const AdminAlbum = () => {
       </div>
       <h1 style={{ marginBottom: '2rem', fontSize: '2rem' }}>Edit Album</h1>
 
-      {error && (
-        <div style={{
-          padding: '1rem',
-          marginBottom: '1rem',
-          backgroundColor: '#fee',
-          color: '#c00',
-          borderRadius: '4px'
-        }}>
-          {error}
-        </div>
-      )}
+      {error && <div className="admin-error-banner">{error}</div>}
 
       <form onSubmit={handleSave}>
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-            Title *
-          </label>
+        <AdminField label="Title *" htmlFor="album-title">
           <input
+            id="album-title"
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             required
-            style={{
-              width: '100%',
-              padding: '0.5rem',
-              fontSize: '1rem',
-              border: '1px solid var(--color-border)',
-              borderRadius: '4px',
-            }}
+            className="admin-input"
           />
-        </div>
+        </AdminField>
 
         <div style={{ marginBottom: '1.5rem' }}>
           <label htmlFor="album-artist-id" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
@@ -530,41 +514,25 @@ const AdminAlbum = () => {
           </small>
         </div>
 
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-            Release Year
-          </label>
+        <AdminField label="Release Year" htmlFor="album-release-year">
           <input
+            id="album-release-year"
             type="text"
             value={releaseYear}
             onChange={(e) => setReleaseYear(e.target.value)}
             placeholder="e.g., 1969"
-            style={{
-              width: '100%',
-              padding: '0.5rem',
-              fontSize: '1rem',
-              border: '1px solid var(--color-border)',
-              borderRadius: '4px',
-            }}
+            className="admin-input"
           />
-        </div>
+        </AdminField>
 
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-            Image Path
-          </label>
+        <AdminField label="Image Path" htmlFor="album-image-path">
           <input
+            id="album-image-path"
             type="text"
             value={imagePath}
             onChange={(e) => setImagePath(e.target.value)}
             placeholder="e.g., abbey_road.jpg"
-            style={{
-              width: '100%',
-              padding: '0.5rem',
-              fontSize: '1rem',
-              border: '1px solid var(--color-border)',
-              borderRadius: '4px',
-            }}
+            className="admin-input"
           />
           {imagePath && (
             <img
@@ -573,7 +541,7 @@ const AdminAlbum = () => {
               style={{ marginTop: '0.5rem', maxWidth: '200px', borderRadius: '4px' }}
             />
           )}
-        </div>
+        </AdminField>
 
         {/* Image Gallery */}
         <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'var(--color-bg-surface)', borderRadius: '4px', border: '1px solid var(--color-border)' }}>
@@ -693,11 +661,9 @@ const AdminAlbum = () => {
           <TagsSection entityType="album" entityId={parseInt(id)} isLoggedIn={true} />
         </div>
 
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-            Wikipedia Slug
-          </label>
+        <AdminField label="Wikipedia Slug" htmlFor="album-wikipedia" help="The part after wikipedia.org/wiki/">
           <input
+            id="album-wikipedia"
             type="text"
             value={wikipedia}
             onChange={(e) => setWikipedia(e.target.value)}
@@ -713,18 +679,9 @@ const AdminAlbum = () => {
             autoCorrect="off"
             autoCapitalize="off"
             spellCheck="false"
-            style={{
-              width: '100%',
-              padding: '0.5rem',
-              fontSize: '1rem',
-              border: '1px solid var(--color-border)',
-              borderRadius: '4px',
-            }}
+            className="admin-input"
           />
-          <small style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
-            The part after wikipedia.org/wiki/
-          </small>
-        </div>
+        </AdminField>
 
         <div style={{ marginBottom: '1.5rem' }}>
           <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
@@ -821,10 +778,7 @@ const AdminAlbum = () => {
       )}
 
       {/* Transfer Section — Move to Artist or Merge into Album */}
-      <div style={{ marginTop: '3rem', padding: '1.5rem', backgroundColor: 'var(--color-warning-bg)', borderRadius: '4px', border: '1px solid var(--color-warning-border)' }}>
-        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '1rem', color: 'var(--color-warning-text)' }}>
-          Transfer Album
-        </h3>
+      <AdminPanel tone="warning" title="Transfer Album">
 
         <div style={{ marginBottom: '1rem' }}>
           <select
@@ -937,19 +891,10 @@ const AdminAlbum = () => {
             ? (movingToArtist ? 'Moving...' : 'Move Album to Artist')
             : (mergingAlbum ? 'Merging...' : 'Merge into Album')}
         </button>
-      </div>
+      </AdminPanel>
 
       {/* Additional Artists Section */}
-      <div style={{
-        marginTop: '3rem',
-        padding: '1.5rem',
-        backgroundColor: '#f0fdf4',
-        borderRadius: '4px',
-        border: '1px solid #86efac'
-      }}>
-        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '1rem', color: '#166534' }}>
-          Additional Artists
-        </h3>
+      <AdminPanel tone="relations" title="Additional Artists">
 
         {secondaryArtists.length > 0 && (
           <div style={{ marginBottom: '1rem' }}>
@@ -959,16 +904,16 @@ const AdminAlbum = () => {
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 padding: '0.5rem 0',
-                borderBottom: '1px solid #bbf7d0'
+                borderBottom: '1px solid var(--color-success-row-border)'
               }}>
                 <span style={{ fontWeight: '500' }}>{a.name}</span>
                 <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
                   <span style={{
                     fontSize: '0.75rem',
                     padding: '0.2rem 0.5rem',
-                    backgroundColor: '#dcfce7',
+                    backgroundColor: "var(--color-success-pill-bg)",
                     borderRadius: '9999px',
-                    color: '#166534'
+                    color: "var(--color-success-text)"
                   }}>{a.role}</span>
                   <button
                     type="button"
@@ -1016,7 +961,7 @@ const AdminAlbum = () => {
                 style={{
                   padding: '0.5rem',
                   fontSize: '0.875rem',
-                  border: '1px solid #86efac',
+                  border: '1px solid var(--color-success-border)',
                   borderRadius: '4px',
                   backgroundColor: 'var(--color-bg-surface)',
                 }}
@@ -1057,7 +1002,7 @@ const AdminAlbum = () => {
                     boxSizing: 'border-box',
                     padding: '0.5rem',
                     fontSize: '0.875rem',
-                    border: '1px solid #86efac',
+                    border: '1px solid var(--color-success-border)',
                     borderRadius: '4px',
                   }}
                 />
@@ -1079,7 +1024,7 @@ const AdminAlbum = () => {
               </button>
             </form>
             {addArtistResults.length > 0 && (
-              <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid #86efac', borderRadius: '4px', backgroundColor: 'var(--color-bg-surface)' }}>
+              <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid var(--color-success-border)', borderRadius: '4px', backgroundColor: 'var(--color-bg-surface)' }}>
                 {addArtistResults.map(artist => (
                   <div
                     key={artist.id}
@@ -1118,7 +1063,7 @@ const AdminAlbum = () => {
             )}
           </div>
         )}
-      </div>
+      </AdminPanel>
 
 
       {/* Tracks Section */}
