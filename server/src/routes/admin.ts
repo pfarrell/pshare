@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { db, pool } from '../db/database.js'
 import { sql } from 'kysely'
 import { SINGLES_ALBUM_TITLE } from '../constants/singles.js'
+import { mergeArtistInto } from '../services/artistMergeService.js'
 import {
   lookupAlbumMBID,
   lookupArtistMBID,
@@ -382,42 +383,7 @@ async function mergeArtistStubs(artistId: number, name: string): Promise<void> {
 
   for (const stub of stubs) {
     console.log(`  Merging stub artist "${stub.name}" (id=${stub.id}) into "${name}" (id=${artistId})`)
-
-    // Delete relations that would conflict when we update related_artist_id
-    await db.deleteFrom('artist_relations').where(eb =>
-      eb.and([
-        eb('related_artist_id', '=', stub.id),
-        eb('artist_id', 'in',
-          db.selectFrom('artist_relations').select('artist_id').where('related_artist_id', '=', artistId)
-        )
-      ])
-    ).execute()
-    // Also avoid creating a self-relation
-    await db.deleteFrom('artist_relations')
-      .where('related_artist_id', '=', stub.id)
-      .where('artist_id', '=', artistId)
-      .execute()
-
-    // Delete relations that would conflict when we update artist_id
-    await db.deleteFrom('artist_relations').where(eb =>
-      eb.and([
-        eb('artist_id', '=', stub.id),
-        eb('related_artist_id', 'in',
-          db.selectFrom('artist_relations').select('related_artist_id').where('artist_id', '=', artistId)
-        )
-      ])
-    ).execute()
-    await db.deleteFrom('artist_relations')
-      .where('artist_id', '=', stub.id)
-      .where('related_artist_id', '=', artistId)
-      .execute()
-
-    // Redirect remaining relations to the real artist
-    await db.updateTable('artist_relations').set({ related_artist_id: artistId }).where('related_artist_id', '=', stub.id).execute()
-    await db.updateTable('artist_relations').set({ artist_id: artistId }).where('artist_id', '=', stub.id).execute()
-
-    // Delete the stub
-    await db.deleteFrom('artists').where('id', '=', stub.id).execute()
+    await db.transaction().execute((trx) => mergeArtistInto(artistId, stub.id, trx))
     console.log(`  Merged stub artist ${stub.id} into ${artistId}`)
   }
 }
@@ -656,56 +622,14 @@ admin.post('/artist/:id/merge', async (c) => {
     const artist = await db.selectFrom('artists').select(['id', 'name']).where('id', '=', id).executeTakeFirst()
     if (!artist) return c.json({ error: 'Artist not found' }, 404)
 
-    for (const stubId of loserIds) {
-      const stub = await db.selectFrom('artists').select(['id', 'name']).where('id', '=', stubId).executeTakeFirst()
-      if (!stub) continue
-
-      console.log(`  Merging relations from "${stub.name}" (id=${stub.id}) into "${artist.name}" (id=${artist.id})`)
-
-      await db.deleteFrom('artist_relations').where(eb =>
-        eb.and([
-          eb('related_artist_id', '=', stub.id),
-          eb('artist_id', 'in',
-            db.selectFrom('artist_relations').select('artist_id').where('related_artist_id', '=', artist.id)
-          )
-        ])
-      ).execute()
-      await db.deleteFrom('artist_relations').where('related_artist_id', '=', stub.id).where('artist_id', '=', artist.id).execute()
-      await db.deleteFrom('artist_relations').where(eb =>
-        eb.and([
-          eb('artist_id', '=', stub.id),
-          eb('related_artist_id', 'in',
-            db.selectFrom('artist_relations').select('related_artist_id').where('artist_id', '=', artist.id)
-          )
-        ])
-      ).execute()
-      await db.deleteFrom('artist_relations').where('artist_id', '=', stub.id).where('related_artist_id', '=', artist.id).execute()
-
-      await db.updateTable('artist_relations').set({ related_artist_id: artist.id }).where('related_artist_id', '=', stub.id).execute()
-      await db.updateTable('artist_relations').set({ artist_id: artist.id }).where('artist_id', '=', stub.id).execute()
-
-      // Re-point albums/tracks still pointing at the stub before deleting it — otherwise
-      // this orphans them (albums.artist_id / tracks.artist_id have no FK constraint, so
-      // the delete below would succeed silently and leave dangling references).
-      await db.updateTable('albums').set({ artist_id: artist.id }).where('artist_id', '=', stub.id).execute()
-      await db.updateTable('tracks').set({ artist_id: artist.id }).where('artist_id', '=', stub.id).execute()
-
-      // Re-point non-primary album credits (collaborator/featured/guest/compilation)
-      // too. Unlike albums/tracks above, artist_albums.artist_id has ON DELETE CASCADE
-      // — without this, the stub's credits would just be silently destroyed by the
-      // delete below instead of transferred to the target artist.
-      await db.deleteFrom('artist_albums').where(eb =>
-        eb.and([
-          eb('artist_id', '=', stub.id),
-          eb('album_id', 'in',
-            db.selectFrom('artist_albums').select('album_id').where('artist_id', '=', artist.id)
-          )
-        ])
-      ).execute()
-      await db.updateTable('artist_albums').set({ artist_id: artist.id }).where('artist_id', '=', stub.id).execute()
-
-      await db.deleteFrom('artists').where('id', '=', stub.id).execute()
-    }
+    await db.transaction().execute(async (trx) => {
+      for (const loserId of loserIds) {
+        const loser = await trx.selectFrom('artists').select(['id', 'name']).where('id', '=', loserId).executeTakeFirst()
+        if (!loser) continue
+        console.log(`  Merging "${loser.name}" (id=${loser.id}) into "${artist.name}" (id=${artist.id})`)
+        await mergeArtistInto(artist.id, loser.id, trx)
+      }
+    })
 
     return c.json({ success: true, merged: loserIds.length })
   } catch (error) {
