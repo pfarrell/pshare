@@ -1,5 +1,5 @@
 // src/stores/favoritesStore.test.js
-import { useFavoritesStore } from './favoritesStore';
+import { useFavoritesStore, favoritePayload } from './favoritesStore';
 import { apiService } from '../services/api';
 
 vi.mock('../services/api', () => ({
@@ -98,5 +98,29 @@ describe('favoritesStore — clear', () => {
 
     expect(useFavoritesStore.getState().items).toEqual([]);
     expect(useFavoritesStore.getState().loaded).toBe(false);
+  });
+});
+
+describe('favoritePayload', () => {
+  test('artist', () => {
+    expect(favoritePayload('artist', { id: 1, name: 'A', image_path: 'a.jpg', extra: 'x' }))
+      .toEqual({ id: 1, name: 'A', image_path: 'a.jpg' });
+  });
+
+  test('album takes track_count/artist from extras and slims artist to id+name', () => {
+    expect(favoritePayload('album', { id: 2, title: 'T', image_path: 't.jpg' }, { track_count: 9, artist: { id: 3, name: 'X', image_path: 'x.jpg' } }))
+      .toEqual({ id: 2, title: 'T', image_path: 't.jpg', track_count: 9, artist: { id: 3, name: 'X' } });
+    expect(favoritePayload('album', { id: 2, title: 'T', image_path: null }, { track_count: 1, artist: null }).artist).toBeNull();
+  });
+
+  test('collection / playlist / track', () => {
+    expect(favoritePayload('collection', { id: 4, name: 'C', image_path: null }, { album_count: 5 }))
+      .toEqual({ id: 4, name: 'C', image_path: null, album_count: 5 });
+    expect(favoritePayload('playlist', { id: 5, name: 'P', image_path: null, track_count: 7 }))
+      .toEqual({ id: 5, name: 'P', image_path: null, track_count: 7 });
+    const artist = { id: 1, name: 'A' };
+    const album = { id: 2, title: 'B' };
+    expect(favoritePayload('track', { id: 6, title: 'S', track_number: '1', duration: 100, artist, album, download_url: '/d/6', stream_url: '/s' }))
+      .toEqual({ id: 6, title: 'S', track_number: '1', duration: 100, artist, album, download_url: '/d/6' });
   });
 });
