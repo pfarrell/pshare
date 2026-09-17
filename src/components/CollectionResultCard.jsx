@@ -1,91 +1,35 @@
 // src/components/CollectionResultCard.jsx
 import { formatCount } from '../utils/formatters';
-import ResultRow from './ResultRow';
-import ContextMenu from './ContextMenu';
+import EntityCard from './EntityCard';
 import CoverCollage from './CoverCollage';
-import { useContextMenu } from '../hooks/useContextMenu';
-import { useIsMobile } from '../hooks/useIsMobile';
 import { useAuthStore } from '../stores/authStore';
-import { useViewModeStore } from '../stores/viewModeStore';
 import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
-import { handleSmallImageError } from '../utils/imageFallback';
 
 // previewAlbums is only passed by the Collections list page (its API response
 // is the only one that includes it) — that's what scopes the collage to that
 // page without affecting Search results or Library/Favorites, which render
 // this same card with a plain imageUrl.
 const CollectionResultCard = ({ collection, onClick, imageUrl, previewAlbums }) => {
-  const isMobile = useIsMobile();
-  const viewMode = useViewModeStore((s) => s.mode);
   const { isAuthenticated } = useAuthStore();
   const favorite = useFavoriteToggle('collection', collection);
-  const ctxMenu = useContextMenu({ shouldIgnore: () => !isAuthenticated });
-
-  const menu = (
-    <ContextMenu
-      open={ctxMenu.open}
-      position={ctxMenu.position}
-      onDismiss={ctxMenu.dismiss}
-      onSwallowTouch={ctxMenu.swallowTouch}
-      onClose={ctxMenu.close}
-      actions={[{
-        key: 'favorite',
-        icon: favorite.icon,
-        label: favorite.label,
-        onClick: favorite.toggle,
-      }]}
-      testId="collection-card-menu-backdrop"
-    />
-  );
-
-  if (isMobile || viewMode === 'list') {
-    const albumCount = formatCount(collection.album_count || null, 'album');
-    const imageContent = (!collection.image_path && previewAlbums?.length)
-      ? <CoverCollage items={previewAlbums} alt={collection.name} placeholderGlyph="▣" />
-      : undefined;
-    return (
-      <>
-        <ResultRow
-          imageUrl={imageUrl}
-          imageContent={imageContent}
-          imageShape="square"
-          title={collection.name}
-          subtitle={albumCount ? `Collection · ${albumCount}` : 'Collection'}
-          onClick={() => !ctxMenu.open && onClick(collection)}
-          onImageError={handleSmallImageError}
-          onContextMenu={ctxMenu.triggerProps.onContextMenu}
-          onTouchStart={ctxMenu.triggerProps.onTouchStart}
-          onTouchMove={ctxMenu.triggerProps.onTouchMove}
-          onTouchEnd={ctxMenu.triggerProps.onTouchEnd}
-        />
-        {menu}
-      </>
-    );
-  }
+  const albumCount = formatCount(collection.album_count || null, 'album');
 
   return (
-    <>
-      <div className="artist-card" onClick={() => !ctxMenu.open && onClick(collection)} {...ctxMenu.triggerProps}>
-        <div className="artist-card-image">
-          <img src={imageUrl} alt={collection.name} onError={handleSmallImageError} />
-        </div>
-        <div className="artist-card-title">
-          <h3 style={{
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical'
-          }}>{collection.name}</h3>
-          {formatCount(collection.album_count || null, 'album') && (
-            <p style={{ fontSize: '0.7rem', color: 'var(--color-text-faint)', margin: '0.125rem 0 0 0' }}>
-              {formatCount(collection.album_count || null, 'album')}
-            </p>
-          )}
-        </div>
-      </div>
-      {menu}
-    </>
+    <EntityCard
+      title={collection.name}
+      imageUrl={imageUrl}
+      listSubtitle={albumCount ? `Collection · ${albumCount}` : 'Collection'}
+      listImageContent={(!collection.image_path && previewAlbums?.length)
+        ? <CoverCollage items={previewAlbums} alt={collection.name} placeholderGlyph="▣" />
+        : undefined}
+      cardTitleStyle={{ overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}
+      cardFooter={albumCount && (
+        <p style={{ fontSize: '0.7rem', color: 'var(--color-text-faint)', margin: '0.125rem 0 0 0' }}>{albumCount}</p>
+      )}
+      onClick={() => onClick(collection)}
+      actions={[isAuthenticated && { key: 'favorite', icon: favorite.icon, label: favorite.label, onClick: favorite.toggle }]}
+      menuTestId="collection-card-menu-backdrop"
+    />
   );
 };
 
