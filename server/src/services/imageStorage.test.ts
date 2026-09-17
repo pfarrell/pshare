@@ -11,7 +11,7 @@ const tmpRoot = () => fs.mkdtempSync(path.join(os.tmpdir(), 'imagestorage-'))
 
 test('downloads to <root>/<subdir>/<name> and creates the sm/ thumbnail', async (t) => {
   const png = await sharp({ create: { width: 800, height: 600, channels: 3, background: '#ff0000' } }).png().toBuffer()
-  const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(png, { status: 200 }))
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(new Uint8Array(png), { status: 200 }))
   const root = tmpRoot()
 
   const stored = await downloadToDisk('https://example.com/cover.png', 'cover.png', 'albums', root)
