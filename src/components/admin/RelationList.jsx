@@ -5,7 +5,7 @@ const RelationList = ({ title, titleExtra, items, getKey = (item) => item.id, re
   if (!items?.length && !titleExtra) return null;
   return (
     <div className="admin-relation-list">
-      <div className="admin-relation-list-title">{title}{titleExtra}</div>
+      {(title || titleExtra) && <div className="admin-relation-list-title">{title}{titleExtra}</div>}
       {(items || []).map((item) => (
         <div key={getKey(item)} className="admin-relation-row" style={rowStyle?.(item)}>
           <span className="admin-relation-name">{renderName(item)}</span>
