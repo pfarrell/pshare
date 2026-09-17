@@ -5,8 +5,10 @@ import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import { useContextMenu } from '../hooks/useContextMenu';
+import { useEntitySearch } from '../hooks/useEntitySearch';
 import ContextMenu from '../components/ContextMenu';
 import WikipediaSlugInput from '../components/admin/WikipediaSlugInput';
+import EntitySearchPicker from '../components/admin/EntitySearchPicker';
 import { handleSmallImageError } from '../utils/imageFallback';
 import { formatCount } from '../utils/formatters';
 
@@ -172,8 +174,7 @@ export default function AdminCollection() {
   const autoScrollDirectionRef = useRef(0);
 
   // Search to add albums
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
+  const albumSearch = useEntitySearch('album', { minLength: 1 });
   const [showSearch, setShowSearch] = useState(false);
 
   // Placeholder stubs
@@ -278,16 +279,6 @@ export default function AdminCollection() {
     }
   };
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-    try {
-      const response = await apiService.search(searchQuery);
-      setSearchResults((response.data.results || []).filter(r => r.type === 'album').map(r => r.data));
-    } catch (err) {
-      console.error('Search failed:', err);
-    }
-  };
-
   const handleAddAlbum = async (album) => {
     if (resolvingStubId) {
       return handleResolveStub(album);
@@ -305,8 +296,7 @@ export default function AdminCollection() {
       );
       setAlbums([...albums, { ...album, order: maxOrder + 1, artist: album.artist || { id: null, name: album.artist_name || '' } }]);
       setShowSearch(false);
-      setSearchQuery('');
-      setSearchResults([]);
+      albumSearch.reset();
     } catch (err) {
       console.error('Failed to add album:', err);
       alert('Failed to add album');
@@ -321,8 +311,7 @@ export default function AdminCollection() {
       setAlbums([...albums, { ...album, order: resolvedStub?.order, artist: album.artist || { id: null, name: album.artist_name || '' } }]);
       setResolvingStubId(null);
       setShowSearch(false);
-      setSearchQuery('');
-      setSearchResults([]);
+      albumSearch.reset();
     } catch (err) {
       console.error('Failed to resolve stub:', err);
       alert(err.response?.data?.error || 'Failed to resolve placeholder');
@@ -704,61 +693,20 @@ export default function AdminCollection() {
               Resolving placeholder: <strong>{stubs.find((s) => s.id === resolvingStubId)?.title}</strong>
             </div>
           )}
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Search for albums..."
-                style={{
-                  width: '100%', boxSizing: 'border-box', padding: '0.5rem', border: '1px solid var(--color-border-strong)',
-                  borderRadius: '4px', fontSize: '1rem',
-                }}
-              />
-            </div>
-            <button
-              onClick={handleSearch}
-              style={{
-                padding: '0.5rem 1rem', backgroundColor: '#3b82f6', color: 'white',
-                border: 'none', borderRadius: '4px', cursor: 'pointer',
-              }}
-            >
-              Search
-            </button>
-          </div>
-
-          {searchResults.length > 0 && (
-            <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-              {searchResults.map((album) => (
-                <div
-                  key={album.id}
-                  onClick={() => handleAddAlbum(album)}
-                  style={{
-                    padding: '0.75rem', borderBottom: '1px solid var(--color-border)',
-                    cursor: 'pointer', display: 'flex',
-                    justifyContent: 'space-between', alignItems: 'center',
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-bg-surface-muted)'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--color-bg-surface)'}
-                >
-                  <div>
-                    <div style={{ fontWeight: '500' }}>{album.title}</div>
-                    <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
-                      {album.artist?.name}
-                    </div>
-                  </div>
-                  <button style={{
-                    padding: '0.25rem 0.5rem', backgroundColor: '#10b981', color: 'white',
-                    border: 'none', borderRadius: '4px', fontSize: '0.75rem', cursor: 'pointer',
-                  }}>
-                    Add
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+          <EntitySearchPicker
+            search={albumSearch}
+            placeholder="Search for albums..."
+            maxHeight="300px"
+            renderItem={(album) => (
+              <>
+                <div style={{ fontWeight: '500' }}>{album.title}</div>
+                <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>{album.artist?.name}</div>
+              </>
+            )}
+            renderAction={() => <button type="button" className="btn btn-success btn-sm">Add</button>}
+            pickOnRowClick
+            onPick={handleAddAlbum}
+          />
 
           {!showStubForm ? (
             <button
@@ -850,7 +798,7 @@ export default function AdminCollection() {
                   onDragOver={handleDragOver}
                   onDragEnd={handleDragEnd}
                   onDrop={handleDrop}
-                  onResolve={(stubId) => { setResolvingStubId(stubId); setShowSearch(true); setSearchQuery(''); setSearchResults([]); }}
+                  onResolve={(stubId) => { setResolvingStubId(stubId); setShowSearch(true); albumSearch.reset(); }}
                   onRemove={handleRemoveStub}
                   onMoveToEdge={moveToEdge}
                 />

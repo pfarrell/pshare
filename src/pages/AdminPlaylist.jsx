@@ -5,7 +5,9 @@ import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import { useContextMenu } from '../hooks/useContextMenu';
+import { useEntitySearch } from '../hooks/useEntitySearch';
 import ContextMenu from '../components/ContextMenu';
+import EntitySearchPicker from '../components/admin/EntitySearchPicker';
 
 // Its own component (rather than inline JSX in a .map()) because
 // useContextMenu is a hook — each row needs its own open/position state.
@@ -90,8 +92,7 @@ export default function AdminPlaylist() {
   const [tracks, setTracks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
+  const trackSearch = useEntitySearch('track', { minLength: 1 });
   const [showSearch, setShowSearch] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState(null);
 
@@ -126,24 +127,12 @@ export default function AdminPlaylist() {
     }
   };
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-
-    try {
-      const response = await apiService.search(searchQuery);
-      setSearchResults(response.data.tracks || []);
-    } catch (err) {
-      console.error('Search failed:', err);
-    }
-  };
-
   const handleAddTrack = async (track) => {
     try {
       await apiService.addTrackToPlaylist(id, track.id);
       setTracks([...tracks, track]);
       setShowSearch(false);
-      setSearchQuery('');
-      setSearchResults([]);
+      trackSearch.reset();
     } catch (err) {
       console.error('Failed to add track:', err);
       alert('Failed to add track');
@@ -466,79 +455,22 @@ export default function AdminPlaylist() {
           marginBottom: '2rem',
           boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)'
         }}>
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Search for tracks..."
-                style={{
-                  width: '100%',
-                  boxSizing: 'border-box',
-                  padding: '0.5rem',
-                  border: '1px solid var(--color-border-strong)',
-                  borderRadius: '4px',
-                  fontSize: '1rem'
-                }}
-              />
-            </div>
-            <button
-              onClick={handleSearch}
-              style={{
-                padding: '0.5rem 1rem',
-                backgroundColor: '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
-              Search
-            </button>
-          </div>
-
-          {searchResults.length > 0 && (
-            <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-              {searchResults.map((track) => (
-                <div
-                  key={track.id}
-                  onClick={() => handleAddTrack(track)}
-                  style={{
-                    padding: '0.75rem',
-                    borderBottom: '1px solid var(--color-border)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-bg-surface-muted)'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--color-bg-surface)'}
-                >
-                  <div>
-                    <div style={{ fontWeight: '500' }}>{track.title}</div>
-                    <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
-                      {track.artist?.name} • {track.album?.title}
-                    </div>
-                  </div>
-                  <button
-                    style={{
-                      padding: '0.25rem 0.5rem',
-                      backgroundColor: '#10b981',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      fontSize: '0.75rem',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Add
-                  </button>
+          <EntitySearchPicker
+            search={trackSearch}
+            placeholder="Search for tracks..."
+            maxHeight="300px"
+            renderItem={(track) => (
+              <>
+                <div style={{ fontWeight: '500' }}>{track.title}</div>
+                <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
+                  {track.artist?.name} • {track.album?.title}
                 </div>
-              ))}
-            </div>
-          )}
+              </>
+            )}
+            renderAction={() => <button type="button" className="btn btn-success btn-sm">Add</button>}
+            pickOnRowClick
+            onPick={handleAddTrack}
+          />
         </div>
       )}
 
