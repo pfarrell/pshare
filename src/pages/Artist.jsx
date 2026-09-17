@@ -19,6 +19,7 @@ import { useContextMenu } from '../hooks/useContextMenu';
 import { useFavoritesStore } from '../stores/favoritesStore';
 import { useOvertoneAction } from '../hooks/useOvertoneAction';
 import { shareLink } from '../utils/shareLink';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 const Artist = () => {
   const { id } = useParams();
@@ -30,7 +31,7 @@ const Artist = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showAllSimilar, setShowAllSimilar] = useState(false);
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+  const isMobile = useIsMobile();
   const [showArtistModal, setShowArtistModal] = useState(false);
   const isFavorite = useFavoritesStore((s) => s.isFavorite('artist', parseInt(id)));
   const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
@@ -61,12 +62,6 @@ const Artist = () => {
       setShuffleLoading(false);
     }
   };
-
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
-  }, []);
 
   useEffect(() => {
     const fetchArtistData = async () => {

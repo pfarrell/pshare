@@ -12,6 +12,8 @@ const NotesSection = ({ entityType, entityId, notes, isLoggedIn, onChange }) => 
   const [content, setContent] = useState('');
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState(null);
+  // Initial value only (not useIsMobile): collapsed-by-default on phones, but
+  // a later resize/rotation must not collapse or expand notes the user is reading.
   const [collapsed, setCollapsed] = useState(() => window.innerWidth <= 768);
 
   const isConnected = Boolean(user?.recall_connected);
