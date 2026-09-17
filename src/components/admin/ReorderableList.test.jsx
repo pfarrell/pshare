@@ -13,6 +13,16 @@ const renderList = (onReorder) => render(
 
 const row = (text) => screen.getByText(text).closest('[draggable]');
 
+// fireEvent.dragOver/drop's init-object shorthand doesn't apply clientY to
+// the resulting DragEvent in this jsdom setup (it comes through as
+// undefined), so before/after-half detection can't be exercised through it.
+// Building the event directly and assigning clientY onto it works.
+const dragEventWithClientY = (type, clientY, dataTransfer) => {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.assign(event, { clientY, dataTransfer });
+  return event;
+};
+
 describe('ReorderableList', () => {
   test('right-click opens Send to Top/Bottom; Send to Top reorders', () => {
     const onReorder = vi.fn();
@@ -47,9 +57,9 @@ describe('ReorderableList', () => {
     vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({ top: 0, bottom: 40, height: 40, left: 0, right: 100, width: 100 });
     const dataTransfer = { effectAllowed: '', dropEffect: '' };
     fireEvent.dragStart(row('c'), { dataTransfer });
-    fireEvent.dragOver(target, { dataTransfer, clientY: 5 });
+    fireEvent(target, dragEventWithClientY('dragover', 5, dataTransfer));
     expect(screen.getByTestId('drop-indicator')).toBeInTheDocument();
-    fireEvent.drop(target, { dataTransfer, clientY: 5 });
+    fireEvent(target, dragEventWithClientY('drop', 5, dataTransfer));
     expect(onReorder).toHaveBeenCalledWith(['c', 'a', 'b']);
   });
 });
