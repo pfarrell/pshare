@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
-import { useUnsavedChangesStore } from '../stores/unsavedChangesStore';
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import Loading from '../components/Loading';
 import TrackArtistPicker from '../components/TrackArtistPicker';
 import MusicBrainzPicker from '../components/MusicBrainzPicker';
@@ -77,17 +77,6 @@ const AdminTrack = () => {
     setHasUnsavedChanges(hasChanges);
   }, [title, trackNumber, releaseYear, wikipedia, albumId, artistId, recordingMbid, detail]);
 
-  useEffect(() => {
-    const handleBeforeUnload = (e) => {
-      if (hasUnsavedChanges) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasUnsavedChanges]);
-
   const saveTrack = useCallback(async () => {
     await apiService.updateTrack(id, {
       title,
@@ -103,64 +92,18 @@ const AdminTrack = () => {
     setHasUnsavedChanges(false);
   }, [id, title, trackNumber, albumId, artistId, releaseYear, wikipedia, recordingMbid, detail]);
 
-  useEffect(() => {
-    const handleClick = async (e) => {
-      if (!hasUnsavedChanges) return;
-      const link = e.target.closest('a');
-      if (!link) return;
-      const href = link.getAttribute('href');
-      if (!href || href.startsWith('http') || href.startsWith('#')) return;
-      if (link.classList.contains('admin-back-link')) return;
-
-      e.preventDefault();
-      e.stopPropagation();
-
-      const choice = window.confirm('You have unsaved changes. Click OK to save and leave, or Cancel to stay on this page.');
-      if (choice) {
-        try {
-          await saveTrack();
-          setTimeout(() => navigate(href), 0);
-        } catch (err) {
-          console.error('Error saving track:', err);
-          setError(err.response?.data?.error || 'Failed to save track');
-        }
-      }
-    };
-    document.addEventListener('click', handleClick, true);
-    return () => document.removeEventListener('click', handleClick, true);
-  }, [hasUnsavedChanges, saveTrack, navigate]);
-
-  // Registered so Layout's pull-to-refresh can prompt to save before
-  // remounting this page (see stores/unsavedChangesStore).
-  useEffect(() => {
-    useUnsavedChangesStore.getState().setUnsavedChanges(hasUnsavedChanges, saveTrack);
-    return () => useUnsavedChangesStore.getState().clear();
-  }, [hasUnsavedChanges, saveTrack]);
-
-  const handleNavigateAway = async (destination) => {
-    if (hasUnsavedChanges) {
-      const choice = window.confirm('You have unsaved changes. Click OK to save and leave, or Cancel to stay on this page.');
-
-      if (choice) {
-        // User clicked OK - save and navigate
-        try {
-          await saveTrack();
-          navigate(destination);
-        } catch (err) {
-          console.error('Error saving track:', err);
-          setError(err.response?.data?.error || 'Failed to save track');
-        }
-      }
-      // If Cancel, do nothing (stay on page)
-    } else {
-      // No unsaved changes, just navigate
-      navigate(destination);
-    }
-  };
+  const { navigateAway } = useUnsavedChangesGuard({
+    isDirty: hasUnsavedChanges,
+    save: saveTrack,
+    onSaveError: (err) => {
+      console.error('Error saving track:', err);
+      setError(err.response?.data?.error || 'Failed to save track');
+    },
+  });
 
   const handleNavigateBack = (e) => {
     e.preventDefault();
-    handleNavigateAway(`/album/${detail.track.album_id}`);
+    navigateAway(`/album/${detail.track.album_id}`);
   };
 
   const handleAddCollaborator = async (newArtistId, newArtistName) => {
