@@ -9,6 +9,7 @@ import ResultRow from './ResultRow';
 import ContextMenu from './ContextMenu';
 import CoverCollage from './CoverCollage';
 import { useContextMenu } from '../hooks/useContextMenu';
+import { useQueueActions } from '../hooks/useQueueActions';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useViewModeStore } from '../stores/viewModeStore';
 import { handleSmallImageError } from '../utils/imageFallback';
@@ -20,46 +21,19 @@ import { handleSmallImageError } from '../utils/imageFallback';
 const PlaylistResultCard = ({ playlist, onClick, imageUrl, previewAlbums }) => {
   const isMobile = useIsMobile();
   const viewMode = useViewModeStore((s) => s.mode);
-  const [playLoading, setPlayLoading] = useState(false);
-  const addTracks = usePlayerStore((s) => s.addTracks);
-  const setPlaylist = usePlayerStore((s) => s.setPlaylist);
   const { isAuthenticated } = useAuthStore();
   const favorite = useFavoriteToggle('playlist', playlist);
   const ctxMenu = useContextMenu({
     shouldIgnore: (e) => !isAuthenticated || e.target.closest('[data-result-row-play]'),
   });
 
-  const withPlaylistTracks = async (dispatch) => {
-    setPlayLoading(true);
-    try {
-      const response = await apiService.getPlaylist(playlist.id);
-      const tracks = response.data.tracks.map((track) => ({
-        ...track,
-        source_playlist: { id: playlist.id, name: playlist.name },
-      }));
-      dispatch(tracks);
-    } catch (err) {
-      console.error('Failed to play playlist', err);
-    } finally {
-      setPlayLoading(false);
-    }
-  };
-
-  const handlePlayAll = () => withPlaylistTracks((tracks) => {
-    addTracks(tracks, false, { flashActivity: true }); // store auto-starts playback if idle
-  });
-
-  const handlePlayNow = () => withPlaylistTracks((tracks) => {
-    setPlaylist(tracks);
-  });
-
-  const handlePlayNext = () => withPlaylistTracks((tracks) => {
-    addTracks(tracks, true, { flashActivity: true });
-  });
-
-  const handleAddToQueue = () => withPlaylistTracks((tracks) => {
-    addTracks(tracks, false, { flashActivity: true });
-  });
+  const queue = useQueueActions(
+    () => apiService.getPlaylist(playlist.id).then((response) => response.data.tracks.map((track) => ({
+      ...track,
+      source_playlist: { id: playlist.id, name: playlist.name },
+    }))),
+    { errorLabel: 'Failed to play playlist' }
+  );
 
   const menu = (
     <ContextMenu
@@ -98,11 +72,11 @@ const PlaylistResultCard = ({ playlist, onClick, imageUrl, previewAlbums }) => {
           onTouchMove={ctxMenu.triggerProps.onTouchMove}
           onTouchEnd={ctxMenu.triggerProps.onTouchEnd}
           play={{
-            loading: playLoading,
-            onPlay: handlePlayAll,
-            onPlayNow: handlePlayNow,
-            onPlayNext: handlePlayNext,
-            onAddToQueue: handleAddToQueue,
+            loading: queue.loading,
+            onPlay: queue.playAll,
+            onPlayNow: queue.playNow,
+            onPlayNext: queue.playNext,
+            onAddToQueue: queue.addToQueue,
             label: `Play ${playlist.name}`,
           }}
         />

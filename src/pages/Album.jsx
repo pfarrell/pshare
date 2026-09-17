@@ -19,14 +19,13 @@ import { useContextMenu } from '../hooks/useContextMenu';
 import { useOvertoneAction } from '../hooks/useOvertoneAction';
 import { useFetch } from '../hooks/useFetch';
 import { useEntityHeaderActions } from '../hooks/useEntityHeaderActions';
+import { useQueueActions } from '../hooks/useQueueActions';
 
 const Album = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const collectionId = location.state?.collectionId ?? null;
-  const addTracks = usePlayerStore((s) => s.addTracks);
-  const setPlaylist = usePlayerStore((s) => s.setPlaylist);
   const setCollectionContext = usePlayerStore((s) => s.setCollectionContext);
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const setPageTracks = usePlayerStore((s) => s.setPageTracks);
@@ -80,37 +79,11 @@ const Album = () => {
   // album once playback naturally runs out.
   const tagCollectionContext = () => {
     if (collectionId) {
-      setCollectionContext({ collectionId, albumId: album.id });
+      setCollectionContext({ collectionId, albumId: albumData?.album?.id });
     }
   };
 
-  const handlePlay = () => {
-    if (albumData?.tracks) {
-      addTracks(albumData.tracks, false, { flashActivity: true }); // store auto-starts playback if idle
-      tagCollectionContext();
-    }
-  };
-
-  const handlePlayNow = () => {
-    if (albumData?.tracks) {
-      setPlaylist(albumData.tracks);
-      tagCollectionContext();
-    }
-  };
-
-  const handlePlayNext = () => {
-    if (albumData?.tracks) {
-      addTracks(albumData.tracks, true, { flashActivity: true }); // store auto-starts playback if idle
-      tagCollectionContext();
-    }
-  };
-
-  const handleAddToQueue = () => {
-    if (albumData?.tracks) {
-      addTracks(albumData.tracks, false, { flashActivity: true }); // store auto-starts playback if idle
-      tagCollectionContext();
-    }
-  };
+  const queue = useQueueActions(albumData?.tracks, { afterEnqueue: tagCollectionContext });
 
   const handleMadeSingle = (trackId) => {
     setAlbumData((d) => ({ ...d, tracks: d.tracks.filter((t) => t.id !== trackId) }));
@@ -193,10 +166,10 @@ const Album = () => {
             {/* Action Buttons */}
             <div className="album-header-actions" style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
               <PlayActionsMenu
-                onPlay={handlePlay}
-                onPlayNow={handlePlayNow}
-                onPlayNext={handlePlayNext}
-                onAddToQueue={handleAddToQueue}
+                onPlay={queue.playAll}
+                onPlayNow={queue.playNow}
+                onPlayNext={queue.playNext}
+                onAddToQueue={queue.addToQueue}
                 overflowActions={headerActions}
               />
               {overtoneModal}
