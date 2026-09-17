@@ -9,15 +9,7 @@ import { requireAuth } from '../middleware/auth.js'
 import { canModify } from '../utils/ownership.js'
 import fs from 'fs'
 import path from 'path'
-import { fileURLToPath } from 'url'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-// In production, we're deployed to /var/www/bemused-node/current, use that
-// In development, calculate from __dirname
-const projectRoot = process.env.NODE_ENV === 'production'
-  ? '/var/www/bemused-node/current'
-  : path.resolve(__dirname, '../../..')
+import { imagesDir } from '../config/paths.js'
 
 const playlists = new Hono<{ Variables: Variables }>()
 
@@ -345,7 +337,7 @@ playlists.post('/:id/image', requireAuth, async (c) => {
     const buffer = Buffer.from(await response.arrayBuffer())
 
     // Determine the image directory (use albums directory for playlists too)
-    const imageDir = path.join(projectRoot, 'public', 'images', 'albums')
+    const imageDir = imagesDir('albums')
     console.log(`Saving playlist image to directory: ${imageDir}`)
 
     // Create directory if it doesn't exist

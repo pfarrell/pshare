@@ -22,33 +22,13 @@ import { fetchArtistImageFromFanart } from '../services/fanart.js'
 import { fetchSimilarArtists } from '../services/lastfmSimilar.js'
 import fs from 'fs'
 import path from 'path'
-import { fileURLToPath } from 'url'
+import { imagesDir } from '../config/paths.js'
 import { createSmallVersion } from '../services/imageResize.js'
 import { parseFile } from 'music-metadata'
 
 const MBID_RETRYABLE = ['unmatched', 'not_found', 'low_confidence']
 
 const admin = new Hono()
-
-// Test route to verify admin routing works
-admin.get('/test', (c) => {
-  return c.json({ message: 'Admin GET routing works!' })
-})
-
-// Test POST route
-admin.post('/test-post', (c) => {
-  return c.json({ message: 'Admin POST routing works!' })
-})
-
-// Helper to get the project root directory
-// Use environment variable or fall back to calculating from __dirname
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-// In production, we're deployed to /var/www/bemused-node/current, use that
-// In development, calculate from __dirname
-const projectRoot = process.env.NODE_ENV === 'production'
-  ? '/var/www/bemused-node/current'
-  : path.resolve(__dirname, '../../..')
 
 // PUT /admin/artist/:id — update an artist
 admin.put('/artist/:id', async (c) => {
@@ -127,10 +107,10 @@ admin.put('/artist/:id', async (c) => {
         console.warn(`mergeArtistStubs failed for artist ${id}:`, err.message)
       )
       if (!mbidUpdate && MBID_RETRYABLE.includes(current.mbid_status ?? 'unmatched')) {
-        const imagesDir = path.join(projectRoot, 'public', 'images')
+        const imgDir = imagesDir()
         lookupArtistMBID(id, name).then(async result => {
           if (!result.mbid) return
-          await fetchArtistImageFromFanart(id, result.mbid, imagesDir)
+          await fetchArtistImageFromFanart(id, result.mbid, imgDir)
           await fetchSimilarArtists(id, name)
         }).catch(err =>
           console.warn(`Post-update lookup chain failed for artist ${id}:`, err.message)
@@ -140,9 +120,9 @@ admin.put('/artist/:id', async (c) => {
 
     // Manually-set MBID: re-run the same side effects a fresh auto-match would trigger
     if (mbidUpdate?.mbid_status === 'manual' && mbidUpdate.musicbrainz_id) {
-      const imagesDir = path.join(projectRoot, 'public', 'images')
+      const imgDir = imagesDir()
       const mbid = mbidUpdate.musicbrainz_id
-      fetchArtistImageFromFanart(id, mbid, imagesDir).catch(err =>
+      fetchArtistImageFromFanart(id, mbid, imgDir).catch(err =>
         console.warn(`Manual MBID image fetch failed for artist ${id}:`, err.message)
       )
       fetchSimilarArtists(id, name).catch(err =>
@@ -281,8 +261,8 @@ admin.put('/album/:id', async (c) => {
     // above, since fetchAlbumArtFromCAA logs its own failures to error_log.
     const caaFetchMbid = mbidUpdate?.mbid_status === 'manual' ? mbidUpdate.musicbrainz_id : caaRetryMbid
     if (caaFetchMbid) {
-      const imagesDir = path.join(projectRoot, 'public', 'images')
-      fetchAlbumArtFromCAA(id, caaFetchMbid, imagesDir).catch(err =>
+      const imgDir = imagesDir()
+      fetchAlbumArtFromCAA(id, caaFetchMbid, imgDir).catch(err =>
         console.warn(`Manual MBID image fetch failed for album ${id}:`, err.message)
       )
     }
@@ -469,10 +449,10 @@ admin.post('/artist', async (c) => {
       console.warn(`mergeArtistStubs failed for new artist ${artist.id}:`, err.message)
     )
 
-    const imagesDir = path.join(projectRoot, 'public', 'images')
+    const imgDir = imagesDir()
     lookupArtistMBID(artist.id, artist.name).then(async result => {
       if (!result.mbid) return
-      await fetchArtistImageFromFanart(artist.id, result.mbid, imagesDir)
+      await fetchArtistImageFromFanart(artist.id, result.mbid, imgDir)
       await fetchSimilarArtists(artist.id, artist.name)
     }).catch(err =>
       console.warn(`Post-create lookup chain failed for artist ${artist.id}:`, err.message)
@@ -759,7 +739,7 @@ admin.post('/artist/:id/image', async (c) => {
     const buffer = Buffer.from(await response.arrayBuffer())
 
     // Determine the image directory
-    const imageDir = path.join(projectRoot, 'public', 'images', 'artists')
+    const imageDir = imagesDir('artists')
     console.log(`Saving artist image to directory: ${imageDir}`)
 
     // Create directory if it doesn't exist
@@ -817,7 +797,7 @@ admin.post('/album/:id/image', async (c) => {
     const buffer = Buffer.from(await response.arrayBuffer())
 
     // Determine the image directory
-    const imageDir = path.join(projectRoot, 'public', 'images', 'albums')
+    const imageDir = imagesDir('albums')
     console.log(`Saving album image to directory: ${imageDir}`)
 
     // Create directory if it doesn't exist
@@ -1968,7 +1948,7 @@ async function downloadAndSaveImage(
   })
   if (!response.ok) throw new Error(`Failed to download image: ${response.status}`)
   const buffer = Buffer.from(await response.arrayBuffer())
-  const imageDir = path.join(projectRoot, 'public', 'images', subdir)
+  const imageDir = imagesDir(subdir)
   if (!fs.existsSync(imageDir)) fs.mkdirSync(imageDir, { recursive: true })
   const imagePath = path.join(imageDir, imageName)
   fs.writeFileSync(imagePath, buffer)

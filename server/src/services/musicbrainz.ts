@@ -4,13 +4,9 @@ import { db } from '../db/database.js'
 import { fetchAlbumArtFromCAA, hasCoverArt } from './coverArtArchive.js'
 import { errorLogService } from './errorLogService.js'
 
-import path from 'path'
-import { fileURLToPath } from 'url'
+import { imagesDir } from '../config/paths.js'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const IMAGES_DIR = process.env.NODE_ENV === 'production'
-  ? '/var/www/bemused-node/current/public/images'
-  : path.resolve(__dirname, '../../../public/images')
+const IMAGES_DIR = imagesDir()
 
 const MB_BASE = 'https://musicbrainz.org/ws/2'
 const USER_AGENT = 'Bemused/1.0 (https://patf.net)'

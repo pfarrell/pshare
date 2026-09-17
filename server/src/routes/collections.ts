@@ -10,15 +10,7 @@ import { requireAuth } from '../middleware/auth.js'
 import { canModify } from '../utils/ownership.js'
 import fs from 'fs'
 import path from 'path'
-import { fileURLToPath } from 'url'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-// In production, we're deployed to /var/www/bemused-node/current, use that
-// In development, calculate from __dirname
-const projectRoot = process.env.NODE_ENV === 'production'
-  ? '/var/www/bemused-node/current'
-  : path.resolve(__dirname, '../../..')
+import { imagesDir } from '../config/paths.js'
 
 const collections = new Hono<{ Variables: Variables }>()
 
@@ -490,7 +482,7 @@ collections.post('/:id/image', requireAuth, async (c) => {
     if (!response.ok) return c.json({ error: 'Failed to download image from URL' }, 400)
 
     const buffer = Buffer.from(await response.arrayBuffer())
-    const imageDir = path.join(projectRoot, 'public', 'images', 'albums')
+    const imageDir = imagesDir('albums')
     if (!fs.existsSync(imageDir)) fs.mkdirSync(imageDir, { recursive: true })
 
     const imagePath = path.join(imageDir, image_name)
