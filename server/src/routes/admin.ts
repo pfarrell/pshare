@@ -1,10 +1,7 @@
 import { Hono } from 'hono'
-import { db } from '../db/database.js'
+import { db, pool } from '../db/database.js'
 import { sql } from 'kysely'
 import { SINGLES_ALBUM_TITLE } from '../constants/singles.js'
-import pg from 'pg'
-
-const pool = new pg.Pool({ connectionString: process.env.BEMUSED_DB })
 import {
   lookupAlbumMBID,
   lookupArtistMBID,

@@ -359,7 +359,7 @@ export interface Database {
 
 // ---- DB instance ----
 
-const pool = new pg.Pool({
+export const pool = new pg.Pool({
   connectionString: process.env.BEMUSED_DB,
   max: 10,
 })
