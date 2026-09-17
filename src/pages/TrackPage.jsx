@@ -10,6 +10,7 @@ import { useContextMenu } from '../hooks/useContextMenu';
 import { useIsMobile } from '../hooks/useIsMobile';
 import PlayButton from '../components/PlayButton';
 import Loading from '../components/Loading';
+import PageError from '../components/PageError';
 import ContextMenu from '../components/ContextMenu';
 import AddToPlaylistModal from '../components/AddToPlaylistModal';
 import TrackNotesModal from '../components/TrackNotesModal';
@@ -140,27 +141,7 @@ const TrackPage = () => {
   }
 
   if (error || !track) {
-    return (
-      <div className="loading-container">
-        <div style={{ textAlign: 'center' }}>
-          <p style={{ color: '#ef4444', fontSize: '1.25rem' }}>{error || 'Track not found'}</p>
-          <button
-            onClick={() => navigate('/')}
-            style={{
-              marginTop: '1rem',
-              padding: '0.5rem 1rem',
-              backgroundColor: '#3b82f6',
-              color: 'white',
-              borderRadius: '4px',
-              border: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            Go Home
-          </button>
-        </div>
-      </div>
-    );
+    return <PageError message={error || 'Track not found'} />;
   }
 
   const isPlaying = Boolean(currentTrack && currentTrack.id === track.id);

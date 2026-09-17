@@ -11,6 +11,7 @@ import Track from '../components/Track';
 import AboutSection from '../components/AboutSection';
 import Loading from '../components/Loading';
 import Retry from '../components/Retry';
+import PageError from '../components/PageError';
 import TagsSection from '../components/TagsSection';
 import PlayActionsMenu from '../components/PlayActionsMenu';
 import ContextMenu from '../components/ContextMenu';
@@ -94,27 +95,7 @@ const Artist = () => {
   }
 
   if (error || !artistData || !artistData.artist) {
-    return (
-      <div className="loading-container">
-        <div style={{ textAlign: 'center' }}>
-          <p style={{ color: '#ef4444', fontSize: '1.25rem' }}>{error || 'Artist not found'}</p>
-          <button 
-            onClick={() => navigate('/')}
-            style={{ 
-              marginTop: '1rem', 
-              padding: '0.5rem 1rem', 
-              backgroundColor: '#3b82f6', 
-              color: 'white', 
-              borderRadius: '4px',
-              border: 'none',
-              cursor: 'pointer'
-            }}
-          >
-            Go Home
-          </button>
-        </div>
-      </div>
-    );
+    return <PageError message={error || 'Artist not found'} />;
   }
 
   const { artist, summary, albums, singles, appears_on, performances, related_artists, members, group_albums, similar_artists } = artistData;

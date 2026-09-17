@@ -6,6 +6,8 @@ import { apiService } from '../services/api';
 import { usePlayerStore } from '../stores/playerStore';
 import { useAuthStore } from '../stores/authStore';
 import Track from '../components/Track';
+import Loading from '../components/Loading';
+import PageError from '../components/PageError';
 import TagsSection from '../components/TagsSection';
 import NotesSection from '../components/NotesSection';
 import CompilationArtistLinks from '../components/CompilationArtistLinks';
@@ -152,50 +154,11 @@ const Album = () => {
   };
 
   if (loading) {
-    return (
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        minHeight: '100%',
-        backgroundColor: '#3a4853'
-      }}>
-        <div style={{ textAlign: 'center' }}>
-          <div className="loading-spinner"></div>
-          <p className="loading-text">Loading album...</p>
-        </div>
-      </div>
-    );
+    return <Loading message="Loading album" />;
   }
 
   if (error || !albumData?.album) {
-    return (
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        minHeight: '100%',
-        backgroundColor: '#3a4853'
-      }}>
-        <div style={{ textAlign: 'center' }}>
-          <p style={{ color: '#ef4444', fontSize: '1.25rem' }}>{error || 'Album not found'}</p>
-          <button 
-            onClick={() => navigate('/')}
-            style={{ 
-              marginTop: '1rem', 
-              padding: '0.5rem 1rem', 
-              backgroundColor: '#3b82f6', 
-              color: 'white', 
-              borderRadius: '4px',
-              border: 'none',
-              cursor: 'pointer'
-            }}
-          >
-            Go Home
-          </button>
-        </div>
-      </div>
-    );
+    return <PageError message={error || 'Album not found'} />;
   }
 
   const { artist, album, tracks, summary, secondary_artists, compilation_artists, collections, notes } = albumData;

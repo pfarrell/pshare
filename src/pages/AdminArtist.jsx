@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import Loading from '../components/Loading';
+import PageError from '../components/PageError';
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal';
 import TagsSection from '../components/TagsSection';
 import MusicBrainzPicker from '../components/MusicBrainzPicker';
@@ -435,12 +436,7 @@ const AdminArtist = () => {
   }
 
   if (error && !artistData) {
-    return (
-      <div className="loading-container">
-        <p style={{ color: '#ef4444', fontSize: '1.25rem' }}>{error}</p>
-        <button onClick={() => navigate('/')}>Go Home</button>
-      </div>
-    );
+    return <PageError message={error} />;
   }
 
   return (
