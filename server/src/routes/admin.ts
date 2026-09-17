@@ -7,15 +7,13 @@ import { deleteAlbumsCascade } from '../services/entityDeleteService.js'
 import {
   lookupAlbumMBID,
   lookupArtistMBID,
-  extractMbid,
 } from '../services/musicbrainz.js'
 import {
-  getArtistByMbid,
-  getReleaseByMbid,
   searchArtistsMB,
   searchReleasesMB,
   searchRecordingsMB,
 } from '../services/musicbrainzLocal.js'
+import { resolveManualMbid } from '../services/mbidService.js'
 import { fetchAlbumArtFromCAA } from '../services/coverArtArchive.js'
 import { fetchArtistImageFromFanart } from '../services/fanart.js'
 import { fetchSimilarArtists } from '../services/lastfmSimilar.js'
@@ -50,35 +48,12 @@ admin.put('/artist/:id', async (c) => {
       return c.json({ error: 'Artist not found' }, 404)
     }
 
-    let mbidUpdate: { musicbrainz_id: string | null; mbid_confidence: number | null; mbid_status: string } | null = null
-
-    if (musicbrainz_id !== undefined) {
-      const raw = typeof musicbrainz_id === 'string' ? musicbrainz_id.trim() : ''
-      if (!raw) {
-        if (current.musicbrainz_id) {
-          mbidUpdate = { musicbrainz_id: null, mbid_confidence: null, mbid_status: 'unmatched' }
-        }
-      } else {
-        let mbid: string
-        try {
-          mbid = extractMbid(raw, 'artist')
-        } catch (err) {
-          return c.json({ error: (err as Error).message }, 400)
-        }
-        if (mbid !== current.musicbrainz_id) {
-          let entity
-          try {
-            entity = await getArtistByMbid(mbid)
-          } catch {
-            return c.json({ error: 'Could not reach MusicBrainz to verify — try again' }, 502)
-          }
-          if (!entity) {
-            return c.json({ error: 'No such artist found on MusicBrainz' }, 400)
-          }
-          mbidUpdate = { musicbrainz_id: mbid, mbid_confidence: 1.0, mbid_status: 'manual' }
-        }
-      }
+    const mbidResult = await resolveManualMbid('artist', musicbrainz_id, current.musicbrainz_id)
+    if (!mbidResult.ok) {
+      const errorResult = mbidResult as { ok: false; status: 400 | 502; error: string }
+      return c.json({ error: errorResult.error }, errorResult.status)
     }
+    const mbidUpdate = mbidResult.update
 
     const updated = await db
       .updateTable('artists')
@@ -170,50 +145,32 @@ admin.put('/album/:id', async (c) => {
       return c.json({ error: 'Album not found' }, 404)
     }
 
-    let mbidUpdate: { musicbrainz_id: string | null; mbid_confidence: number | null; mbid_status: string; release_group_musicbrainz_id: string | null } | null = null
-    let mbidReleaseYear: string | undefined
-    // Set when the admin re-pastes the MBID that's already stored, as a way to
-    // retry a Cover Art Archive fetch that failed the first time (transient
-    // CAA/MusicBrainz errors) — the MBID fields don't need updating, just the
-    // image-fetch side effect below. Only offered while there's no image yet;
-    // once one is attached, re-submitting the same id is a no-op again so we
-    // don't re-download and accumulate duplicate image rows on every save.
-    let caaRetryMbid: string | undefined
-
-    if (musicbrainz_id !== undefined) {
-      const raw = typeof musicbrainz_id === 'string' ? musicbrainz_id.trim() : ''
-      if (!raw) {
-        if (current.musicbrainz_id) {
-          mbidUpdate = { musicbrainz_id: null, mbid_confidence: null, mbid_status: 'unmatched', release_group_musicbrainz_id: null }
-        }
-      } else {
-        let mbid: string
-        try {
-          mbid = extractMbid(raw, 'release')
-        } catch (err) {
-          return c.json({ error: (err as Error).message }, 400)
-        }
-        if (mbid !== current.musicbrainz_id) {
-          let entity
-          try {
-            entity = await getReleaseByMbid(mbid)
-          } catch {
-            return c.json({ error: 'Could not reach MusicBrainz to verify — try again' }, 502)
-          }
-          if (!entity) {
-            return c.json({ error: 'No such release found on MusicBrainz' }, 400)
-          }
-          mbidUpdate = { musicbrainz_id: mbid, mbid_confidence: 1.0, mbid_status: 'manual', release_group_musicbrainz_id: entity.release_group_id ?? null }
-          // Prefer the release-group's original release date over this specific
-          // edition's — a manually-pasted MBID is often for a remaster/reissue,
-          // and the point of auto-filling this is to save the admin from having
-          // to go look up the original year by hand.
-          mbidReleaseYear = (entity.original_date || entity.date)?.match(/^\d{4}/)?.[0]
-        } else if (current.mbid_status === 'manual' && !current.image_path) {
-          caaRetryMbid = mbid
-        }
-      }
+    const mbidResult = await resolveManualMbid('release', musicbrainz_id, current.musicbrainz_id)
+    if (!mbidResult.ok) {
+      const errorResult = mbidResult as { ok: false; status: 400 | 502; error: string }
+      return c.json({ error: errorResult.error }, errorResult.status)
     }
+
+    const mbidUpdateWithResult = mbidResult as { ok: true; update: any; entity?: any; sameAsCurrent: boolean }
+    const mbidUpdate = mbidUpdateWithResult.update
+      ? {
+          ...mbidUpdateWithResult.update,
+          release_group_musicbrainz_id: mbidUpdateWithResult.update.musicbrainz_id
+            ? (mbidUpdateWithResult.entity?.release_group_id ?? null)
+            : null,
+        }
+      : null
+    // Prefer the release-group's original release date over this specific
+    // edition's — a manually-pasted MBID is often for a remaster/reissue.
+    const mbidReleaseYear: string | undefined = mbidUpdateWithResult.update?.musicbrainz_id
+      ? (mbidUpdateWithResult.entity?.original_date || mbidUpdateWithResult.entity?.date)?.match(/^\d{4}/)?.[0]
+      : undefined
+    // Re-pasting the already-stored MBID retries a Cover Art Archive fetch
+    // that failed the first time — only while no image is attached yet, so
+    // repeated saves don't accumulate duplicate image rows.
+    const caaRetryMbid = !mbidUpdateWithResult.update && mbidUpdateWithResult.sameAsCurrent && current.mbid_status === 'manual' && !current.image_path
+      ? current.musicbrainz_id ?? undefined
+      : undefined
 
     const updated = await db
       .updateTable('albums')
