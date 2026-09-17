@@ -148,6 +148,19 @@ const Album = () => {
     ? (compilation_artists || [])
     : (secondary_artists || []).filter((sa) => sa.role !== 'collaborator');
 
+  const headerActions = [
+    isAdmin && { key: 'edit', icon: '✎', label: 'Edit', onClick: () => navigate(`/admin/album/${id}`) },
+    isAuthenticated && { key: 'collection', icon: '▣', label: 'Add to Collection', onClick: () => setShowCollectionModal(true) },
+    isAuthenticated && {
+      key: 'favorite',
+      icon: isFavorite ? '★' : '☆',
+      label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
+      onClick: handleToggleFavorite,
+    },
+    overtoneAction,
+    isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: () => shareLink({ title: album.title, text: `${album.title} by ${artist.name}` }) },
+  ].filter(Boolean);
+
   return (
     <div style={{ padding: '.5rem', maxWidth: '1400px', margin: '0 auto' }}>
       {/* Album Header */}
@@ -206,18 +219,7 @@ const Album = () => {
                 onPlayNow={handlePlayNow}
                 onPlayNext={handlePlayNext}
                 onAddToQueue={handleAddToQueue}
-                overflowActions={[
-                  isAdmin && { key: 'edit', icon: '✎', label: 'Edit', onClick: () => navigate(`/admin/album/${id}`) },
-                  isAuthenticated && { key: 'collection', icon: '▣', label: 'Add to Collection', onClick: () => setShowCollectionModal(true) },
-                  isAuthenticated && {
-                    key: 'favorite',
-                    icon: isFavorite ? '★' : '☆',
-                    label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
-                    onClick: handleToggleFavorite,
-                  },
-                  overtoneAction,
-                  isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: () => shareLink({ title: album.title, text: `${album.title} by ${artist.name}` }) },
-                ].filter(Boolean)}
+                overflowActions={headerActions}
               />
               {overtoneModal}
             </div>
@@ -287,49 +289,10 @@ const Album = () => {
         position={ctxMenu.position}
         onDismiss={ctxMenu.dismiss}
         onSwallowTouch={ctxMenu.swallowTouch}
+        onClose={ctxMenu.close}
+        actions={headerActions}
         testId="album-header-menu-backdrop"
-      >
-        {isAdmin && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); navigate(`/admin/album/${id}`); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); navigate(`/admin/album/${id}`); }}
-          >
-            ✎ Edit
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); setShowCollectionModal(true); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); setShowCollectionModal(true); }}
-          >
-            ▣ Add to Collection
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={(e) => { e.stopPropagation(); handleToggleFavorite(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleToggleFavorite(); }}
-          >
-            {isFavorite ? '★ Remove from Favorites' : '☆ Add to Favorites'}
-          </button>
-        )}
-        {overtoneAction && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); overtoneAction.onClick(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); overtoneAction.onClick(); }}
-          >
-            {overtoneAction.icon} {overtoneAction.label}
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); shareLink({ title: album.title, text: `${album.title} by ${artist.name}` }); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); shareLink({ title: album.title, text: `${album.title} by ${artist.name}` }); }}
-          >
-            📤 Share
-          </button>
-        )}
-      </ContextMenu>
+      />
 
       {showCollectionModal && (
         <AddToCollectionModal

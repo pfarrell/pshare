@@ -85,6 +85,17 @@ export default function Playlist() {
   // Show edit button if user is admin OR if user owns the playlist
   const canEdit = isAdmin || (user && playlist.user_id === user.id);
 
+  const headerActions = [
+    canEdit && { key: 'edit', icon: '✎', label: 'Edit', onClick: () => navigate(`/admin/playlist/${id}`) },
+    isAuthenticated && {
+      key: 'favorite',
+      icon: isFavorite ? '★' : '☆',
+      label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
+      onClick: handleToggleFavorite,
+    },
+    isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: () => shareLink({ title: playlist.name, text: `${playlist.name} playlist` }) },
+  ].filter(Boolean);
+
   // Distinct albums (by id, in track order) among this playlist's tracks that
   // have a cover — feeds the collage fallback when the playlist has no custom image.
   const albumCoverItems = [];
@@ -143,16 +154,7 @@ export default function Playlist() {
             onPlayNext={handlePlayNext}
             onAddToQueue={handleAddToQueue}
             disabled={!tracks?.length}
-            overflowActions={[
-              canEdit && { key: 'edit', icon: '✎', label: 'Edit', onClick: () => navigate(`/admin/playlist/${id}`) },
-              isAuthenticated && {
-                key: 'favorite',
-                icon: isFavorite ? '★' : '☆',
-                label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
-                onClick: handleToggleFavorite,
-              },
-              isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: () => shareLink({ title: playlist.name, text: `${playlist.name} playlist` }) },
-            ].filter(Boolean)}
+            overflowActions={headerActions}
           />
         </div>
       </div>
@@ -162,33 +164,10 @@ export default function Playlist() {
         position={ctxMenu.position}
         onDismiss={ctxMenu.dismiss}
         onSwallowTouch={ctxMenu.swallowTouch}
+        onClose={ctxMenu.close}
+        actions={headerActions}
         testId="playlist-header-menu-backdrop"
-      >
-        {canEdit && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); navigate(`/admin/playlist/${id}`); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); navigate(`/admin/playlist/${id}`); }}
-          >
-            ✎ Edit
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={(e) => { e.stopPropagation(); handleToggleFavorite(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleToggleFavorite(); }}
-          >
-            {isFavorite ? '★ Remove from Favorites' : '☆ Add to Favorites'}
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); shareLink({ title: playlist.name, text: `${playlist.name} playlist` }); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); shareLink({ title: playlist.name, text: `${playlist.name} playlist` }); }}
-          >
-            📤 Share
-          </button>
-        )}
-      </ContextMenu>
+      />
 
       {showImageModal && playlist.image_path && (
         <ImageLightbox

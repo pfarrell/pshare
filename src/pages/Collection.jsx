@@ -61,6 +61,17 @@ export default function Collection() {
   const { collection, albums, stubs, notes, summary } = collectionData;
   const canEdit = isAdmin || (user && collection.user_id === user.id);
 
+  const headerActions = [
+    canEdit && { key: 'edit', icon: '✎', label: 'Edit', onClick: () => navigate(`/admin/collection/${id}`) },
+    isAuthenticated && {
+      key: 'favorite',
+      icon: isFavorite ? '★' : '☆',
+      label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
+      onClick: handleToggleFavorite,
+    },
+    isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: () => shareLink({ title: collection.name, text: `${collection.name} collection` }) },
+  ].filter(Boolean);
+
   return (
     <div style={{ padding: '.5rem', maxWidth: '1400px', margin: '0 auto' }}>
       {/* Collection Header */}
@@ -86,16 +97,7 @@ export default function Collection() {
               <PlayActionsMenu
                 onPlay={albums?.length > 0 ? handleShuffleAll : undefined}
                 disabled={shuffleLoading}
-                overflowActions={[
-                  canEdit && { key: 'edit', icon: '✎', label: 'Edit', onClick: () => navigate(`/admin/collection/${id}`) },
-                  isAuthenticated && {
-                    key: 'favorite',
-                    icon: isFavorite ? '★' : '☆',
-                    label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
-                    onClick: handleToggleFavorite,
-                  },
-                  isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: () => shareLink({ title: collection.name, text: `${collection.name} collection` }) },
-                ].filter(Boolean)}
+                overflowActions={headerActions}
               />
             );
 
@@ -145,33 +147,10 @@ export default function Collection() {
         position={ctxMenu.position}
         onDismiss={ctxMenu.dismiss}
         onSwallowTouch={ctxMenu.swallowTouch}
+        onClose={ctxMenu.close}
+        actions={headerActions}
         testId="collection-header-menu-backdrop"
-      >
-        {canEdit && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); navigate(`/admin/collection/${id}`); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); navigate(`/admin/collection/${id}`); }}
-          >
-            ✎ Edit
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={(e) => { e.stopPropagation(); handleToggleFavorite(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleToggleFavorite(); }}
-          >
-            {isFavorite ? '★ Remove from Favorites' : '☆ Add to Favorites'}
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); shareLink({ title: collection.name, text: `${collection.name} collection` }); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); shareLink({ title: collection.name, text: `${collection.name} collection` }); }}
-          >
-            📤 Share
-          </button>
-        )}
-      </ContextMenu>
+      />
 
       {showImageModal && collection.image_path && (
         <ImageLightbox

@@ -82,6 +82,18 @@ const Artist = () => {
 
   const { artist, summary, albums, singles, appears_on, performances, related_artists, members, group_albums, similar_artists } = artistData;
 
+  const headerActions = [
+    isAdmin && { key: 'edit', icon: '✎', label: 'Edit', onClick: () => navigate(`/admin/artist/${id}`) },
+    isAuthenticated && {
+      key: 'favorite',
+      icon: isFavorite ? '★' : '☆',
+      label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
+      onClick: handleToggleFavorite,
+    },
+    overtoneAction,
+    isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: () => shareLink({ title: artist.name, text: artist.name }) },
+  ].filter(Boolean);
+
   const handlePlaySingles = () => {
     if (singles?.length) {
       addTracks(singles, false, { flashActivity: true }); // store auto-starts playback if idle
@@ -125,17 +137,7 @@ const Artist = () => {
               <PlayActionsMenu
                 onPlay={(albums?.length > 0 || singles?.length > 0) ? handleShuffleArtist : undefined}
                 disabled={shuffleLoading}
-                overflowActions={[
-                  isAdmin && { key: 'edit', icon: '✎', label: 'Edit', onClick: () => navigate(`/admin/artist/${id}`) },
-                  isAuthenticated && {
-                    key: 'favorite',
-                    icon: isFavorite ? '★' : '☆',
-                    label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
-                    onClick: handleToggleFavorite,
-                  },
-                  overtoneAction,
-                  isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: () => shareLink({ title: artist.name, text: artist.name }) },
-                ].filter(Boolean)}
+                overflowActions={headerActions}
               />
               {overtoneModal}
             </div>
@@ -233,41 +235,10 @@ const Artist = () => {
         position={ctxMenu.position}
         onDismiss={ctxMenu.dismiss}
         onSwallowTouch={ctxMenu.swallowTouch}
+        onClose={ctxMenu.close}
+        actions={headerActions}
         testId="artist-header-menu-backdrop"
-      >
-        {isAdmin && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); navigate(`/admin/artist/${id}`); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); navigate(`/admin/artist/${id}`); }}
-          >
-            ✎ Edit
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={(e) => { e.stopPropagation(); handleToggleFavorite(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleToggleFavorite(); }}
-          >
-            {isFavorite ? '★ Remove from Favorites' : '☆ Add to Favorites'}
-          </button>
-        )}
-        {overtoneAction && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); overtoneAction.onClick(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); overtoneAction.onClick(); }}
-          >
-            {overtoneAction.icon} {overtoneAction.label}
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); shareLink({ title: artist.name, text: artist.name }); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); shareLink({ title: artist.name, text: artist.name }); }}
-          >
-            📤 Share
-          </button>
-        )}
-      </ContextMenu>
+      />
 
       {/* Albums Grid */}
       {albums && albums.length > 0 && (
