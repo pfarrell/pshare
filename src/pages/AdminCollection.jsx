@@ -7,6 +7,7 @@ import { useUnsavedChangesStore } from '../stores/unsavedChangesStore';
 import { useContextMenu } from '../hooks/useContextMenu';
 import ContextMenu from '../components/ContextMenu';
 import { parseWikipediaSlug } from '../utils/wikipediaSlug';
+import { handleSmallImageError } from '../utils/imageFallback';
 
 const AUTO_SCROLL_EDGE_PX = 60;
 const AUTO_SCROLL_SPEED_PX = 12;
@@ -82,12 +83,7 @@ const CollectionAlbumRow = ({ item, index, isDragged, onDragStart, onDragOver, o
             src={apiService.getImageUrl(item.data.image_path, 'album_small')}
             alt={item.data.title}
             style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px' }}
-            onError={(e) => {
-              if (e.target.src.includes('/sm/')) {
-                e.target.src = e.target.src.replace('/sm/', '/');
-                e.target.onerror = null;
-              }
-            }}
+            onError={handleSmallImageError}
           />
         )}
         <div>

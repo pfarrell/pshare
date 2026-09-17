@@ -8,6 +8,7 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import { useAuthStore } from '../stores/authStore';
 import { useFavoritesStore } from '../stores/favoritesStore';
 import { useViewModeStore } from '../stores/viewModeStore';
+import { handleSmallImageError } from '../utils/imageFallback';
 
 // previewAlbums is only passed by the Collections list page (its API response
 // is the only one that includes it) — that's what scopes the collage to that
@@ -20,13 +21,6 @@ const CollectionResultCard = ({ collection, onClick, imageUrl, previewAlbums }) 
   const isFavorite = useFavoritesStore((s) => s.isFavorite('collection', collection.id));
   const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
   const ctxMenu = useContextMenu({ shouldIgnore: () => !isAuthenticated });
-
-  const handleImageError = (e) => {
-    if (e.target.src.includes('/sm/')) {
-      e.target.src = e.target.src.replace('/sm/', '/');
-      e.target.onerror = null;
-    }
-  };
 
   const handleToggleFavorite = (e) => {
     e.stopPropagation();
@@ -62,7 +56,7 @@ const CollectionResultCard = ({ collection, onClick, imageUrl, previewAlbums }) 
           title={collection.name}
           subtitle={albumCount ? `Collection · ${albumCount}` : 'Collection'}
           onClick={() => !ctxMenu.open && onClick(collection)}
-          onImageError={handleImageError}
+          onImageError={handleSmallImageError}
           onContextMenu={ctxMenu.triggerProps.onContextMenu}
           onTouchStart={ctxMenu.triggerProps.onTouchStart}
           onTouchMove={ctxMenu.triggerProps.onTouchMove}
@@ -77,7 +71,7 @@ const CollectionResultCard = ({ collection, onClick, imageUrl, previewAlbums }) 
     <>
       <div className="artist-card" onClick={() => !ctxMenu.open && onClick(collection)} {...ctxMenu.triggerProps}>
         <div className="artist-card-image">
-          <img src={imageUrl} alt={collection.name} onError={handleImageError} />
+          <img src={imageUrl} alt={collection.name} onError={handleSmallImageError} />
         </div>
         <div className="artist-card-title">
           <h3 style={{

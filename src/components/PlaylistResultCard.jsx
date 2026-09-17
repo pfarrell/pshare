@@ -11,6 +11,7 @@ import CoverCollage from './CoverCollage';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useViewModeStore } from '../stores/viewModeStore';
+import { handleSmallImageError } from '../utils/imageFallback';
 
 // previewAlbums is only passed by the Playlists list page (its API response
 // is the only one that includes it) — that's what scopes the collage to that
@@ -28,13 +29,6 @@ const PlaylistResultCard = ({ playlist, onClick, imageUrl, previewAlbums }) => {
   const ctxMenu = useContextMenu({
     shouldIgnore: (e) => !isAuthenticated || e.target.closest('[data-result-row-play]'),
   });
-
-  const handleImageError = (e) => {
-    if (e.target.src.includes('/sm/')) {
-      e.target.src = e.target.src.replace('/sm/', '/');
-      e.target.onerror = null;
-    }
-  };
 
   const withPlaylistTracks = async (dispatch) => {
     setPlayLoading(true);
@@ -107,7 +101,7 @@ const PlaylistResultCard = ({ playlist, onClick, imageUrl, previewAlbums }) => {
           title={playlist.name}
           subtitle={trackCount ? `Playlist · ${trackCount}` : 'Playlist'}
           onClick={() => !ctxMenu.open && onClick(playlist)}
-          onImageError={handleImageError}
+          onImageError={handleSmallImageError}
           onContextMenu={ctxMenu.triggerProps.onContextMenu}
           onTouchStart={ctxMenu.triggerProps.onTouchStart}
           onTouchMove={ctxMenu.triggerProps.onTouchMove}
@@ -133,7 +127,7 @@ const PlaylistResultCard = ({ playlist, onClick, imageUrl, previewAlbums }) => {
           <img
             src={imageUrl}
             alt={playlist.name}
-            onError={handleImageError}
+            onError={handleSmallImageError}
           />
         </div>
         <div className="artist-card-title">

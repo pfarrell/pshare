@@ -7,6 +7,7 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import { useAuthStore } from '../stores/authStore';
 import { useFavoritesStore } from '../stores/favoritesStore';
 import { useViewModeStore } from '../stores/viewModeStore';
+import { handleSmallImageError } from '../utils/imageFallback';
 
 const ArtistCard = ({ artist, onClick, imageUrl }) => {
   const isMobile = useIsMobile();
@@ -17,13 +18,6 @@ const ArtistCard = ({ artist, onClick, imageUrl }) => {
   // Favorite is the only menu item for artists today, so suppress the
   // gesture entirely when logged out rather than opening an empty menu.
   const ctxMenu = useContextMenu({ shouldIgnore: () => !isAuthenticated });
-
-  const handleImageError = (e) => {
-    if (e.target.src.includes('/sm/')) {
-      e.target.src = e.target.src.replace('/sm/', '/');
-      e.target.onerror = null;
-    }
-  };
 
   const handleToggleFavorite = (e) => {
     e.stopPropagation();
@@ -54,7 +48,7 @@ const ArtistCard = ({ artist, onClick, imageUrl }) => {
           title={artist.name}
           subtitle="Artist"
           onClick={() => !ctxMenu.open && onClick(artist)}
-          onImageError={handleImageError}
+          onImageError={handleSmallImageError}
           onContextMenu={ctxMenu.triggerProps.onContextMenu}
           onTouchStart={ctxMenu.triggerProps.onTouchStart}
           onTouchMove={ctxMenu.triggerProps.onTouchMove}
@@ -72,7 +66,7 @@ const ArtistCard = ({ artist, onClick, imageUrl }) => {
           <img
             src={imageUrl}
             alt={artist.name}
-            onError={handleImageError}
+            onError={handleSmallImageError}
           />
         </div>
 

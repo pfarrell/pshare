@@ -13,6 +13,7 @@ import { usePlayerStore } from '../stores/playerStore';
 import { useAuthStore } from '../stores/authStore';
 import { useFavoritesStore } from '../stores/favoritesStore';
 import { formatCount, getAlbumYear } from '../utils/formatters';
+import { handleSmallImageError } from '../utils/imageFallback';
 
 const AlbumCard = ({ album, artist, onClick, imageUrl, hideArtist = false, collectionId = null }) => {
   const [showCollectionModal, setShowCollectionModal] = useState(false);
@@ -31,13 +32,6 @@ const AlbumCard = ({ album, artist, onClick, imageUrl, hideArtist = false, colle
   const ctxMenu = useContextMenu({
     shouldIgnore: (e) => e.target.closest('[data-result-row-play]') || (!isAuthenticated && !showGoToArtist),
   });
-
-  const handleImageError = (e) => {
-    if (e.target.src.includes('/sm/')) {
-      e.target.src = e.target.src.replace('/sm/', '/');
-      e.target.onerror = null;
-    }
-  };
 
   const withAlbumTracks = async (dispatch) => {
     setPlayLoading(true);
@@ -114,7 +108,7 @@ const AlbumCard = ({ album, artist, onClick, imageUrl, hideArtist = false, colle
           title={album.title}
           subtitle={subtitle}
           onClick={() => !ctxMenu.open && onClick(album)}
-          onImageError={handleImageError}
+          onImageError={handleSmallImageError}
           onContextMenu={ctxMenu.triggerProps.onContextMenu}
           onTouchStart={ctxMenu.triggerProps.onTouchStart}
           onTouchMove={ctxMenu.triggerProps.onTouchMove}
@@ -139,7 +133,7 @@ const AlbumCard = ({ album, artist, onClick, imageUrl, hideArtist = false, colle
               src={imageUrl}
               alt={`${album.title}, ${artist?.name || ''}`}
               style={{ cursor: 'pointer' }}
-              onError={handleImageError}
+              onError={handleSmallImageError}
             />
           </div>
           <div className="artist-card-title">
