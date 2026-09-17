@@ -190,3 +190,12 @@ describe('long-press / right-click play menu', () => {
     expect(play.onAddToQueue).not.toHaveBeenCalled();
   });
 });
+
+describe('ResultRow — triggerProps', () => {
+  test('spreads a single triggerProps object onto the row', () => {
+    const onContextMenu = vi.fn();
+    render(<ResultRow imageUrl="/x.jpg" title="Row" triggerProps={{ onContextMenu, onTouchStart: vi.fn(), onTouchMove: vi.fn(), onTouchEnd: vi.fn() }} />);
+    fireEvent.contextMenu(screen.getByText('Row').closest('.result-row'));
+    expect(onContextMenu).toHaveBeenCalledTimes(1);
+  });
+});

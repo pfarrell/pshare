@@ -17,8 +17,10 @@ const ResultRow = ({
   onTouchMove,
   onTouchEnd,
   play,
+  triggerProps,
 }) => {
   const isMobile = useIsMobile();
+  const trigger = triggerProps ?? { onContextMenu, onTouchStart, onTouchMove, onTouchEnd };
   const [showPlayMenu, setShowPlayMenu] = useState(false);
   const [playMenuPos, setPlayMenuPos] = useState({ x: 0, y: 0 });
   const playLongPressTimer = useRef(null);
@@ -111,10 +113,7 @@ const ResultRow = ({
     <div
       className="result-row"
       onClick={onClick}
-      onContextMenu={onContextMenu}
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd}
+      {...trigger}
     >
       <div className={`result-row-image result-row-image-${imageShape}`}>
         {imageContent || <img src={imageUrl} alt={title} onError={onImageError} />}
