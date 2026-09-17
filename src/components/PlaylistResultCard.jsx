@@ -62,15 +62,13 @@ const PlaylistResultCard = ({ playlist, onClick, imageUrl, previewAlbums }) => {
     addTracks(tracks, false, { flashActivity: true });
   });
 
-  const handleToggleFavorite = (e) => {
-    e.stopPropagation();
+  const handleToggleFavorite = () => {
     toggleFavorite('playlist', playlist.id, {
       id: playlist.id,
       name: playlist.name,
       image_path: playlist.image_path,
       track_count: playlist.track_count,
     });
-    ctxMenu.close();
   };
 
   const menu = (
@@ -79,12 +77,15 @@ const PlaylistResultCard = ({ playlist, onClick, imageUrl, previewAlbums }) => {
       position={ctxMenu.position}
       onDismiss={ctxMenu.dismiss}
       onSwallowTouch={ctxMenu.swallowTouch}
+      onClose={ctxMenu.close}
+      actions={[{
+        key: 'favorite',
+        icon: isFavorite ? '★' : '☆',
+        label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
+        onClick: handleToggleFavorite,
+      }]}
       testId="playlist-card-menu-backdrop"
-    >
-      <button onClick={handleToggleFavorite} onTouchEnd={(e) => { e.preventDefault(); handleToggleFavorite(e); }}>
-        {isFavorite ? '★ Remove from Favorites' : '☆ Add to Favorites'}
-      </button>
-    </ContextMenu>
+    />
   );
 
   if (isMobile || viewMode === 'list') {

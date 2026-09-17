@@ -80,26 +80,7 @@ const TrackPage = () => {
     }
   };
 
-  const handleEdit = (e) => {
-    e.stopPropagation();
-    ctxMenu.close();
-    navigate(`/admin/track/${id}`);
-  };
-
-  const handleAddToPlaylist = (e) => {
-    e.stopPropagation();
-    ctxMenu.close();
-    setShowPlaylistModal(true);
-  };
-
-  const handleShowNotes = (e) => {
-    e.stopPropagation();
-    ctxMenu.close();
-    setShowNotesModal(true);
-  };
-
-  const handleToggleFavorite = (e) => {
-    e.stopPropagation();
+  const handleToggleFavorite = () => {
     if (!track) return;
     toggleFavorite('track', track.id, {
       id: track.id,
@@ -110,14 +91,6 @@ const TrackPage = () => {
       album: track.album,
       download_url: track.download_url,
     });
-    ctxMenu.close();
-  };
-
-  const handleDownload = (e) => {
-    e.stopPropagation();
-    if (!track) return;
-    window.location.href = track.download_url;
-    ctxMenu.close();
   };
 
   if (loading) {
@@ -129,6 +102,22 @@ const TrackPage = () => {
   }
 
   const isPlaying = Boolean(currentTrack && currentTrack.id === track.id);
+
+  const headerActions = [
+    isAdmin && { key: 'edit', icon: '✎', label: 'Edit', onClick: () => navigate(`/admin/track/${id}`) },
+    isAuthenticated && { key: 'playlist', icon: '📋', label: 'Add to Playlist', onClick: () => setShowPlaylistModal(true) },
+    isAuthenticated && { key: 'notes', icon: '📝', label: 'Notes', onClick: () => setShowNotesModal(true) },
+    isAuthenticated && {
+      key: 'favorite',
+      icon: isFavorite ? '★' : '☆',
+      label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
+      onClick: handleToggleFavorite,
+    },
+    downloadsEnabled && isAuthenticated && track.download_url && !isMobile && {
+      key: 'download', icon: '⬇', label: 'Download', onClick: () => { window.location.href = track.download_url; },
+    },
+    isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: handleShare },
+  ].filter(Boolean);
 
   return (
     <div style={{ padding: '.5rem', maxWidth: '1400px', margin: '0 auto' }}>
@@ -200,57 +189,10 @@ const TrackPage = () => {
         openedViaTouch={ctxMenu.openedViaTouch}
         onDismiss={ctxMenu.dismiss}
         onSwallowTouch={ctxMenu.swallowTouch}
+        onClose={ctxMenu.close}
+        actions={headerActions}
         testId="track-page-header-menu-backdrop"
-      >
-        {isAdmin && (
-          <button
-            onClick={handleEdit}
-            onTouchEnd={(e) => { e.preventDefault(); handleEdit(e); }}
-          >
-            ✎ Edit
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={handleAddToPlaylist}
-            onTouchEnd={(e) => { e.preventDefault(); handleAddToPlaylist(e); }}
-          >
-            📋 Add to Playlist
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={handleShowNotes}
-            onTouchEnd={(e) => { e.preventDefault(); handleShowNotes(e); }}
-          >
-            📝 Notes
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={handleToggleFavorite}
-            onTouchEnd={(e) => { e.preventDefault(); handleToggleFavorite(e); }}
-          >
-            {isFavorite ? '★ Remove from Favorites' : '☆ Add to Favorites'}
-          </button>
-        )}
-        {downloadsEnabled && isAuthenticated && track.download_url && !isMobile && (
-          <button
-            onClick={handleDownload}
-            onTouchEnd={(e) => { e.preventDefault(); handleDownload(e); }}
-          >
-            ⬇ Download
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); handleShare(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); handleShare(); }}
-          >
-            📤 Share
-          </button>
-        )}
-      </ContextMenu>
+      />
 
       {showPlaylistModal && (
         <AddToPlaylistModal

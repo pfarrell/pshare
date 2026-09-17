@@ -70,23 +70,12 @@ const PlaylistTrackRow = ({ track, index, isDragged, onDragStart, onDragOver, on
         openedViaTouch={ctxMenu.openedViaTouch}
         onDismiss={ctxMenu.dismiss}
         onSwallowTouch={ctxMenu.swallowTouch}
+        actions={[
+          { key: 'top', icon: '⬆', label: 'Send to Top', onClick: () => moveTo('top') },
+          { key: 'bottom', icon: '⬇', label: 'Send to Bottom', onClick: () => moveTo('bottom') },
+        ]}
         testId="playlist-row-menu-backdrop"
-      >
-        <button
-          onClick={() => moveTo('top')}
-          onTouchStart={(e) => { e.stopPropagation(); }}
-          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); moveTo('top'); }}
-        >
-          ⬆ Send to Top
-        </button>
-        <button
-          onClick={() => moveTo('bottom')}
-          onTouchStart={(e) => { e.stopPropagation(); }}
-          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); moveTo('bottom'); }}
-        >
-          ⬇ Send to Bottom
-        </button>
-      </ContextMenu>
+      />
     </div>
   );
 };

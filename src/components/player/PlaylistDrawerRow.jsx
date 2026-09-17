@@ -133,36 +133,13 @@ const PlaylistDrawerRow = ({
         openedViaTouch={ctxMenu.openedViaTouch}
         onDismiss={ctxMenu.dismiss}
         onSwallowTouch={ctxMenu.swallowTouch}
+        actions={[
+          track.album?.id && !onThisAlbum && { key: 'album', icon: '💿', label: 'Go to Album', onClick: handleGoToAlbum },
+          track.artist?.id && !onThisArtist && { key: 'artist', icon: '🎤', label: 'Go to Artist', onClick: handleGoToArtist },
+          track.source_playlist?.id && !onThisPlaylist && { key: 'playlist', icon: '📃', label: 'Go to Playlist', onClick: handleGoToPlaylist },
+        ]}
         testId="playlist-row-menu-backdrop"
-      >
-        {track.album?.id && !onThisAlbum && (
-          <button
-            onClick={handleGoToAlbum}
-            onTouchStart={(e) => { e.stopPropagation(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleGoToAlbum(); }}
-          >
-            💿 Go to Album
-          </button>
-        )}
-        {track.artist?.id && !onThisArtist && (
-          <button
-            onClick={handleGoToArtist}
-            onTouchStart={(e) => { e.stopPropagation(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleGoToArtist(); }}
-          >
-            🎤 Go to Artist
-          </button>
-        )}
-        {track.source_playlist?.id && !onThisPlaylist && (
-          <button
-            onClick={handleGoToPlaylist}
-            onTouchStart={(e) => { e.stopPropagation(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleGoToPlaylist(); }}
-          >
-            📃 Go to Playlist
-          </button>
-        )}
-      </ContextMenu>
+      />
     </li>
   );
 };

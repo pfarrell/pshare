@@ -19,10 +19,8 @@ const ArtistCard = ({ artist, onClick, imageUrl }) => {
   // gesture entirely when logged out rather than opening an empty menu.
   const ctxMenu = useContextMenu({ shouldIgnore: () => !isAuthenticated });
 
-  const handleToggleFavorite = (e) => {
-    e.stopPropagation();
+  const handleToggleFavorite = () => {
     toggleFavorite('artist', artist.id, { id: artist.id, name: artist.name, image_path: artist.image_path });
-    ctxMenu.close();
   };
 
   const menu = (
@@ -31,12 +29,15 @@ const ArtistCard = ({ artist, onClick, imageUrl }) => {
       position={ctxMenu.position}
       onDismiss={ctxMenu.dismiss}
       onSwallowTouch={ctxMenu.swallowTouch}
+      onClose={ctxMenu.close}
+      actions={[{
+        key: 'favorite',
+        icon: isFavorite ? '★' : '☆',
+        label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
+        onClick: handleToggleFavorite,
+      }]}
       testId="artist-card-menu-backdrop"
-    >
-      <button onClick={handleToggleFavorite} onTouchEnd={(e) => { e.preventDefault(); handleToggleFavorite(e); }}>
-        {isFavorite ? '★ Remove from Favorites' : '☆ Add to Favorites'}
-      </button>
-    </ContextMenu>
+    />
   );
 
   if (isMobile || viewMode === 'list') {

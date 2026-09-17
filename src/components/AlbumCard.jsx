@@ -82,12 +82,6 @@ const AlbumCard = ({ album, artist, onClick, imageUrl, hideArtist = false, colle
       track_count: album.track_count,
       artist: artist ? { id: artist.id, name: artist.name } : null,
     });
-    ctxMenu.close();
-  };
-
-  const handleGoToArtist = () => {
-    navigate(`/artist/${artist.id}`);
-    ctxMenu.close();
   };
 
   const trackCount = formatCount(album.track_count || null, 'track');
@@ -98,6 +92,19 @@ const AlbumCard = ({ album, artist, onClick, imageUrl, hideArtist = false, colle
   const subtitle = hideArtist
     ? `Album${yearSuffix}${trackCountSuffix}`
     : `Album · ${artist?.name || ''}${album.has_collaborators ? ' +' : ''}${yearSuffix}${trackCountSuffix}`;
+
+  const menuActions = [
+    { key: 'play-next', icon: '⏭', label: 'Play Next', onClick: handlePlayNext },
+    { key: 'add-queue', icon: '➕', label: 'Add to Queue', onClick: handleAddToQueue },
+    showGoToArtist && { key: 'artist', icon: '🎤', label: 'Go to Artist', onClick: () => navigate(`/artist/${artist.id}`) },
+    isAuthenticated && { key: 'collection', icon: '▣', label: 'Add to Collection', onClick: () => setShowCollectionModal(true) },
+    isAuthenticated && {
+      key: 'favorite',
+      icon: isFavorite ? '★' : '☆',
+      label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
+      onClick: handleToggleFavorite,
+    },
+  ];
 
   return (
     <>
@@ -163,45 +170,10 @@ const AlbumCard = ({ album, artist, onClick, imageUrl, hideArtist = false, colle
         openedViaTouch={ctxMenu.openedViaTouch}
         onDismiss={ctxMenu.dismiss}
         onSwallowTouch={ctxMenu.swallowTouch}
+        onClose={ctxMenu.close}
+        actions={menuActions}
         testId="album-card-menu-backdrop"
-      >
-        <button
-          onClick={(e) => { e.stopPropagation(); ctxMenu.close(); handlePlayNext(); }}
-          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); handlePlayNext(); }}
-        >
-          ⏭ Play Next
-        </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); ctxMenu.close(); handleAddToQueue(); }}
-          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); handleAddToQueue(); }}
-        >
-          ➕ Add to Queue
-        </button>
-        {showGoToArtist && (
-          <button
-            onClick={(e) => { e.stopPropagation(); handleGoToArtist(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleGoToArtist(); }}
-          >
-            🎤 Go to Artist
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); setShowCollectionModal(true); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); setShowCollectionModal(true); }}
-          >
-            ▣ Add to Collection
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={(e) => { e.stopPropagation(); handleToggleFavorite(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleToggleFavorite(); }}
-          >
-            {isFavorite ? '★ Remove from Favorites' : '☆ Add to Favorites'}
-          </button>
-        )}
-      </ContextMenu>
+      />
 
       {showCollectionModal && (
         <AddToCollectionModal

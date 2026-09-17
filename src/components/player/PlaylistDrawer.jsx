@@ -156,23 +156,12 @@ const PlaylistDrawer = ({ onSaveQueue }) => {
           openedViaTouch={bgCtx.openedViaTouch}
           onDismiss={bgCtx.dismiss}
           onSwallowTouch={bgCtx.swallowTouch}
+          actions={[
+            { key: 'save', icon: '💾', label: 'Save as Playlist', onClick: handleSaveQueue },
+            { key: 'clear', icon: '🗑', label: 'Clear Playlist', onClick: handleClearPlaylist },
+          ]}
           testId="save-queue-drawer-menu-backdrop"
-        >
-          <button
-            onClick={handleSaveQueue}
-            onTouchStart={(e) => { e.stopPropagation(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleSaveQueue(); }}
-          >
-            💾 Save as Playlist
-          </button>
-          <button
-            onClick={handleClearPlaylist}
-            onTouchStart={(e) => { e.stopPropagation(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleClearPlaylist(); }}
-          >
-            🗑 Clear Playlist
-          </button>
-        </ContextMenu>
+        />
       </div>
 
       {tooltip && <PlaylistTrackTooltip track={tooltip.track} x={tooltip.x} y={tooltip.y} />}

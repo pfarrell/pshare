@@ -22,10 +22,8 @@ const CollectionResultCard = ({ collection, onClick, imageUrl, previewAlbums }) 
   const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
   const ctxMenu = useContextMenu({ shouldIgnore: () => !isAuthenticated });
 
-  const handleToggleFavorite = (e) => {
-    e.stopPropagation();
+  const handleToggleFavorite = () => {
     toggleFavorite('collection', collection.id, { id: collection.id, name: collection.name, image_path: collection.image_path, album_count: collection.album_count });
-    ctxMenu.close();
   };
 
   const menu = (
@@ -34,12 +32,15 @@ const CollectionResultCard = ({ collection, onClick, imageUrl, previewAlbums }) 
       position={ctxMenu.position}
       onDismiss={ctxMenu.dismiss}
       onSwallowTouch={ctxMenu.swallowTouch}
+      onClose={ctxMenu.close}
+      actions={[{
+        key: 'favorite',
+        icon: isFavorite ? '★' : '☆',
+        label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
+        onClick: handleToggleFavorite,
+      }]}
       testId="collection-card-menu-backdrop"
-    >
-      <button onClick={handleToggleFavorite} onTouchEnd={(e) => { e.preventDefault(); handleToggleFavorite(e); }}>
-        {isFavorite ? '★ Remove from Favorites' : '☆ Add to Favorites'}
-      </button>
-    </ContextMenu>
+    />
   );
 
   if (isMobile || viewMode === 'list') {

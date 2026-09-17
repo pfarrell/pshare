@@ -158,25 +158,12 @@ const MusicPlayerWrapper = ({ className = '' }) => {
         openedViaTouch={saveQueueCtx.openedViaTouch}
         onDismiss={saveQueueCtx.dismiss}
         onSwallowTouch={saveQueueCtx.swallowTouch}
+        actions={[
+          isAuthenticated && { key: 'save', icon: '💾', label: 'Save as Playlist', onClick: handleSaveQueue },
+          { key: 'clear', icon: '🗑', label: 'Clear Playlist', onClick: handleClearPlaylist },
+        ]}
         testId="save-queue-menu-backdrop"
-      >
-        {isAuthenticated && (
-          <button
-            onClick={handleSaveQueue}
-            onTouchStart={(e) => { e.stopPropagation(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleSaveQueue(); }}
-          >
-            💾 Save as Playlist
-          </button>
-        )}
-        <button
-          onClick={handleClearPlaylist}
-          onTouchStart={(e) => { e.stopPropagation(); }}
-          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleClearPlaylist(); }}
-        >
-          🗑 Clear Playlist
-        </button>
-      </ContextMenu>
+      />
 
       {saveModalOpen && (
         <SavePlaylistModal

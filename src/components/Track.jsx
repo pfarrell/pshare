@@ -192,6 +192,29 @@ const Track = ({ track, index, trackCount, includeMeta = false, isPlaying = fals
     ctxMenu.close();
   };
 
+  const playMenuActions = [
+    { key: 'play-now', icon: '▶', label: 'Play Now', onClick: handlePlayNow },
+    { key: 'play-next', icon: '⏭', label: 'Play Next', onClick: handlePlayNext, className: pressedButton === 'next' ? 'menu-btn-pressed' : '' },
+    { key: 'add-queue', icon: '➕', label: 'Add to Queue', onClick: handleAddToQueue, className: pressedButton === 'queue' ? 'menu-btn-pressed' : '' },
+  ];
+
+  const rowMenuActions = [
+    track.album?.id && !onThisAlbum && { key: 'album', icon: '💿', label: 'Go to Album', onClick: handleGoToAlbum },
+    track.artist?.id && !onThisArtist && { key: 'artist', icon: '🎤', label: 'Go to Artist', onClick: handleGoToArtist },
+    showMakeSingle && track.album?.id && track.album.title !== '_Singles' && { key: 'single', icon: '🎵', label: 'Make Single', onClick: handleMakeSingle },
+    showEdit && { key: 'edit', icon: '✏️', label: 'Edit', onClick: handleEdit },
+    isAuthenticated && { key: 'playlist', icon: '📋', label: 'Add to Playlist', onClick: handleAddToPlaylist },
+    isAuthenticated && { key: 'notes', icon: '📝', label: 'Notes', onClick: handleShowNotes },
+    isAuthenticated && {
+      key: 'favorite',
+      icon: isFavorite ? '★' : '☆',
+      label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
+      onClick: handleToggleFavorite,
+    },
+    downloadsEnabled && isAuthenticated && track.download_url && !isMobile && { key: 'download', icon: '⬇', label: 'Download', onClick: handleDownload },
+    isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: handleShare },
+  ];
+
   return (
     <div
       className={`track-item ${isPlaying ? 'currently-playing' : ''}`}
@@ -290,34 +313,9 @@ const Track = ({ track, index, trackCount, includeMeta = false, isPlaying = fals
         openedViaTouch={playCtxMenu.openedViaTouch}
         onDismiss={playCtxMenu.dismiss}
         onSwallowTouch={playCtxMenu.swallowTouch}
+        actions={playMenuActions}
         testId="track-play-menu-backdrop"
-      >
-        <button
-          onClick={handlePlayNow}
-          onTouchStart={(e) => { e.stopPropagation(); }}
-          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handlePlayNow(); }}
-        >
-          ▶ Play Now
-        </button>
-
-        <button
-          className={pressedButton === 'next' ? 'menu-btn-pressed' : ''}
-          onClick={handlePlayNext}
-          onTouchStart={(e) => { e.stopPropagation(); }}
-          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handlePlayNext(); }}
-        >
-          ⏭ Play Next
-        </button>
-
-        <button
-          className={pressedButton === 'queue' ? 'menu-btn-pressed' : ''}
-          onClick={handleAddToQueue}
-          onTouchStart={(e) => { e.stopPropagation(); }}
-          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleAddToQueue(); }}
-        >
-          ➕ Add to Queue
-        </button>
-      </ContextMenu>
+      />
 
       <ContextMenu
         open={ctxMenu.open}
@@ -325,98 +323,9 @@ const Track = ({ track, index, trackCount, includeMeta = false, isPlaying = fals
         openedViaTouch={ctxMenu.openedViaTouch}
         onDismiss={ctxMenu.dismiss}
         onSwallowTouch={ctxMenu.swallowTouch}
+        actions={rowMenuActions}
         testId="track-menu-backdrop"
-      >
-        {track.album?.id && !onThisAlbum && (
-          <button
-            onClick={handleGoToAlbum}
-            onTouchStart={(e) => { e.stopPropagation(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleGoToAlbum(); }}
-          >
-            💿 Go to Album
-          </button>
-        )}
-
-        {track.artist?.id && !onThisArtist && (
-          <button
-            onClick={handleGoToArtist}
-            onTouchStart={(e) => { e.stopPropagation(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleGoToArtist(); }}
-          >
-            🎤 Go to Artist
-          </button>
-        )}
-
-        {showMakeSingle && track.album?.id && track.album.title !== '_Singles' && (
-          <button
-            onClick={handleMakeSingle}
-            onTouchStart={(e) => { e.stopPropagation(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleMakeSingle(); }}
-          >
-            🎵 Make Single
-          </button>
-        )}
-
-        {showEdit && (
-          <button
-            onClick={handleEdit}
-            onTouchStart={(e) => { e.stopPropagation(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleEdit(); }}
-          >
-            ✏️ Edit
-          </button>
-        )}
-
-        {isAuthenticated && (
-          <button
-            onClick={handleAddToPlaylist}
-            onTouchStart={(e) => { e.stopPropagation(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleAddToPlaylist(); }}
-          >
-            📋 Add to Playlist
-          </button>
-        )}
-
-        {isAuthenticated && (
-          <button
-            onClick={handleShowNotes}
-            onTouchStart={(e) => { e.stopPropagation(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleShowNotes(); }}
-          >
-            📝 Notes
-          </button>
-        )}
-
-        {isAuthenticated && (
-          <button
-            onClick={handleToggleFavorite}
-            onTouchStart={(e) => { e.stopPropagation(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleToggleFavorite(); }}
-          >
-            {isFavorite ? '★ Remove from Favorites' : '☆ Add to Favorites'}
-          </button>
-        )}
-
-        {downloadsEnabled && isAuthenticated && track.download_url && !isMobile && (
-          <button
-            onClick={handleDownload}
-            onTouchStart={(e) => { e.stopPropagation(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleDownload(); }}
-          >
-            ⬇ Download
-          </button>
-        )}
-
-        {isAuthenticated && (
-          <button
-            onClick={handleShare}
-            onTouchStart={(e) => { e.stopPropagation(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleShare(); }}
-          >
-            📤 Share
-          </button>
-        )}
-      </ContextMenu>
+      />
 
       {showPlaylistModal && (
         <AddToPlaylistModal
