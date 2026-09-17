@@ -4,83 +4,25 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
-import { useContextMenu } from '../hooks/useContextMenu';
 import { useEntitySearch } from '../hooks/useEntitySearch';
-import ContextMenu from '../components/ContextMenu';
 import EntitySearchPicker from '../components/admin/EntitySearchPicker';
+import ReorderableList from '../components/admin/ReorderableList';
 
-// Its own component (rather than inline JSX in a .map()) because
-// useContextMenu is a hook — each row needs its own open/position state.
-// Right-click (desktop) / long-press (mobile) opens a menu that moves the
-// track to either end of the list in one step, without dragging it there.
-// The Delete button is excluded from opening it (shouldIgnore below) since a
-// right-click/long-press there is meant for that button, not the row.
-const PlaylistTrackRow = ({ track, index, isDragged, onDragStart, onDragOver, onDrop, onDelete, onMoveToEdge }) => {
-  const ctxMenu = useContextMenu({ shouldIgnore: (e) => !!e.target.closest('button') });
-  const moveTo = (edge) => {
-    ctxMenu.close();
-    onMoveToEdge(track.id, edge);
-  };
-  return (
-    <div
-      draggable
-      onDragStart={(e) => onDragStart(e, index)}
-      onDragOver={onDragOver}
-      onDrop={(e) => onDrop(e, index)}
-      style={{
-        padding: '1rem',
-        borderBottom: '1px solid var(--color-border)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        cursor: 'move',
-        backgroundColor: isDragged ? 'var(--color-bg-surface-muted)' : 'var(--color-bg-surface)'
-      }}
-      {...ctxMenu.triggerProps}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
-        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', width: '2rem' }}>
-          {index + 1}
-        </span>
-        <span style={{ fontSize: '1.5rem', color: 'var(--color-text-faint)', cursor: 'move' }}>
-          ☰
-        </span>
-        <div>
-          <div style={{ fontWeight: '500' }}>{track.title}</div>
-          <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
-            {track.artist?.name} • {track.album?.title}
-          </div>
+const PlaylistTrackRowContent = ({ track, index, onDelete }) => (
+  <>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
+      <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', width: '2rem' }}>{index + 1}</span>
+      <span style={{ fontSize: '1.5rem', color: 'var(--color-text-faint)', cursor: 'move' }}>☰</span>
+      <div>
+        <div style={{ fontWeight: '500' }}>{track.title}</div>
+        <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
+          {track.artist?.name} • {track.album?.title}
         </div>
       </div>
-      <button
-        onClick={() => onDelete(track.id)}
-        style={{
-          padding: '0.5rem 1rem',
-          backgroundColor: '#ef4444',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-          fontSize: '0.875rem'
-        }}
-      >
-        Delete
-      </button>
-      <ContextMenu
-        open={ctxMenu.open}
-        position={ctxMenu.position}
-        openedViaTouch={ctxMenu.openedViaTouch}
-        onDismiss={ctxMenu.dismiss}
-        onSwallowTouch={ctxMenu.swallowTouch}
-        actions={[
-          { key: 'top', icon: '⬆', label: 'Send to Top', onClick: () => moveTo('top') },
-          { key: 'bottom', icon: '⬇', label: 'Send to Bottom', onClick: () => moveTo('bottom') },
-        ]}
-        testId="playlist-row-menu-backdrop"
-      />
     </div>
-  );
-};
+    <button type="button" className="btn btn-danger" onClick={() => onDelete(track.id)}>Delete</button>
+  </>
+);
 
 export default function AdminPlaylist() {
   const { id } = useParams();
@@ -94,7 +36,6 @@ export default function AdminPlaylist() {
   const [saving, setSaving] = useState(false);
   const trackSearch = useEntitySearch('track', { minLength: 1 });
   const [showSearch, setShowSearch] = useState(false);
-  const [draggedIndex, setDraggedIndex] = useState(null);
 
   // Image download state
   const [imageUrl, setImageUrl] = useState('');
@@ -151,16 +92,6 @@ export default function AdminPlaylist() {
     }
   };
 
-  const handleDragStart = (e, index) => {
-    setDraggedIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
-
   // Applies a fully-reordered track list optimistically, then persists it —
   // shared by drag-and-drop and the context menu's Send to Top/Bottom actions.
   const persistReorder = async (newTracks) => {
@@ -177,33 +108,6 @@ export default function AdminPlaylist() {
       // Reload to get correct order
       loadPlaylist();
     }
-  };
-
-  const handleDrop = async (e, dropIndex) => {
-    e.preventDefault();
-
-    if (draggedIndex === null || draggedIndex === dropIndex) return;
-
-    const newTracks = [...tracks];
-    const [movedTrack] = newTracks.splice(draggedIndex, 1);
-    newTracks.splice(dropIndex, 0, movedTrack);
-
-    setDraggedIndex(null);
-    await persistReorder(newTracks);
-  };
-
-  const moveTrackToEdge = async (trackId, edge) => {
-    const fromIndex = tracks.findIndex((t) => t.id === trackId);
-    if (fromIndex === -1) return;
-
-    const newTracks = [...tracks];
-    const [moved] = newTracks.splice(fromIndex, 1);
-    if (edge === 'top') {
-      newTracks.unshift(moved);
-    } else {
-      newTracks.push(moved);
-    }
-    await persistReorder(newTracks);
   };
 
   // Track changes to the editable fields
@@ -490,19 +394,13 @@ export default function AdminPlaylist() {
             No tracks in this playlist. Use the search above to add tracks.
           </div>
         ) : (
-          tracks.map((track, index) => (
-            <PlaylistTrackRow
-              key={track.id}
-              track={track}
-              index={index}
-              isDragged={draggedIndex === index}
-              onDragStart={handleDragStart}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              onDelete={handleDeleteTrack}
-              onMoveToEdge={moveTrackToEdge}
-            />
-          ))
+          <ReorderableList
+            items={tracks}
+            getKey={(track) => track.id}
+            onReorder={persistReorder}
+            menuTestId="playlist-row-menu-backdrop"
+            renderRow={(track, index) => <PlaylistTrackRowContent track={track} index={index} onDelete={handleDeleteTrack} />}
+          />
         )}
       </div>
     </div>

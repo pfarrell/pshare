@@ -4,158 +4,55 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
-import { useContextMenu } from '../hooks/useContextMenu';
 import { useEntitySearch } from '../hooks/useEntitySearch';
-import ContextMenu from '../components/ContextMenu';
 import WikipediaSlugInput from '../components/admin/WikipediaSlugInput';
 import EntitySearchPicker from '../components/admin/EntitySearchPicker';
+import ReorderableList from '../components/admin/ReorderableList';
 import { handleSmallImageError } from '../utils/imageFallback';
 import { formatCount } from '../utils/formatters';
 
-const AUTO_SCROLL_EDGE_PX = 60;
-const AUTO_SCROLL_SPEED_PX = 12;
-
-// Shows exactly where a dragged album/stub would land, between two rows.
-const DropIndicator = () => (
-  <div data-testid="drop-indicator" style={{ height: '3px', backgroundColor: '#3b82f6', borderRadius: '2px' }} />
+const CollectionAlbumRowContent = ({ item, index, onRemove }) => (
+  <>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
+      <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', width: '2rem' }}>{index + 1}</span>
+      <span style={{ fontSize: '1.5rem', color: 'var(--color-text-faint)', cursor: 'move' }}>☰</span>
+      {item.data.image_path && (
+        <img
+          src={apiService.getImageUrl(item.data.image_path, 'album_small')}
+          alt={item.data.title}
+          style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px' }}
+          onError={handleSmallImageError}
+        />
+      )}
+      <div>
+        <div style={{ fontWeight: '500' }}>{item.data.title}</div>
+        <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>{item.data.artist?.name}</div>
+      </div>
+    </div>
+    <button type="button" className="btn btn-danger" onClick={() => onRemove(item.data.id)}>Remove</button>
+  </>
 );
 
-// Right-click (desktop) / long-press (mobile) menu shared by album and stub
-// rows — moves the row to either end of the merged list in one step, without
-// needing to drag it there. A row's own action buttons (Remove/Resolve) are
-// excluded from opening it since a right-click/long-press on those is meant
-// for that button, not the row.
-const RowMoveMenu = ({ ctxMenu, item, onMoveToEdge }) => {
-  const moveTo = (edge) => {
-    ctxMenu.close();
-    onMoveToEdge(item, edge);
-  };
-  return (
-    <ContextMenu
-      open={ctxMenu.open}
-      position={ctxMenu.position}
-      openedViaTouch={ctxMenu.openedViaTouch}
-      onDismiss={ctxMenu.dismiss}
-      onSwallowTouch={ctxMenu.swallowTouch}
-      actions={[
-        { key: 'top', icon: '⬆', label: 'Send to Top', onClick: () => moveTo('top') },
-        { key: 'bottom', icon: '⬇', label: 'Send to Bottom', onClick: () => moveTo('bottom') },
-      ]}
-      testId="collection-row-menu-backdrop"
-    />
-  );
-};
-
-// Rows are their own components (rather than inline JSX in a .map()) because
-// useContextMenu is a hook — each row needs its own open/position state.
-const CollectionAlbumRow = ({ item, index, isDragged, onDragStart, onDragOver, onDragEnd, onDrop, onRemove, onMoveToEdge }) => {
-  const ctxMenu = useContextMenu({ shouldIgnore: (e) => !!e.target.closest('button') });
-  return (
-    <div
-      draggable
-      onDragStart={(e) => onDragStart(e, item)}
-      onDragOver={(e) => onDragOver(e, item)}
-      onDragEnd={onDragEnd}
-      onDrop={(e) => onDrop(e, item)}
-      style={{
-        padding: '1rem', borderBottom: '1px solid var(--color-border)',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        cursor: 'move',
-        backgroundColor: isDragged ? 'var(--color-bg-surface-muted)' : 'var(--color-bg-surface)',
-      }}
-      {...ctxMenu.triggerProps}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
-        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', width: '2rem' }}>
-          {index + 1}
-        </span>
-        <span style={{ fontSize: '1.5rem', color: 'var(--color-text-faint)', cursor: 'move' }}>☰</span>
-        {item.data.image_path && (
-          <img
-            src={apiService.getImageUrl(item.data.image_path, 'album_small')}
-            alt={item.data.title}
-            style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px' }}
-            onError={handleSmallImageError}
-          />
-        )}
-        <div>
-          <div style={{ fontWeight: '500' }}>{item.data.title}</div>
-          <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
-            {item.data.artist?.name}
-          </div>
-        </div>
+const CollectionStubRowContent = ({ item, index, onResolve, onRemove }) => (
+  <>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
+      <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', width: '2rem' }}>{index + 1}</span>
+      <span style={{ fontSize: '1.5rem', color: 'var(--color-text-faint)', cursor: 'move' }}>☰</span>
+      <div style={{
+        width: '40px', height: '40px', borderRadius: '4px', border: '2px dashed var(--color-text-faint)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-faint)',
+      }}>▢</div>
+      <div>
+        <div style={{ fontWeight: '500' }}>{item.data.title}</div>
+        <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>{item.data.artist_name}</div>
       </div>
-      <button
-        onClick={() => onRemove(item.data.id)}
-        style={{
-          padding: '0.5rem 1rem', backgroundColor: '#ef4444', color: 'white',
-          border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.875rem',
-        }}
-      >
-        Remove
-      </button>
-      <RowMoveMenu ctxMenu={ctxMenu} item={item} onMoveToEdge={onMoveToEdge} />
     </div>
-  );
-};
-
-const CollectionStubRow = ({ item, index, isDragged, onDragStart, onDragOver, onDragEnd, onDrop, onResolve, onRemove, onMoveToEdge }) => {
-  const ctxMenu = useContextMenu({ shouldIgnore: (e) => !!e.target.closest('button') });
-  return (
-    <div
-      draggable
-      onDragStart={(e) => onDragStart(e, item)}
-      onDragOver={(e) => onDragOver(e, item)}
-      onDragEnd={onDragEnd}
-      onDrop={(e) => onDrop(e, item)}
-      style={{
-        padding: '1rem', borderBottom: '1px solid var(--color-border)',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        cursor: 'move',
-        backgroundColor: isDragged ? 'var(--color-bg-surface-muted)' : 'var(--color-bg-surface)',
-      }}
-      {...ctxMenu.triggerProps}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
-        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', width: '2rem' }}>
-          {index + 1}
-        </span>
-        <span style={{ fontSize: '1.5rem', color: 'var(--color-text-faint)', cursor: 'move' }}>☰</span>
-        <div style={{
-          width: '40px', height: '40px', borderRadius: '4px', border: '2px dashed var(--color-text-faint)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-faint)',
-        }}>▢</div>
-        <div>
-          <div style={{ fontWeight: '500' }}>{item.data.title}</div>
-          <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
-            {item.data.artist_name}
-          </div>
-        </div>
-      </div>
-      <div style={{ display: 'flex', gap: '0.5rem' }}>
-        <button
-          onClick={() => onResolve(item.data.id)}
-          style={{
-            padding: '0.5rem 1rem', backgroundColor: '#3b82f6', color: 'white',
-            border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.875rem',
-          }}
-        >
-          Resolve
-        </button>
-        <button
-          onClick={() => onRemove(item.data.id)}
-          style={{
-            padding: '0.5rem 1rem', backgroundColor: '#ef4444', color: 'white',
-            border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.875rem',
-          }}
-        >
-          Remove Placeholder
-        </button>
-      </div>
-      <RowMoveMenu ctxMenu={ctxMenu} item={item} onMoveToEdge={onMoveToEdge} />
+    <div style={{ display: 'flex', gap: '0.5rem' }}>
+      <button type="button" className="btn btn-primary" onClick={() => onResolve(item.data.id)}>Resolve</button>
+      <button type="button" className="btn btn-danger" onClick={() => onRemove(item.data.id)}>Remove Placeholder</button>
     </div>
-  );
-};
+  </>
+);
 
 export default function AdminCollection() {
   const { id } = useParams();
@@ -167,11 +64,7 @@ export default function AdminCollection() {
   const [albums, setAlbums] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [draggedItem, setDraggedItem] = useState(null); // { type: 'album' | 'stub', id }
-  const [dragOverTarget, setDragOverTarget] = useState(null); // { type, id, position: 'before' | 'after' }
   const searchPanelRef = useRef(null);
-  const autoScrollFrameRef = useRef(null);
-  const autoScrollDirectionRef = useRef(0);
 
   // Search to add albums
   const albumSearch = useEntitySearch('album', { minLength: 1 });
@@ -191,6 +84,7 @@ export default function AdminCollection() {
 
   useEffect(() => {
     loadCollection();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   useEffect(() => {
@@ -208,61 +102,6 @@ export default function AdminCollection() {
       searchPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [showSearch]);
-
-  // Auto-scrolls the page's scroll container (Layout.jsx's .main-content,
-  // not window — this app's whole layout is a fixed-height flex column with
-  // its own internal scroll area) while a native drag hovers near its top or
-  // bottom edge, so a long list can be reordered past the current viewport.
-  //
-  // Listens on `document`, not the container itself: .app-header/.app-footer
-  // are position:fixed *siblings* of .main-content that visually overlap its
-  // top/bottom edge zones (see index.css), so a drag near either screen edge
-  // has the cursor hovering over the header/footer, not a descendant of
-  // .main-content — a listener on the container would never see that event.
-  useEffect(() => {
-    const container = document.querySelector('.main-content');
-    if (!container) return undefined;
-
-    const stepAutoScroll = () => {
-      if (autoScrollDirectionRef.current !== 0) {
-        container.scrollTop += autoScrollDirectionRef.current * AUTO_SCROLL_SPEED_PX;
-      }
-      autoScrollFrameRef.current = requestAnimationFrame(stepAutoScroll);
-    };
-
-    const handleDragOverContainer = (e) => {
-      const rect = container.getBoundingClientRect();
-      if (e.clientY < rect.top + AUTO_SCROLL_EDGE_PX) {
-        autoScrollDirectionRef.current = -1;
-      } else if (e.clientY > rect.bottom - AUTO_SCROLL_EDGE_PX) {
-        autoScrollDirectionRef.current = 1;
-      } else {
-        autoScrollDirectionRef.current = 0;
-      }
-      if (!autoScrollFrameRef.current) {
-        autoScrollFrameRef.current = requestAnimationFrame(stepAutoScroll);
-      }
-    };
-
-    const stopAutoScroll = () => {
-      autoScrollDirectionRef.current = 0;
-      if (autoScrollFrameRef.current) {
-        cancelAnimationFrame(autoScrollFrameRef.current);
-        autoScrollFrameRef.current = null;
-      }
-    };
-
-    document.addEventListener('dragover', handleDragOverContainer);
-    document.addEventListener('drop', stopAutoScroll);
-    document.addEventListener('dragend', stopAutoScroll);
-
-    return () => {
-      document.removeEventListener('dragover', handleDragOverContainer);
-      document.removeEventListener('drop', stopAutoScroll);
-      document.removeEventListener('dragend', stopAutoScroll);
-      stopAutoScroll();
-    };
-  }, []);
 
   const loadCollection = async () => {
     try {
@@ -359,24 +198,6 @@ export default function AdminCollection() {
     ...stubs.map((stub) => ({ type: 'stub', order: stub.order ?? 0, data: stub })),
   ].sort((a, b) => a.order - b.order);
 
-  const handleDragStart = (e, item) => {
-    setDraggedItem({ type: item.type, id: item.data.id });
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e, item) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const rect = e.currentTarget.getBoundingClientRect();
-    const position = e.clientY - rect.top < rect.height / 2 ? 'before' : 'after';
-    setDragOverTarget({ type: item.type, id: item.data.id, position });
-  };
-
-  const handleDragEnd = () => {
-    setDraggedItem(null);
-    setDragOverTarget(null);
-  };
-
   // Recomputes order for a fully-reordered merged list, applies it
   // optimistically, then persists it — shared by drag-and-drop and the
   // context menu's Send to Top/Bottom actions.
@@ -394,45 +215,6 @@ export default function AdminCollection() {
       alert('Failed to save order');
       loadCollection();
     }
-  };
-
-  const handleDrop = async (e, targetItem) => {
-    e.preventDefault();
-    const dropPosition = dragOverTarget?.position ?? 'before';
-    setDragOverTarget(null);
-    if (!draggedItem) return;
-    if (draggedItem.type === targetItem.type && draggedItem.id === targetItem.data.id) return;
-
-    const current = buildMergedItems();
-    const fromIndex = current.findIndex((i) => i.type === draggedItem.type && i.data.id === draggedItem.id);
-    let toIndex = current.findIndex((i) => i.type === targetItem.type && i.data.id === targetItem.data.id);
-    if (fromIndex === -1 || toIndex === -1) return;
-    if (dropPosition === 'after') toIndex += 1;
-
-    const reordered = [...current];
-    const [moved] = reordered.splice(fromIndex, 1);
-    // toIndex was computed against the pre-removal array — shift it back by
-    // one if the removed item was earlier in the list than the drop target.
-    const insertAt = fromIndex < toIndex ? toIndex - 1 : toIndex;
-    reordered.splice(insertAt, 0, moved);
-
-    setDraggedItem(null);
-    await persistReorder(reordered);
-  };
-
-  const moveToEdge = async (item, edge) => {
-    const current = buildMergedItems();
-    const fromIndex = current.findIndex((i) => i.type === item.type && i.data.id === item.data.id);
-    if (fromIndex === -1) return;
-
-    const reordered = [...current];
-    const [moved] = reordered.splice(fromIndex, 1);
-    if (edge === 'top') {
-      reordered.unshift(moved);
-    } else {
-      reordered.push(moved);
-    }
-    await persistReorder(reordered);
   };
 
   // Track changes to the editable fields
@@ -771,42 +553,22 @@ export default function AdminCollection() {
             No albums in this collection. Use the search above to add albums.
           </div>
         ) : (
-          buildMergedItems().map((item, index) => {
-            const isDropTarget = dragOverTarget?.type === item.type && dragOverTarget?.id === item.data.id;
-            const isDragged = draggedItem?.type === item.type && draggedItem?.id === item.data.id;
-            return (
-            <div key={`${item.type}-${item.data.id}`}>
-              {isDropTarget && dragOverTarget.position === 'before' && <DropIndicator />}
-              {item.type === 'album' ? (
-                <CollectionAlbumRow
-                  item={item}
-                  index={index}
-                  isDragged={isDragged}
-                  onDragStart={handleDragStart}
-                  onDragOver={handleDragOver}
-                  onDragEnd={handleDragEnd}
-                  onDrop={handleDrop}
-                  onRemove={handleRemoveAlbum}
-                  onMoveToEdge={moveToEdge}
-                />
-              ) : (
-                <CollectionStubRow
-                  item={item}
-                  index={index}
-                  isDragged={isDragged}
-                  onDragStart={handleDragStart}
-                  onDragOver={handleDragOver}
-                  onDragEnd={handleDragEnd}
-                  onDrop={handleDrop}
-                  onResolve={(stubId) => { setResolvingStubId(stubId); setShowSearch(true); albumSearch.reset(); }}
-                  onRemove={handleRemoveStub}
-                  onMoveToEdge={moveToEdge}
-                />
-              )}
-              {isDropTarget && dragOverTarget.position === 'after' && <DropIndicator />}
-            </div>
-            );
-          })
+          <ReorderableList
+            items={buildMergedItems()}
+            getKey={(item) => `${item.type}-${item.data.id}`}
+            onReorder={persistReorder}
+            menuTestId="collection-row-menu-backdrop"
+            renderRow={(item, index) => (item.type === 'album' ? (
+              <CollectionAlbumRowContent item={item} index={index} onRemove={handleRemoveAlbum} />
+            ) : (
+              <CollectionStubRowContent
+                item={item}
+                index={index}
+                onResolve={(stubId) => { setResolvingStubId(stubId); setShowSearch(true); albumSearch.reset(); }}
+                onRemove={handleRemoveStub}
+              />
+            ))}
+          />
         )}
       </div>
     </div>
