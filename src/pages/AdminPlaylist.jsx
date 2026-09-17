@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
-import { useUnsavedChangesStore } from '../stores/unsavedChangesStore';
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import { useContextMenu } from '../hooks/useContextMenu';
 import ContextMenu from '../components/ContextMenu';
 
@@ -237,18 +237,6 @@ export default function AdminPlaylist() {
     setHasUnsavedChanges(hasChanges);
   }, [playlistData, originalData]);
 
-  // Warn user before leaving page with unsaved changes (browser navigation)
-  useEffect(() => {
-    const handleBeforeUnload = (e) => {
-      if (hasUnsavedChanges) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasUnsavedChanges]);
-
   // Just the API call, no navigation — shared by the Save button, the
   // link-click guard below, and the pull-to-refresh save prompt in Layout
   // (registered via unsavedChangesStore).
@@ -261,38 +249,14 @@ export default function AdminPlaylist() {
     setHasUnsavedChanges(false);
   }, [id, playlistData]);
 
-  useEffect(() => {
-    useUnsavedChangesStore.getState().setUnsavedChanges(hasUnsavedChanges, savePlaylist);
-    return () => useUnsavedChangesStore.getState().clear();
-  }, [hasUnsavedChanges, savePlaylist]);
-
-  // Intercept all link clicks to check for unsaved changes
-  useEffect(() => {
-    const handleClick = async (e) => {
-      if (!hasUnsavedChanges) return;
-      const link = e.target.closest('a');
-      if (!link) return;
-      const href = link.getAttribute('href');
-      if (!href || href.startsWith('http') || href.startsWith('#')) return;
-      if (link.classList.contains('admin-back-link')) return;
-
-      e.preventDefault();
-      e.stopPropagation();
-
-      const choice = window.confirm('You have unsaved changes. Click OK to save and leave, or Cancel to stay on this page.');
-      if (choice) {
-        try {
-          await savePlaylist();
-          setTimeout(() => navigate(href), 0);
-        } catch (err) {
-          console.error('Failed to save playlist:', err);
-          alert('Failed to save playlist');
-        }
-      }
-    };
-    document.addEventListener('click', handleClick, true);
-    return () => document.removeEventListener('click', handleClick, true);
-  }, [hasUnsavedChanges, savePlaylist, navigate]);
+  useUnsavedChangesGuard({
+    isDirty: hasUnsavedChanges,
+    save: savePlaylist,
+    onSaveError: (err) => {
+      console.error('Failed to save playlist:', err);
+      alert('Failed to save playlist');
+    },
+  });
 
   const handleSave = async () => {
     try {
