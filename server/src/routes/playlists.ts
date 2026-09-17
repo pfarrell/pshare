@@ -7,9 +7,7 @@ import type { Variables } from '../types.js'
 import { countsService } from '../services/countsService.js'
 import { requireAuth } from '../middleware/auth.js'
 import { canModify } from '../utils/ownership.js'
-import fs from 'fs'
-import path from 'path'
-import { imagesDir } from '../config/paths.js'
+import { downloadToDisk, ImageStorageError } from '../services/imageStorage.js'
 
 const playlists = new Hono<{ Variables: Variables }>()
 
@@ -327,30 +325,7 @@ playlists.post('/:id/image', requireAuth, async (c) => {
   }
 
   try {
-    // Download the image
-    console.log(`Downloading playlist image from: ${image_url}`)
-    const response = await fetch(image_url)
-    if (!response.ok) {
-      return c.json({ error: 'Failed to download image from URL' }, 400)
-    }
-
-    const buffer = Buffer.from(await response.arrayBuffer())
-
-    // Determine the image directory (use albums directory for playlists too)
-    const imageDir = imagesDir('albums')
-    console.log(`Saving playlist image to directory: ${imageDir}`)
-
-    // Create directory if it doesn't exist
-    if (!fs.existsSync(imageDir)) {
-      console.log(`Creating directory: ${imageDir}`)
-      fs.mkdirSync(imageDir, { recursive: true })
-    }
-
-    // Save the image
-    const imagePath = path.join(imageDir, image_name)
-    console.log(`Writing playlist image to: ${imagePath}`)
-    fs.writeFileSync(imagePath, buffer)
-    console.log(`Playlist image saved successfully: ${imagePath}`)
+    await downloadToDisk(image_url, image_name, 'albums')
 
     // Update the playlist record
     const updated = await db
@@ -369,6 +344,7 @@ playlists.post('/:id/image', requireAuth, async (c) => {
 
     return c.json({ success: true, playlist: updated })
   } catch (error) {
+    if (error instanceof ImageStorageError) return c.json({ error: error.message }, 400)
     console.error('Error downloading/saving playlist image:', error)
     return c.json({ error: 'Failed to save image' }, 500)
   }

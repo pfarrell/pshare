@@ -8,9 +8,7 @@ import { getCollectionSummary } from '../services/wikipedia.js'
 import { streamBase } from '../db/streamUrl.js'
 import { requireAuth } from '../middleware/auth.js'
 import { canModify } from '../utils/ownership.js'
-import fs from 'fs'
-import path from 'path'
-import { imagesDir } from '../config/paths.js'
+import { downloadToDisk, ImageStorageError } from '../services/imageStorage.js'
 
 const collections = new Hono<{ Variables: Variables }>()
 
@@ -478,15 +476,7 @@ collections.post('/:id/image', requireAuth, async (c) => {
   }
 
   try {
-    const response = await fetch(image_url)
-    if (!response.ok) return c.json({ error: 'Failed to download image from URL' }, 400)
-
-    const buffer = Buffer.from(await response.arrayBuffer())
-    const imageDir = imagesDir('albums')
-    if (!fs.existsSync(imageDir)) fs.mkdirSync(imageDir, { recursive: true })
-
-    const imagePath = path.join(imageDir, image_name)
-    fs.writeFileSync(imagePath, buffer)
+    await downloadToDisk(image_url, image_name, 'albums')
 
     const updated = await db
       .updateTable('collections')
@@ -498,6 +488,7 @@ collections.post('/:id/image', requireAuth, async (c) => {
     if (!updated) return c.json({ error: 'Collection not found' }, 404)
     return c.json({ success: true, collection: updated })
   } catch (error) {
+    if (error instanceof ImageStorageError) return c.json({ error: error.message }, 400)
     console.error('Error downloading/saving collection image:', error)
     return c.json({ error: 'Failed to save image' }, 500)
   }
