@@ -10,6 +10,7 @@ import MusicBrainzPicker from '../components/MusicBrainzPicker';
 import TrackArtistPicker from '../components/TrackArtistPicker';
 import ReprocessAlbumModal from '../components/ReprocessAlbumModal';
 import { parseWikipediaSlug } from '../utils/wikipediaSlug';
+import { formatDuration } from '../utils/formatters';
 import toast from 'react-hot-toast';
 
 const toFilename = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
@@ -1298,7 +1299,7 @@ const AdminAlbum = () => {
                         />
                       </td>
                       <td style={{ padding: '0.75rem', color: 'var(--color-text-muted)' }}>
-                        {track.duration ? `${Math.floor(track.duration / 60)}:${String(track.duration % 60).padStart(2, '0')}` : '-'}
+                        {formatDuration(track.duration) || '-'}
                       </td>
                       <td style={{ padding: '0.75rem', textAlign: 'center' }}>
                         {albumData?.album?.title !== '_Singles' && (

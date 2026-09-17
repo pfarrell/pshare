@@ -3,14 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { useIsCurrentPage } from '../../hooks/useIsCurrentPage';
+import { formatPlaybackTime } from '../../utils/formatters';
 import ContextMenu from '../ContextMenu';
-
-const formatTime = (seconds) => {
-  if (!seconds || !Number.isFinite(seconds)) return '0:00';
-  const minutes = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
-};
 
 // CSS's own animation (activity-row-flash, 0.6s x2) self-terminates the
 // visual fade — this component has no timing logic of its own.
@@ -118,7 +112,7 @@ const PlaylistDrawerRow = ({
         <div className="playlist-track-art-blank" style={{ width: artSize, height: artSize }} />
       )}
       <span className="track-text">
-        {index + 1}. {track.title} - {track.artist?.name} ({formatTime(track.duration)})
+        {index + 1}. {track.title} - {track.artist?.name} ({formatPlaybackTime(track.duration)})
       </span>
       <button
         className="track-delete-button"

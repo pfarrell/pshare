@@ -7,6 +7,7 @@ import Loading from '../components/Loading';
 import TrackArtistPicker from '../components/TrackArtistPicker';
 import MusicBrainzPicker from '../components/MusicBrainzPicker';
 import MusicBrainzModal from '../components/MusicBrainzModal';
+import { formatDuration } from '../utils/formatters';
 import toast from 'react-hot-toast';
 
 const AdminTrack = () => {
@@ -319,7 +320,7 @@ const AdminTrack = () => {
         <h2 style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '0.75rem' }}>File Info (read-only)</h2>
         <div><strong>Track ID:</strong> {detail.track.id}</div>
         <div><strong>Media File ID:</strong> {detail.track.media_file_id ?? '—'}</div>
-        <div><strong>Duration:</strong> {detail.track.duration_sec ? `${Math.floor(detail.track.duration_sec / 60)}:${String(detail.track.duration_sec % 60).padStart(2, '0')}` : '—'}</div>
+        <div><strong>Duration:</strong> {formatDuration(detail.track.duration_sec) || '—'}</div>
         <div><strong>Approved:</strong> {String(detail.track.approved)}</div>
         <div><strong>Track Created:</strong> {detail.track.created_at}</div>
         <div><strong>Track Updated:</strong> {detail.track.updated_at}</div>

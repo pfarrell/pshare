@@ -4,6 +4,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { usePlayerEngine } from '../../hooks/usePlayerEngine';
 import PlaylistDrawer from './PlaylistDrawer';
 import { useContextMenu } from '../../hooks/useContextMenu';
+import { formatPlaybackTime } from '../../utils/formatters';
 import ContextMenu from '../ContextMenu';
 import SavePlaylistModal from './SavePlaylistModal';
 
@@ -31,13 +32,6 @@ const PLAYBACK_MODE_DISPLAY = {
 const SCOPE_TYPE_LABEL = {
   collection: 'Collection',
   artist: 'Artist',
-};
-
-const formatTime = (seconds) => {
-  if (!seconds || !Number.isFinite(seconds)) return '0:00';
-  const minutes = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
 };
 
 const MusicPlayerWrapper = ({ className = '' }) => {
@@ -125,7 +119,7 @@ const MusicPlayerWrapper = ({ className = '' }) => {
             {HAMBURGER}
           </button>
 
-          <span className="time-display elapsed">{formatTime(currentTime)}</span>
+          <span className="time-display elapsed">{formatPlaybackTime(currentTime)}</span>
 
           <div className={`progress-bar-wrapper ${isBuffering ? 'loading' : ''}`}>
             <input
@@ -139,7 +133,7 @@ const MusicPlayerWrapper = ({ className = '' }) => {
             <div className="progress-bar-loading-overlay" />
           </div>
 
-          <span className="time-display total">{formatTime(duration)}</span>
+          <span className="time-display total">{formatPlaybackTime(duration)}</span>
 
           <button className="player-btn prev-btn" title="Previous" onClick={playPrev}>{PREV}</button>
           <button className="player-btn play-btn" title="Play/Pause" onClick={togglePlayPause}>

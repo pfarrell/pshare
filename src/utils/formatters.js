@@ -34,3 +34,16 @@ export const getAlbumYear = (release_year) => {
   return release_year;
 };
 
+/**
+ * Format a live playback position/length (audio element currentTime/duration).
+ * Unlike formatDuration, never returns '' — the player always shows a time.
+ * @param {number|undefined} seconds - may be fractional, NaN, or Infinity
+ * @returns {string} e.g. "0:00", "1:05"
+ */
+export const formatPlaybackTime = (seconds) => {
+  if (!seconds || !Number.isFinite(seconds)) return '0:00';
+  const minutes = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
+};
+
