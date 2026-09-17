@@ -42,5 +42,16 @@ export async function mergeArtistInto(targetId: number, loserId: number, trx: Ky
   await trx.updateTable('albums').set({ artist_id: targetId }).where('artist_id', '=', loserId).execute()
   await trx.updateTable('tracks').set({ artist_id: targetId }).where('artist_id', '=', loserId).execute()
 
+  // track_artists.artist_id is ON DELETE CASCADE with UNIQUE (track_id,
+  // artist_id) — keep the target's existing credit where both are credited,
+  // transfer the rest.
+  await trx.deleteFrom('track_artists').where((eb) =>
+    eb.and([
+      eb('artist_id', '=', loserId),
+      eb('track_id', 'in', trx.selectFrom('track_artists').select('track_id').where('artist_id', '=', targetId)),
+    ])
+  ).execute()
+  await trx.updateTable('track_artists').set({ artist_id: targetId }).where('artist_id', '=', loserId).execute()
+
   await trx.deleteFrom('artists').where('id', '=', loserId).execute()
 }
