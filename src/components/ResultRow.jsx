@@ -29,7 +29,7 @@ const ResultRow = ({
   const playClearLongPressFlagTimer = useRef(null);
 
   // Long-press (mobile) / right-click (desktop) on the play button reveals
-  // Play Now / Play Next / Add to Queue, mirroring Track.jsx's dropdown.
+  // Play Next / Add to Queue, mirroring Track.jsx's dropdown.
   // Both onPlayNext and onAddToQueue must be supplied to enable it — a
   // caller that only wants tap-to-play-all can omit them.
   const hasPlayMenu = !!(play && play.onPlayNext && play.onAddToQueue);
@@ -43,7 +43,7 @@ const ResultRow = ({
 
   const openPlayMenu = (x, y) => {
     const menuWidth = 180;
-    const menuHeight = 130;
+    const menuHeight = 90;
     let px = x - menuWidth / 2;
     let py = y;
     if (px < 10) px = 10;
@@ -159,7 +159,6 @@ const ResultRow = ({
             className="track-dropdown"
             style={{ position: 'fixed', left: `${playMenuPos.x}px`, top: `${playMenuPos.y}px`, zIndex: 100 }}
           >
-            {play.onPlayNow && <button onClick={(e) => choosePlayAction(e, play.onPlayNow)}>▶ Play Now</button>}
             <button onClick={(e) => choosePlayAction(e, play.onPlayNext)}>⏭ Play Next</button>
             <button onClick={(e) => choosePlayAction(e, play.onAddToQueue)}>➕ Add to Queue</button>
           </div>

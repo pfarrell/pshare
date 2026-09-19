@@ -95,7 +95,7 @@ describe('Album page', () => {
     expect(addTracks).toHaveBeenCalledWith(albumData.tracks, false, { flashActivity: true });
   });
 
-  test('the default Play button appends to the queue without clearing it', async () => {
+  test('the default Play button appends to the queue, jumps to it, and does not clear the existing queue', async () => {
     const addTracks = vi.fn();
     usePlayerStore.setState({ addTracks, currentTrack: null });
 
@@ -104,20 +104,7 @@ describe('Album page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Play' }));
 
-    expect(addTracks).toHaveBeenCalledWith(albumData.tracks, false, { flashActivity: true });
-  });
-
-  test('the Play Now menu item replaces the queue outright', async () => {
-    const setPlaylist = vi.fn();
-    usePlayerStore.setState({ setPlaylist, currentTrack: null });
-
-    renderAlbum();
-    await screen.findByText('Test Album');
-
-    fireEvent.click(screen.getByRole('button', { name: 'More options' }));
-    fireEvent.click(screen.getByText('▶ Play Now'));
-
-    expect(setPlaylist).toHaveBeenCalledWith(albumData.tracks);
+    expect(addTracks).toHaveBeenCalledWith(albumData.tracks, false, { flashActivity: true, playImmediately: true });
   });
 
   test('registers the album tracks as pageTracks once loaded, so the footer play button can fall back to them', async () => {
@@ -137,31 +124,31 @@ describe('Album page', () => {
   });
 });
 
-describe('Album page — collection context', () => {
-  test('Play sets collectionContext when opened from a collection', async () => {
+describe('Album page — queueSource', () => {
+  test('Play tags queueSource with this album, whether or not it was opened from a collection', async () => {
     const addTracks = vi.fn();
-    const setCollectionContext = vi.fn();
-    usePlayerStore.setState({ addTracks, setCollectionContext, currentTrack: null });
+    const setQueueSource = vi.fn();
+    usePlayerStore.setState({ addTracks, setQueueSource, currentTrack: null });
 
     renderAlbum([{ pathname: '/album/10', state: { collectionId: 7 } }]);
     await screen.findByText('Test Album');
 
     fireEvent.click(screen.getByRole('button', { name: 'Play' }));
 
-    expect(setCollectionContext).toHaveBeenCalledWith({ collectionId: 7, albumId: 10 });
+    expect(setQueueSource).toHaveBeenCalledWith({ type: 'album', id: 10 });
   });
 
-  test('Play does not touch collectionContext when opened outside a collection', async () => {
+  test('Play tags queueSource the same way when opened outside a collection', async () => {
     const addTracks = vi.fn();
-    const setCollectionContext = vi.fn();
-    usePlayerStore.setState({ addTracks, setCollectionContext, currentTrack: null });
+    const setQueueSource = vi.fn();
+    usePlayerStore.setState({ addTracks, setQueueSource, currentTrack: null });
 
     renderAlbum();
     await screen.findByText('Test Album');
 
     fireEvent.click(screen.getByRole('button', { name: 'Play' }));
 
-    expect(setCollectionContext).not.toHaveBeenCalled();
+    expect(setQueueSource).toHaveBeenCalledWith({ type: 'album', id: 10 });
   });
 });
 

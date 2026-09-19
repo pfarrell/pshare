@@ -48,13 +48,13 @@ export default function Playlist() {
   const ctxMenu = useContextMenu({ shouldIgnore });
 
   useEffect(() => {
-    // Lets the footer play button fall back to "Play Now" behavior when the playlist is
+    // Lets the footer play button start playing this playlist's tracks when the playlist is
     // empty, instead of trying to resume a track that was never loaded.
     setPageTracks(playlistData?.tracks || []);
     return () => setPageTracks([]);
   }, [playlistData, setPageTracks]);
 
-  const queue = useQueueActions(playlistData?.tracks);
+  const queue = useQueueActions(playlistData?.tracks, { queueSource: playlistData?.playlist ? { type: 'playlist', id: playlistData.playlist.id } : undefined });
 
   if (loading) return <Loading />;
   if (error) return <Retry message={error.message} onRetry={loadPlaylist} />;
@@ -115,8 +115,7 @@ export default function Playlist() {
 
           {/* Action Buttons */}
           <PlayActionsMenu
-            onPlay={queue.playAll}
-            onPlayNow={queue.playNow}
+            onPlay={queue.play}
             onPlayNext={queue.playNext}
             onAddToQueue={queue.addToQueue}
             disabled={!tracks?.length}

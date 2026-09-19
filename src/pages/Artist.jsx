@@ -21,6 +21,7 @@ import { useOvertoneAction } from '../hooks/useOvertoneAction';
 import { useFetch } from '../hooks/useFetch';
 import { useEntityHeaderActions } from '../hooks/useEntityHeaderActions';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { useQueueActions } from '../hooks/useQueueActions';
 
 const Artist = () => {
   const { id } = useParams();
@@ -32,11 +33,13 @@ const Artist = () => {
     () => apiService.getArtist(id).then((response) => response.data),
     [id]
   );
+  const queue = useQueueActions(
+    () => apiService.getRandomScopeTracks('artist', artistData.artist.id).then((response) => response.data.tracks),
+    { queueSource: artistData?.artist ? { type: 'artist', id: artistData.artist.id } : undefined, errorLabel: 'Failed to play artist' }
+  );
   const [showAllSimilar, setShowAllSimilar] = useState(false);
   const isMobile = useIsMobile();
   const [showArtistModal, setShowArtistModal] = useState(false);
-  const startScopeShuffle = usePlayerStore((s) => s.startScopeShuffle);
-  const [shuffleLoading, setShuffleLoading] = useState(false);
   const { overflowAction: overtoneAction, modal: overtoneModal } = useOvertoneAction(artistData?.artist?.musicbrainz_id);
   const { actions: headerActions, shouldIgnore } = useEntityHeaderActions({
     kind: 'artist',
@@ -47,15 +50,6 @@ const Artist = () => {
     share: artistData?.artist ? { title: artistData.artist.name, text: artistData.artist.name } : null,
   });
   const ctxMenu = useContextMenu({ shouldIgnore });
-
-  const handleShuffleArtist = async () => {
-    setShuffleLoading(true);
-    try {
-      await startScopeShuffle('artist', artistData.artist.id);
-    } finally {
-      setShuffleLoading(false);
-    }
-  };
 
   const handleAlbumClick = (album) => {
     navigate(`/album/${album.id}`);
@@ -114,8 +108,10 @@ const Artist = () => {
 
             <div className="artist-header-actions" style={{ display: 'flex', gap: '0.5rem' }}>
               <PlayActionsMenu
-                onPlay={(albums?.length > 0 || singles?.length > 0) ? handleShuffleArtist : undefined}
-                disabled={shuffleLoading}
+                onPlay={(albums?.length > 0 || singles?.length > 0) ? queue.play : undefined}
+                onPlayNext={queue.playNext}
+                onAddToQueue={queue.addToQueue}
+                disabled={queue.loading}
                 overflowActions={headerActions}
               />
               {overtoneModal}

@@ -16,9 +16,9 @@ import ContextMenu from '../components/ContextMenu';
 import CardGrid from '../components/CardGrid';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { useIsMobile } from '../hooks/useIsMobile';
-import { usePlayerStore } from '../stores/playerStore';
 import { useFetch } from '../hooks/useFetch';
 import { useEntityHeaderActions } from '../hooks/useEntityHeaderActions';
+import { useQueueActions } from '../hooks/useQueueActions';
 import { formatCount } from '../utils/formatters';
 
 export default function Collection() {
@@ -31,8 +31,6 @@ export default function Collection() {
     [id]
   );
   const [showImageModal, setShowImageModal] = useState(false);
-  const startScopeShuffle = usePlayerStore((s) => s.startScopeShuffle);
-  const [shuffleLoading, setShuffleLoading] = useState(false);
   const canEdit = isAdmin || (user && collectionData?.collection?.user_id === user.id);
   const { actions: headerActions, shouldIgnore } = useEntityHeaderActions({
     kind: 'collection',
@@ -43,15 +41,10 @@ export default function Collection() {
     share: collectionData?.collection ? { title: collectionData.collection.name, text: `${collectionData.collection.name} collection` } : null,
   });
   const ctxMenu = useContextMenu({ shouldIgnore });
-
-  const handleShuffleAll = async () => {
-    setShuffleLoading(true);
-    try {
-      await startScopeShuffle('collection', collectionData.collection.id);
-    } finally {
-      setShuffleLoading(false);
-    }
-  };
+  const queue = useQueueActions(
+    () => apiService.getRandomScopeTracks('collection', collectionData.collection.id).then((response) => response.data.tracks),
+    { queueSource: collectionData?.collection ? { type: 'collection', id: collectionData.collection.id } : undefined, errorLabel: 'Failed to play collection' }
+  );
 
   if (loading) return <Loading />;
   if (error) return <Retry message={error.message} onRetry={loadCollection} />;
@@ -82,8 +75,10 @@ export default function Collection() {
           {(() => {
             const playActions = (
               <PlayActionsMenu
-                onPlay={albums?.length > 0 ? handleShuffleAll : undefined}
-                disabled={shuffleLoading}
+                onPlay={albums?.length > 0 ? queue.play : undefined}
+                onPlayNext={queue.playNext}
+                onAddToQueue={queue.addToQueue}
+                disabled={queue.loading}
                 overflowActions={headerActions}
               />
             );
@@ -164,7 +159,6 @@ export default function Collection() {
                   artist={item.data.artist}
                   imageUrl={apiService.getImageUrl(item.data.image_path, 'album_small')}
                   onClick={() => navigate(`/album/${item.data.id}`, { state: { collectionId: collection.id } })}
-                  collectionId={collection.id}
                 />
               ) : (
                 <AlbumStubCard key={`stub-${item.data.id}`} stub={item.data} />

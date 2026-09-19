@@ -332,26 +332,9 @@ describe('mobile row layout', () => {
     expect(addTracks).toHaveBeenCalledWith(
       [{ id: 1, title: 'Track One', url: 'http://x/1.mp3' }],
       false,
-      { flashActivity: true }
+      { flashActivity: true, playImmediately: true }
     );
     expect(onClick).not.toHaveBeenCalled();
-  });
-
-  test('right-clicking play and choosing "Play Now" fetches the album and replaces the queue outright', async () => {
-    apiService.getAlbum.mockResolvedValue({
-      data: { tracks: [{ id: 1, title: 'Track One', url: 'http://x/1.mp3' }] },
-    });
-    const setPlaylist = vi.fn();
-    usePlayerStore.setState({ setPlaylist });
-
-    render(<AlbumCard album={album} artist={artist} onClick={vi.fn()} imageUrl="/img/sm/x.jpg" />);
-    fireEvent.contextMenu(screen.getByRole('button', { name: 'Play Test Album' }), { clientX: 10, clientY: 10 });
-
-    fireEvent.click(screen.getByText('▶ Play Now'));
-
-    await waitFor(() => expect(setPlaylist).toHaveBeenCalled());
-    expect(apiService.getAlbum).toHaveBeenCalledWith(7);
-    expect(setPlaylist).toHaveBeenCalledWith([{ id: 1, title: 'Track One', url: 'http://x/1.mp3' }]);
   });
 
   test('right-clicking play and choosing "Play Next" fetches the album and inserts it next in the queue', async () => {
@@ -464,62 +447,47 @@ describe('desktop list-mode row layout', () => {
     expect(addTracks).toHaveBeenCalledWith(
       [{ id: 1, title: 'Track One', url: 'http://x/1.mp3' }],
       false,
-      { flashActivity: true }
+      { flashActivity: true, playImmediately: true }
     );
   });
 });
 
-describe('AlbumCard — collection context', () => {
+describe('AlbumCard — queueSource', () => {
   beforeEach(() => {
     // Play button aria-label lookup below matches the ResultRow (mobile/list)
     // render path, same as the other Play-button tests in this file.
     Object.defineProperty(window, 'innerWidth', { value: 500, configurable: true });
   });
 
-  test('tapping play sets collectionContext when opened from a collection grid', async () => {
+  test('tapping play tags queueSource with this album', async () => {
     apiService.getAlbum.mockResolvedValue({
       data: { tracks: [{ id: 1, title: 'Track One', url: 'http://x/1.mp3' }] },
     });
     const addTracks = vi.fn();
-    const setCollectionContext = vi.fn();
-    usePlayerStore.setState({ addTracks, setCollectionContext });
-
-    render(<AlbumCard album={album} artist={artist} onClick={vi.fn()} imageUrl="/img/sm/x.jpg" collectionId={42} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Play Test Album' }));
-
-    await waitFor(() => expect(addTracks).toHaveBeenCalled());
-    expect(setCollectionContext).toHaveBeenCalledWith({ collectionId: 42, albumId: 7 });
-  });
-
-  test('right-clicking play and choosing "Play Next" also tags collectionContext', async () => {
-    apiService.getAlbum.mockResolvedValue({
-      data: { tracks: [{ id: 1, title: 'Track One', url: 'http://x/1.mp3' }] },
-    });
-    const addTracks = vi.fn();
-    const setCollectionContext = vi.fn();
-    usePlayerStore.setState({ addTracks, setCollectionContext });
-
-    render(<AlbumCard album={album} artist={artist} onClick={vi.fn()} imageUrl="/img/sm/x.jpg" collectionId={42} />);
-    fireEvent.contextMenu(screen.getByRole('button', { name: 'Play Test Album' }), { clientX: 10, clientY: 10 });
-    fireEvent.click(screen.getByText('⏭ Play Next'));
-
-    await waitFor(() => expect(addTracks).toHaveBeenCalled());
-    expect(setCollectionContext).toHaveBeenCalledWith({ collectionId: 42, albumId: 7 });
-  });
-
-  test('tapping play does not touch collectionContext when there is no collectionId', async () => {
-    apiService.getAlbum.mockResolvedValue({
-      data: { tracks: [{ id: 1, title: 'Track One', url: 'http://x/1.mp3' }] },
-    });
-    const addTracks = vi.fn();
-    const setCollectionContext = vi.fn();
-    usePlayerStore.setState({ addTracks, setCollectionContext });
+    const setQueueSource = vi.fn();
+    usePlayerStore.setState({ addTracks, setQueueSource });
 
     render(<AlbumCard album={album} artist={artist} onClick={vi.fn()} imageUrl="/img/sm/x.jpg" />);
     fireEvent.click(screen.getByRole('button', { name: 'Play Test Album' }));
 
     await waitFor(() => expect(addTracks).toHaveBeenCalled());
-    expect(setCollectionContext).not.toHaveBeenCalled();
+    expect(setQueueSource).toHaveBeenCalledWith({ type: 'album', id: 7 });
+  });
+
+  test('right-clicking play and choosing "Play Next" does NOT tag queueSource', async () => {
+    apiService.getAlbum.mockResolvedValue({
+      data: { tracks: [{ id: 1, title: 'Track One', url: 'http://x/1.mp3' }] },
+    });
+    const addTracks = vi.fn();
+    const setQueueSource = vi.fn();
+    usePlayerStore.setState({ addTracks, setQueueSource });
+
+    render(<AlbumCard album={album} artist={artist} onClick={vi.fn()} imageUrl="/img/sm/x.jpg" />);
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Play Test Album' }), { clientX: 10, clientY: 10 });
+    fireEvent.click(screen.getByText('⏭ Play Next'));
+
+    await waitFor(() => expect(addTracks).toHaveBeenCalled());
+    expect(setQueueSource).not.toHaveBeenCalled();
   });
 });
 

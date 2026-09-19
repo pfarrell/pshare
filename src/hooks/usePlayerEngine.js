@@ -40,8 +40,7 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const nextTrackIndex = usePlayerStore((s) => s.nextTrackIndex);
   const playlistFinished = usePlayerStore((s) => s.playlistFinished);
-  const collectionContext = usePlayerStore((s) => s.collectionContext);
-  const scopeContext = usePlayerStore((s) => s.scopeContext);
+  const queueSource = usePlayerStore((s) => s.queueSource);
   const playbackMode = usePlayerStore((s) => s.playbackMode);
   const playlist = usePlayerStore((s) => s.playlist);
   const currentTrackIndex = usePlayerStore((s) => s.currentTrackIndex);
@@ -164,35 +163,53 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
     }
   }, [nextTrackIndex]);
 
-  // When an album played from a collection (see Album.jsx's setCollectionContext)
-  // runs all the way out — nextTrackIndex resolved to -1, so playNext() gave up and
-  // set playlistFinished — pull in the collection's next album and keep playing,
-  // rather than just stopping. Lives here rather than in the store because it needs
-  // apiService, and this hook (mounted outside <Routes> in App.jsx) keeps running no
-  // matter which page is shown, so it survives navigating away mid-album.
+  // When the queue runs all the way out — nextTrackIndex resolved to -1, so playNext() gave
+  // up and set playlistFinished — keep going based on how the current content was queued
+  // (queueSource, set by useQueueActions' play()), rather than just stopping:
+  //   - collection/artist: fetch another random batch from the same scope and keep playing.
+  //   - album: fetch the next-newest album by the same artist (existing adjacent-album
+  //     ordering, artist-discography fallback) and keep playing; if there's no next album,
+  //     stop, same as today when a queue naturally ends.
+  //   - playlist (or no queueSource at all): do nothing.
+  // Lives here rather than in the store because it needs apiService, and this hook (mounted
+  // outside <Routes> in App.jsx) keeps running no matter which page is shown, so it survives
+  // navigating away mid-queue.
   // Skipped entirely while playbackMode is 'shuffle-scope': that mode's own top-up effect
-  // below already keeps the queue full — collectionContext can still be set at the same time
-  // (enterScopeShuffle derives a scope from it without clearing it), and this effect running
-  // too would double up on filling the queue.
+  // below already keeps collection/artist scopes full before they'd ever truly run out.
   useEffect(() => {
-    if (!playlistFinished || !collectionContext || playbackMode === 'shuffle-scope') return undefined;
+    if (!playlistFinished || !queueSource || playbackMode === 'shuffle-scope') return undefined;
     let cancelled = false;
-    const { collectionId, albumId } = collectionContext;
-    apiService.getAdjacentAlbums(albumId, collectionId)
-      .then((response) => {
-        const next = response.data?.next;
-        if (!next || cancelled) return undefined;
-        return apiService.getAlbum(next.id).then((albumResponse) => {
-          if (cancelled) return;
-          const tracks = albumResponse.data?.tracks || [];
-          if (tracks.length === 0) return;
-          usePlayerStore.getState().addTracks(tracks, false, { playImmediately: true });
-          usePlayerStore.getState().setCollectionContext({ collectionId, albumId: next.id });
+    const { type, id } = queueSource;
+
+    const fetchMore = async () => {
+      if (type === 'collection' || type === 'artist') {
+        const response = await apiService.getRandomScopeTracks(type, id, {
+          limit: SCOPE_SHUFFLE_BATCH_SIZE,
+          excludeTrackIds: usePlayerStore.getState().playlist.map((t) => t.id),
         });
+        const tracks = response.data?.tracks || [];
+        return tracks.length > 0 ? { tracks, nextSource: { type, id } } : null;
+      }
+      if (type === 'album') {
+        const response = await apiService.getAdjacentAlbums(id);
+        const next = response.data?.next;
+        if (!next || cancelled) return null;
+        const albumResponse = await apiService.getAlbum(next.id);
+        const tracks = albumResponse.data?.tracks || [];
+        return tracks.length > 0 ? { tracks, nextSource: { type: 'album', id: next.id } } : null;
+      }
+      return null; // 'playlist' (and any other/unrecognized type): no auto-continue, by design
+    };
+
+    fetchMore()
+      .then((result) => {
+        if (cancelled || !result) return;
+        usePlayerStore.getState().addTracks(result.tracks, false, { playImmediately: true });
+        usePlayerStore.getState().setQueueSource(result.nextSource);
       })
-      .catch((error) => console.error('Failed to auto-advance to next collection album:', error));
+      .catch((error) => console.error('Failed to auto-continue the queue:', error));
     return () => { cancelled = true; };
-  }, [playlistFinished, collectionContext, playbackMode]);
+  }, [playlistFinished, queueSource, playbackMode]);
 
   // Keeps Shuffle Scope's queue topped up: once only a few unplayed tracks remain, fetch
   // another random batch from the same scope and append it, so playback never has to stop
@@ -200,12 +217,12 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
   // stops re-fetching once `remaining` grows past the threshold again after a batch lands.
   const scopeShuffleFetchInFlight = useRef(false);
   useEffect(() => {
-    if (playbackMode !== 'shuffle-scope' || !scopeContext) return;
+    if (playbackMode !== 'shuffle-scope' || !queueSource) return;
     if (scopeShuffleFetchInFlight.current) return;
     const remaining = playlist.length - 1 - currentTrackIndex;
     if (remaining > SCOPE_SHUFFLE_TOPUP_REMAINING) return;
     scopeShuffleFetchInFlight.current = true;
-    apiService.getRandomScopeTracks(scopeContext.type, scopeContext.id, {
+    apiService.getRandomScopeTracks(queueSource.type, queueSource.id, {
       limit: SCOPE_SHUFFLE_BATCH_SIZE,
       excludeTrackIds: playlist.map((t) => t.id),
     })
@@ -214,7 +231,7 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
       })
       .catch((error) => console.error('Failed to top up scope shuffle queue:', error))
       .finally(() => { scopeShuffleFetchInFlight.current = false; });
-  }, [playbackMode, scopeContext, playlist, currentTrackIndex]);
+  }, [playbackMode, queueSource, playlist, currentTrackIndex]);
 
   useEffect(() => {
     if (titleOverride) {

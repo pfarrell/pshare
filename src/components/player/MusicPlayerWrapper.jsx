@@ -44,7 +44,7 @@ const MusicPlayerWrapper = ({ className = '' }) => {
   const currentTime = usePlayerStore((s) => s.currentTime);
   const duration = usePlayerStore((s) => s.duration);
   const playbackMode = usePlayerStore((s) => s.playbackMode);
-  const scopeContext = usePlayerStore((s) => s.scopeContext);
+  const queueSource = usePlayerStore((s) => s.queueSource);
   const drawerOpen = usePlayerStore((s) => s.drawerOpen);
   const playlist = usePlayerStore((s) => s.playlist);
   const activityPulseToken = usePlayerStore((s) => s.activityPulseToken);
@@ -97,7 +97,7 @@ const MusicPlayerWrapper = ({ className = '' }) => {
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
   const { glyph: shuffleGlyph, title: shuffleTitle } = playbackMode === 'shuffle-scope'
-    ? { glyph: SHUFFLE_SCOPE, title: `Shuffle ${SCOPE_TYPE_LABEL[scopeContext?.type] || 'Scope'}` }
+    ? { glyph: SHUFFLE_SCOPE, title: `Shuffle ${SCOPE_TYPE_LABEL[queueSource?.type] || 'Scope'}` }
     : PLAYBACK_MODE_DISPLAY[playbackMode];
 
   return (

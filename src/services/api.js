@@ -200,7 +200,8 @@ export const apiService = {
   downloadCollectionImage: (id, image_url, image_name) => api.post(`/admin/collection/${id}/image`, { image_url, image_name }),
 
   // Shuffle scope — dispatches to the right entity's random-tracks endpoint. Used by
-  // playerStore's startScopeShuffle/enterScopeShuffle and usePlayerEngine's top-up effect.
+  // useQueueActions' play() (Artist/Collection), playerStore's enterScopeShuffle, and
+  // usePlayerEngine's top-up and queue-exhaustion effects.
   getRandomScopeTracks: (type, id, { limit = 25, excludeTrackIds = [] } = {}) => {
     const path = type === 'artist' ? `/artist/${id}/tracks/random` : `/collection/${id}/tracks/random`;
     return api.post(path, { limit, excludeTrackIds });

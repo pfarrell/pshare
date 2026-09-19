@@ -68,12 +68,13 @@ describe('mobile row layout', () => {
     expect(screen.getByText('Playlist')).toBeInTheDocument();
   });
 
-  test('tapping play fetches the playlist, appends it to the queue, and does not navigate', async () => {
+  test('tapping play fetches the playlist, appends it to the queue, jumps to it, and does not navigate', async () => {
     apiService.getPlaylist.mockResolvedValue({
       data: { tracks: [{ id: 1, title: 'Track One', url: 'http://x/1.mp3' }] },
     });
     const addTracks = vi.fn();
-    usePlayerStore.setState({ addTracks });
+    const setQueueSource = vi.fn();
+    usePlayerStore.setState({ addTracks, setQueueSource });
     const onClick = vi.fn();
 
     render(<PlaylistResultCard playlist={playlist} onClick={onClick} imageUrl="/img/sm/x.jpg" />);
@@ -86,8 +87,9 @@ describe('mobile row layout', () => {
     expect(addTracks).toHaveBeenCalledWith(
       [{ id: 1, title: 'Track One', url: 'http://x/1.mp3', source_playlist: { id: 5, name: 'Test Playlist' } }],
       false,
-      { flashActivity: true }
+      { flashActivity: true, playImmediately: true }
     );
+    expect(setQueueSource).toHaveBeenCalledWith({ type: 'playlist', id: 5 });
     expect(onClick).not.toHaveBeenCalled();
   });
 
@@ -106,29 +108,11 @@ describe('mobile row layout', () => {
       expect(addTracks).toHaveBeenCalledWith(
         [{ id: 1, title: 'Track One', url: 'http://x/1.mp3', source_playlist: { id: 5, name: 'Test Playlist' } }],
         false,
-        { flashActivity: true }
+        { flashActivity: true, playImmediately: true }
       );
     });
   });
 
-  test('right-clicking play and choosing "Play Now" fetches the playlist and replaces the queue outright', async () => {
-    apiService.getPlaylist.mockResolvedValue({
-      data: { tracks: [{ id: 1, title: 'Track One', url: 'http://x/1.mp3' }] },
-    });
-    const setPlaylist = vi.fn();
-    usePlayerStore.setState({ setPlaylist });
-
-    render(<PlaylistResultCard playlist={playlist} onClick={vi.fn()} imageUrl="/img/sm/x.jpg" />);
-    fireEvent.contextMenu(screen.getByRole('button', { name: 'Play Test Playlist' }), { clientX: 10, clientY: 10 });
-
-    fireEvent.click(screen.getByText('▶ Play Now'));
-
-    await waitFor(() => expect(setPlaylist).toHaveBeenCalled());
-    expect(apiService.getPlaylist).toHaveBeenCalledWith(5);
-    expect(setPlaylist).toHaveBeenCalledWith(
-      [{ id: 1, title: 'Track One', url: 'http://x/1.mp3', source_playlist: { id: 5, name: 'Test Playlist' } }]
-    );
-  });
 
   test('right-clicking play and choosing "Play Next" fetches the playlist and inserts it next in the queue', async () => {
     apiService.getPlaylist.mockResolvedValue({
@@ -244,12 +228,13 @@ describe('desktop list-mode row layout', () => {
     expect(screen.getByText('Playlist · 8 tracks')).toBeInTheDocument();
   });
 
-  test('tapping play fetches the playlist and appends it to the queue', async () => {
+  test('tapping play fetches the playlist, appends it to the queue, and jumps to it', async () => {
     apiService.getPlaylist.mockResolvedValue({
       data: { tracks: [{ id: 1, title: 'Track One', url: 'http://x/1.mp3' }] },
     });
     const addTracks = vi.fn();
-    usePlayerStore.setState({ addTracks });
+    const setQueueSource = vi.fn();
+    usePlayerStore.setState({ addTracks, setQueueSource });
 
     render(<PlaylistResultCard playlist={playlist} onClick={vi.fn()} imageUrl="/img/sm/x.jpg" />);
 
@@ -259,8 +244,9 @@ describe('desktop list-mode row layout', () => {
     expect(addTracks).toHaveBeenCalledWith(
       [{ id: 1, title: 'Track One', url: 'http://x/1.mp3', source_playlist: { id: 5, name: 'Test Playlist' } }],
       false,
-      { flashActivity: true }
+      { flashActivity: true, playImmediately: true }
     );
+    expect(setQueueSource).toHaveBeenCalledWith({ type: 'playlist', id: 5 });
   });
 });
 

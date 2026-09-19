@@ -58,8 +58,8 @@ const TrackPage = () => {
   const ctxMenu = useContextMenu({ shouldIgnore });
 
   useEffect(() => {
-    // Lets the footer play button fall back to "Play Now" behavior when the
-    // playlist is empty, matching Album.jsx/Artist.jsx's usage of setPageTracks.
+    // Lets the footer play button start playing this track when the queue
+    // is empty, matching Album.jsx/Playlist.jsx's usage of setPageTracks.
     setPageTracks(track ? [track] : []);
     return () => setPageTracks([]);
   }, [track, setPageTracks]);

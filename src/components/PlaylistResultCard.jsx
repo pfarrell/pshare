@@ -19,7 +19,7 @@ const PlaylistResultCard = ({ playlist, onClick, imageUrl, previewAlbums }) => {
       ...track,
       source_playlist: { id: playlist.id, name: playlist.name },
     }))),
-    { errorLabel: 'Failed to play playlist' }
+    { queueSource: { type: 'playlist', id: playlist.id }, errorLabel: 'Failed to play playlist' }
   );
   const trackCount = formatCount(playlist.track_count || null, 'track');
 
@@ -37,8 +37,7 @@ const PlaylistResultCard = ({ playlist, onClick, imageUrl, previewAlbums }) => {
       onClick={() => onClick(playlist)}
       play={{
         loading: queue.loading,
-        onPlay: queue.playAll,
-        onPlayNow: queue.playNow,
+        onPlay: queue.play,
         onPlayNext: queue.playNext,
         onAddToQueue: queue.addToQueue,
         label: `Play ${playlist.name}`,
