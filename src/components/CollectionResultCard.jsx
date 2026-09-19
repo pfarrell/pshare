@@ -2,8 +2,10 @@
 import { formatCount } from '../utils/formatters';
 import EntityCard from './EntityCard';
 import CoverCollage from './CoverCollage';
+import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
 import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
+import { useQueueActions } from '../hooks/useQueueActions';
 
 // previewAlbums is only passed by the Collections list page (its API response
 // is the only one that includes it) — that's what scopes the collage to that
@@ -13,6 +15,10 @@ const CollectionResultCard = ({ collection, onClick, imageUrl, previewAlbums }) 
   const { isAuthenticated } = useAuthStore();
   const favorite = useFavoriteToggle('collection', collection);
   const albumCount = formatCount(collection.album_count || null, 'album');
+  const queue = useQueueActions(
+    () => apiService.getRandomScopeTracks('collection', collection.id).then((response) => response.data.tracks),
+    { queueSource: { type: 'collection', id: collection.id }, errorLabel: 'Failed to play collection' }
+  );
 
   return (
     <EntityCard
@@ -27,6 +33,13 @@ const CollectionResultCard = ({ collection, onClick, imageUrl, previewAlbums }) 
         <p style={{ fontSize: '0.7rem', color: 'var(--color-text-faint)', margin: '0.125rem 0 0 0' }}>{albumCount}</p>
       )}
       onClick={() => onClick(collection)}
+      play={{
+        loading: queue.loading,
+        onPlay: queue.play,
+        onPlayNext: queue.playNext,
+        onAddToQueue: queue.addToQueue,
+        label: `Play ${collection.name}`,
+      }}
       actions={[isAuthenticated && { key: 'favorite', icon: favorite.icon, label: favorite.label, onClick: favorite.toggle }]}
       menuTestId="collection-card-menu-backdrop"
     />

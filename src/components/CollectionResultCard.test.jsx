@@ -1,8 +1,17 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import CollectionResultCard from './CollectionResultCard';
 import { useAuthStore } from '../stores/authStore';
 import { useFavoritesStore } from '../stores/favoritesStore';
 import { useViewModeStore } from '../stores/viewModeStore';
+import { apiService } from '../services/api';
+import { usePlayerStore } from '../stores/playerStore';
+
+vi.mock('../services/api', () => ({
+  apiService: {
+    getRandomScopeTracks: vi.fn(),
+    getImageUrl: (path) => (path ? `http://example.com/${path}` : null),
+  },
+}));
 
 const collection = { id: 9, name: 'Test Collection' };
 
@@ -57,11 +66,6 @@ describe('mobile row layout', () => {
   test('shows just "Collection" as the subtitle when album_count is absent', () => {
     render(<CollectionResultCard collection={collection} onClick={vi.fn()} imageUrl="/img/sm/x.jpg" />);
     expect(screen.getByText('Collection')).toBeInTheDocument();
-  });
-
-  test('does not render a play button', () => {
-    render(<CollectionResultCard collection={collection} onClick={vi.fn()} imageUrl="/img/sm/x.jpg" />);
-    expect(screen.queryByRole('button')).toBeNull();
   });
 
   test('clicking the row calls onClick with the collection', () => {
@@ -176,5 +180,27 @@ describe('CollectionResultCard — Favorite menu item', () => {
     fireEvent.click(screen.getByText('☆ Add to Favorites'));
 
     expect(toggleFavorite).toHaveBeenCalledWith('collection', collection.id, expect.objectContaining({ id: collection.id, name: collection.name }));
+  });
+});
+
+describe('play button', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'innerWidth', { value: 500, configurable: true });
+  });
+
+  test('tapping play fetches a random batch of the collection\'s tracks and tags queueSource', async () => {
+    apiService.getRandomScopeTracks.mockResolvedValue({
+      data: { tracks: [{ id: 1, title: 'Track One', url: 'http://x/1.mp3' }] },
+    });
+    const addTracks = vi.fn();
+    const setQueueSource = vi.fn();
+    usePlayerStore.setState({ addTracks, setQueueSource });
+
+    render(<CollectionResultCard collection={collection} onClick={vi.fn()} imageUrl="/img/sm/x.jpg" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Play Test Collection' }));
+
+    await waitFor(() => expect(addTracks).toHaveBeenCalled());
+    expect(apiService.getRandomScopeTracks).toHaveBeenCalledWith('collection', 9);
+    expect(setQueueSource).toHaveBeenCalledWith({ type: 'collection', id: 9 });
   });
 });

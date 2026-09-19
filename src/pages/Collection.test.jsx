@@ -12,6 +12,7 @@ vi.mock('../services/api', () => ({
   apiService: {
     getCollection: vi.fn(),
     getImageUrl: (path) => (path ? `http://example.com/${path}` : null),
+    getRandomScopeTracks: vi.fn(),
   },
 }));
 
@@ -30,7 +31,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   useAuthStore.setState({ isAdmin: false, isAuthenticated: false, user: null });
   useFavoritesStore.setState({ isFavorite: () => false, toggleFavorite: vi.fn() });
-  usePlayerStore.setState({ startScopeShuffle: vi.fn().mockResolvedValue(undefined) });
+  usePlayerStore.setState({ addTracks: vi.fn(), setQueueSource: vi.fn() });
+  apiService.getRandomScopeTracks.mockResolvedValue({ data: { tracks: [] } });
 });
 
 describe('Collection page — wikipedia summary', () => {
@@ -88,7 +90,7 @@ describe('Collection page — Shuffle All', () => {
     expect(screen.queryByRole('button', { name: 'Play' })).not.toBeInTheDocument();
   });
 
-  test('shows a Play button that starts collection shuffle when the collection has albums', async () => {
+  test('shows a Play button that fetches a random batch of the collection\'s tracks when the collection has albums', async () => {
     apiService.getCollection.mockResolvedValue({
       data: {
         collection: baseCollection,
@@ -97,13 +99,22 @@ describe('Collection page — Shuffle All', () => {
         summary: null,
       },
     });
+    apiService.getRandomScopeTracks.mockResolvedValue({
+      data: { tracks: [{ id: 100, title: 'Random Track', url: '/stream/100' }] },
+    });
     renderCollection();
     await screen.findByText('A');
 
     fireEvent.click(screen.getByRole('button', { name: 'Play' }));
 
     await waitFor(() => {
-      expect(usePlayerStore.getState().startScopeShuffle).toHaveBeenCalledWith('collection', baseCollection.id);
+      expect(apiService.getRandomScopeTracks).toHaveBeenCalledWith('collection', baseCollection.id);
+      expect(usePlayerStore.getState().addTracks).toHaveBeenCalledWith(
+        [{ id: 100, title: 'Random Track', url: '/stream/100' }],
+        false,
+        { flashActivity: true, playImmediately: true }
+      );
+      expect(usePlayerStore.getState().setQueueSource).toHaveBeenCalledWith({ type: 'collection', id: baseCollection.id });
     });
   });
 });
