@@ -54,7 +54,7 @@ export default function Playlist() {
     return () => setPageTracks([]);
   }, [playlistData, setPageTracks]);
 
-  const queue = useQueueActions(playlistData?.tracks);
+  const queue = useQueueActions(playlistData?.tracks, { queueSource: playlistData?.playlist ? { type: 'playlist', id: playlistData.playlist.id } : undefined });
 
   if (loading) return <Loading />;
   if (error) return <Retry message={error.message} onRetry={loadPlaylist} />;
@@ -115,8 +115,7 @@ export default function Playlist() {
 
           {/* Action Buttons */}
           <PlayActionsMenu
-            onPlay={queue.playAll}
-            onPlayNow={queue.playNow}
+            onPlay={queue.play}
             onPlayNext={queue.playNext}
             onAddToQueue={queue.addToQueue}
             disabled={!tracks?.length}

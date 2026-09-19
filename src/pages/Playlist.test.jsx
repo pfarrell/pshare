@@ -42,27 +42,17 @@ describe('Playlist page', () => {
     source_playlist: { id: playlistData.playlist.id, name: playlistData.playlist.name },
   }));
 
-  test('the default Play button appends to the queue without clearing it', async () => {
+  test('the default Play button appends to the queue, jumps to it, and does not clear the existing queue', async () => {
     const addTracks = vi.fn();
-    usePlayerStore.setState({ addTracks });
+    const setQueueSource = vi.fn();
+    usePlayerStore.setState({ addTracks, setQueueSource });
     renderPlaylist();
     await screen.findByText('Test Playlist');
 
     fireEvent.click(screen.getByRole('button', { name: 'Play' }));
 
-    expect(addTracks).toHaveBeenCalledWith(withSourcePlaylist, false, { flashActivity: true });
-  });
-
-  test('the Play Now menu item replaces the queue outright', async () => {
-    const setPlaylist = vi.fn();
-    usePlayerStore.setState({ setPlaylist });
-    renderPlaylist();
-    await screen.findByText('Test Playlist');
-
-    fireEvent.click(screen.getByRole('button', { name: 'More options' }));
-    fireEvent.click(screen.getByText('▶ Play Now'));
-
-    expect(setPlaylist).toHaveBeenCalledWith(withSourcePlaylist);
+    expect(addTracks).toHaveBeenCalledWith(withSourcePlaylist, false, { flashActivity: true, playImmediately: true });
+    expect(setQueueSource).toHaveBeenCalledWith({ type: 'playlist', id: playlistData.playlist.id });
   });
 
   test('registers the playlist tracks as pageTracks once loaded, so the footer play button can fall back to them', async () => {
