@@ -43,7 +43,7 @@ export default function Collection() {
   const ctxMenu = useContextMenu({ shouldIgnore });
   const queue = useQueueActions(
     () => apiService.getRandomScopeTracks('collection', collectionData.collection.id).then((response) => response.data.tracks),
-    { queueSource: collectionData?.collection ? { type: 'collection', id: collectionData.collection.id } : undefined, errorLabel: 'Failed to shuffle collection' }
+    { queueSource: collectionData?.collection ? { type: 'collection', id: collectionData.collection.id } : undefined, errorLabel: 'Failed to play collection' }
   );
 
   if (loading) return <Loading />;
@@ -76,6 +76,8 @@ export default function Collection() {
             const playActions = (
               <PlayActionsMenu
                 onPlay={albums?.length > 0 ? queue.play : undefined}
+                onPlayNext={queue.playNext}
+                onAddToQueue={queue.addToQueue}
                 disabled={queue.loading}
                 overflowActions={headerActions}
               />

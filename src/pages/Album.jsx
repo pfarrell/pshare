@@ -67,7 +67,7 @@ const Album = () => {
   };
 
   useEffect(() => {
-    // Lets the footer play button fall back to "Play Now" behavior when the playlist is
+    // Lets the footer play button start playing this album's tracks when the playlist is
     // empty, instead of trying to resume a track that was never loaded.
     setPageTracks(albumData?.tracks || []);
     return () => setPageTracks([]);

@@ -35,7 +35,7 @@ const Artist = () => {
   );
   const queue = useQueueActions(
     () => apiService.getRandomScopeTracks('artist', artistData.artist.id).then((response) => response.data.tracks),
-    { queueSource: artistData?.artist ? { type: 'artist', id: artistData.artist.id } : undefined, errorLabel: 'Failed to shuffle artist' }
+    { queueSource: artistData?.artist ? { type: 'artist', id: artistData.artist.id } : undefined, errorLabel: 'Failed to play artist' }
   );
   const [showAllSimilar, setShowAllSimilar] = useState(false);
   const isMobile = useIsMobile();
@@ -109,6 +109,8 @@ const Artist = () => {
             <div className="artist-header-actions" style={{ display: 'flex', gap: '0.5rem' }}>
               <PlayActionsMenu
                 onPlay={(albums?.length > 0 || singles?.length > 0) ? queue.play : undefined}
+                onPlayNext={queue.playNext}
+                onAddToQueue={queue.addToQueue}
                 disabled={queue.loading}
                 overflowActions={headerActions}
               />

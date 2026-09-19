@@ -48,7 +48,7 @@ export default function Playlist() {
   const ctxMenu = useContextMenu({ shouldIgnore });
 
   useEffect(() => {
-    // Lets the footer play button fall back to "Play Now" behavior when the playlist is
+    // Lets the footer play button start playing this playlist's tracks when the playlist is
     // empty, instead of trying to resume a track that was never loaded.
     setPageTracks(playlistData?.tracks || []);
     return () => setPageTracks([]);

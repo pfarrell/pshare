@@ -79,7 +79,7 @@ export const usePlayerStore = create((set, get) => ({
   standbyUnlocked: false,
 
   // Tracks belonging to whatever detail page (album, etc.) is currently mounted, kept in sync
-  // by that page's own effect. Lets togglePlayPause fall back to "Play Now" behavior when the
+  // by that page's own effect. Lets togglePlayPause start playing this page's tracks when the
   // playlist is empty, instead of trying to resume a track that was never loaded.
   pageTracks: [],
   setPageTracks: (tracks) => set({ pageTracks: tracks || [] }),
