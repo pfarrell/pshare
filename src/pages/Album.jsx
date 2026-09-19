@@ -26,7 +26,6 @@ const Album = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const collectionId = location.state?.collectionId ?? null;
-  const setCollectionContext = usePlayerStore((s) => s.setCollectionContext);
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const setPageTracks = usePlayerStore((s) => s.setPageTracks);
   const { isAdmin, isAuthenticated } = useAuthStore();
@@ -74,16 +73,7 @@ const Album = () => {
     return () => setPageTracks([]);
   }, [albumData, setPageTracks]);
 
-  // Whenever this album is played from a collection, tag the queue with that
-  // context so usePlayerEngine can auto-advance into the collection's next
-  // album once playback naturally runs out.
-  const tagCollectionContext = () => {
-    if (collectionId) {
-      setCollectionContext({ collectionId, albumId: albumData?.album?.id });
-    }
-  };
-
-  const queue = useQueueActions(albumData?.tracks, { afterEnqueue: tagCollectionContext });
+  const queue = useQueueActions(albumData?.tracks, { queueSource: albumData?.album ? { type: 'album', id: albumData.album.id } : undefined });
 
   const handleMadeSingle = (trackId) => {
     setAlbumData((d) => ({ ...d, tracks: d.tracks.filter((t) => t.id !== trackId) }));
@@ -166,8 +156,7 @@ const Album = () => {
             {/* Action Buttons */}
             <div className="album-header-actions" style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
               <PlayActionsMenu
-                onPlay={queue.playAll}
-                onPlayNow={queue.playNow}
+                onPlay={queue.play}
                 onPlayNext={queue.playNext}
                 onAddToQueue={queue.addToQueue}
                 overflowActions={headerActions}

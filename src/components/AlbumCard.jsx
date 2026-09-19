@@ -7,31 +7,20 @@ import { useIsCurrentPage } from '../hooks/useIsCurrentPage';
 import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
 import { useQueueActions } from '../hooks/useQueueActions';
 import { apiService } from '../services/api';
-import { usePlayerStore } from '../stores/playerStore';
 import { useAuthStore } from '../stores/authStore';
 import { formatCount, getAlbumYear } from '../utils/formatters';
 
-const AlbumCard = ({ album, artist, onClick, imageUrl, hideArtist = false, collectionId = null }) => {
+const AlbumCard = ({ album, artist, onClick, imageUrl, hideArtist = false }) => {
   const [showCollectionModal, setShowCollectionModal] = useState(false);
   const navigate = useNavigate();
-  const setCollectionContext = usePlayerStore((s) => s.setCollectionContext);
   const { isAuthenticated } = useAuthStore();
   const favorite = useFavoriteToggle('album', album, { track_count: album.track_count, artist });
   const onThisArtist = useIsCurrentPage(artist?.id ? `/artist/${artist.id}` : null);
   const showGoToArtist = Boolean(artist?.id && !onThisArtist);
 
-  // Mirrors Album.jsx's tagCollectionContext(): when this card is played from
-  // a collection's grid, tag the queue so usePlayerEngine can auto-advance
-  // into the collection's next album once playback naturally runs out.
-  const tagCollectionContext = () => {
-    if (collectionId) {
-      setCollectionContext({ collectionId, albumId: album.id });
-    }
-  };
-
   const queue = useQueueActions(
     () => apiService.getAlbum(album.id).then((response) => response.data.tracks),
-    { afterEnqueue: tagCollectionContext, errorLabel: 'Failed to play album' }
+    { queueSource: { type: 'album', id: album.id }, errorLabel: 'Failed to play album' }
   );
 
   const trackCount = formatCount(album.track_count || null, 'track');
@@ -54,8 +43,7 @@ const AlbumCard = ({ album, artist, onClick, imageUrl, hideArtist = false, colle
         onClick={() => onClick(album)}
         play={{
           loading: queue.loading,
-          onPlay: queue.playAll,
-          onPlayNow: queue.playNow,
+          onPlay: queue.play,
           onPlayNext: queue.playNext,
           onAddToQueue: queue.addToQueue,
           label: `Play ${album.title}`,
@@ -72,7 +60,7 @@ const AlbumCard = ({ album, artist, onClick, imageUrl, hideArtist = false, colle
               <PlayButton
                 size={22}
                 data-result-row-play="true"
-                onClick={(e) => { e.stopPropagation(); queue.playAll(); }}
+                onClick={(e) => { e.stopPropagation(); queue.play(); }}
                 loading={queue.loading}
                 aria-label={`Play ${album.title}`}
               />
