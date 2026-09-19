@@ -27,8 +27,8 @@ beforeEach(() => {
   usePlayerStore.setState({
     audioElementA: null, audioElementB: null, activeSlot: 'a',
     currentTrack: null, currentTime: 0, duration: 0, isPlaying: false, isBuffering: false,
-    nextTrackIndex: -1, playlist: [], playlistFinished: false, collectionContext: null,
-    scopeContext: null, playbackMode: 'off', currentTrackIndex: -1,
+    nextTrackIndex: -1, playlist: [], playlistFinished: false, queueSource: null,
+    playbackMode: 'off', currentTrackIndex: -1,
   });
   // Default to a logged-in session for these tests — the log-gating
   // behavior itself (anonymous playback must not call apiService.log) is
@@ -234,44 +234,128 @@ test('a nextTrackIndex change while not yet within the prefetch window does not 
   expect(ensureStandbyLoaded).not.toHaveBeenCalled();
 });
 
-describe('collection auto-advance', () => {
-  test('does nothing when playlistFinished is true but there is no collectionContext', async () => {
+describe('queue auto-continue on natural finish', () => {
+  test('does nothing when playlistFinished is true but there is no queueSource', async () => {
     const audioRefA = makeAudioRef();
     const audioRefB = makeAudioRef();
     renderHook(() => usePlayerEngine(audioRefA, audioRefB));
 
     await act(async () => {
-      usePlayerStore.setState({ playlistFinished: true, collectionContext: null });
+      usePlayerStore.setState({ playlistFinished: true, queueSource: null });
     });
 
     expect(apiService.getAdjacentAlbums).not.toHaveBeenCalled();
+    expect(apiService.getRandomScopeTracks).not.toHaveBeenCalled();
   });
 
-  test('fetches and appends+jumps into the next collection album once the queue finishes', async () => {
-    apiService.getAdjacentAlbums.mockResolvedValue({ data: { next: { id: 11 } } });
-    apiService.getAlbum.mockResolvedValue({ data: { tracks: [{ id: 100, title: 'Next Track', url: '/stream/100' }] } });
+  test('collection: fetches another random batch and keeps playing', async () => {
+    apiService.getRandomScopeTracks.mockResolvedValue({ data: { tracks: [{ id: 100, title: 'New', url: '/stream/100' }] } });
     const addTracks = vi.fn();
-    const setCollectionContext = vi.fn();
-    usePlayerStore.setState({ addTracks, setCollectionContext });
+    const setQueueSource = vi.fn();
+    usePlayerStore.setState({ addTracks, setQueueSource, playlist: [{ id: 1, title: 'T1', url: '/stream/1' }] });
 
     const audioRefA = makeAudioRef();
     const audioRefB = makeAudioRef();
     renderHook(() => usePlayerEngine(audioRefA, audioRefB));
 
     await act(async () => {
-      usePlayerStore.setState({ playlistFinished: true, collectionContext: { collectionId: 7, albumId: 10 } });
+      usePlayerStore.setState({ playlistFinished: true, queueSource: { type: 'collection', id: 7 } });
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    expect(apiService.getAdjacentAlbums).toHaveBeenCalledWith(10, 7);
+    expect(apiService.getRandomScopeTracks).toHaveBeenCalledWith('collection', 7, { limit: 25, excludeTrackIds: [1] });
+    expect(addTracks).toHaveBeenCalledWith(
+      [{ id: 100, title: 'New', url: '/stream/100' }],
+      false,
+      { playImmediately: true }
+    );
+    expect(setQueueSource).toHaveBeenCalledWith({ type: 'collection', id: 7 });
+  });
+
+  test('artist: fetches another random batch and keeps playing', async () => {
+    apiService.getRandomScopeTracks.mockResolvedValue({ data: { tracks: [{ id: 100, title: 'New', url: '/stream/100' }] } });
+    const addTracks = vi.fn();
+    const setQueueSource = vi.fn();
+    usePlayerStore.setState({ addTracks, setQueueSource, playlist: [{ id: 1, title: 'T1', url: '/stream/1' }] });
+
+    const audioRefA = makeAudioRef();
+    const audioRefB = makeAudioRef();
+    renderHook(() => usePlayerEngine(audioRefA, audioRefB));
+
+    await act(async () => {
+      usePlayerStore.setState({ playlistFinished: true, queueSource: { type: 'artist', id: 3 } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(apiService.getRandomScopeTracks).toHaveBeenCalledWith('artist', 3, { limit: 25, excludeTrackIds: [1] });
+    expect(setQueueSource).toHaveBeenCalledWith({ type: 'artist', id: 3 });
+  });
+
+  test('album: fetches the next-newest album by the same artist and keeps playing', async () => {
+    apiService.getAdjacentAlbums.mockResolvedValue({ data: { next: { id: 11 } } });
+    apiService.getAlbum.mockResolvedValue({ data: { tracks: [{ id: 100, title: 'Next Track', url: '/stream/100' }] } });
+    const addTracks = vi.fn();
+    const setQueueSource = vi.fn();
+    usePlayerStore.setState({ addTracks, setQueueSource });
+
+    const audioRefA = makeAudioRef();
+    const audioRefB = makeAudioRef();
+    renderHook(() => usePlayerEngine(audioRefA, audioRefB));
+
+    await act(async () => {
+      usePlayerStore.setState({ playlistFinished: true, queueSource: { type: 'album', id: 10 } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(apiService.getAdjacentAlbums).toHaveBeenCalledWith(10);
     expect(apiService.getAlbum).toHaveBeenCalledWith(11);
     expect(addTracks).toHaveBeenCalledWith(
       [{ id: 100, title: 'Next Track', url: '/stream/100' }],
       false,
       { playImmediately: true }
     );
-    expect(setCollectionContext).toHaveBeenCalledWith({ collectionId: 7, albumId: 11 });
+    expect(setQueueSource).toHaveBeenCalledWith({ type: 'album', id: 11 });
+  });
+
+  test('album: does not fetch track data or advance when there is no next album', async () => {
+    apiService.getAdjacentAlbums.mockResolvedValue({ data: { next: null } });
+    const addTracks = vi.fn();
+    usePlayerStore.setState({ addTracks });
+
+    const audioRefA = makeAudioRef();
+    const audioRefB = makeAudioRef();
+    renderHook(() => usePlayerEngine(audioRefA, audioRefB));
+
+    await act(async () => {
+      usePlayerStore.setState({ playlistFinished: true, queueSource: { type: 'album', id: 10 } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(apiService.getAlbum).not.toHaveBeenCalled();
+    expect(addTracks).not.toHaveBeenCalled();
+  });
+
+  test('playlist: does nothing', async () => {
+    const addTracks = vi.fn();
+    usePlayerStore.setState({ addTracks });
+
+    const audioRefA = makeAudioRef();
+    const audioRefB = makeAudioRef();
+    renderHook(() => usePlayerEngine(audioRefA, audioRefB));
+
+    await act(async () => {
+      usePlayerStore.setState({ playlistFinished: true, queueSource: { type: 'playlist', id: 5 } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(apiService.getAdjacentAlbums).not.toHaveBeenCalled();
+    expect(apiService.getRandomScopeTracks).not.toHaveBeenCalled();
+    expect(addTracks).not.toHaveBeenCalled();
   });
 
   test('does not auto-advance while playbackMode is shuffle-scope (its own top-up effect handles this)', async () => {
@@ -282,7 +366,7 @@ describe('collection auto-advance', () => {
     await act(async () => {
       usePlayerStore.setState({
         playlistFinished: true,
-        collectionContext: { collectionId: 7, albumId: null },
+        queueSource: { type: 'collection', id: 7 },
         playbackMode: 'shuffle-scope',
         // Enough tracks that the scope shuffle top-up effect (a separate concern,
         // covered by its own describe block) doesn't also fire here.
@@ -292,25 +376,7 @@ describe('collection auto-advance', () => {
     });
 
     expect(apiService.getAdjacentAlbums).not.toHaveBeenCalled();
-  });
-
-  test('does not fetch track data or advance when the collection has no next album', async () => {
-    apiService.getAdjacentAlbums.mockResolvedValue({ data: { next: null } });
-    const addTracks = vi.fn();
-    usePlayerStore.setState({ addTracks });
-
-    const audioRefA = makeAudioRef();
-    const audioRefB = makeAudioRef();
-    renderHook(() => usePlayerEngine(audioRefA, audioRefB));
-
-    await act(async () => {
-      usePlayerStore.setState({ playlistFinished: true, collectionContext: { collectionId: 7, albumId: 10 } });
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(apiService.getAlbum).not.toHaveBeenCalled();
-    expect(addTracks).not.toHaveBeenCalled();
+    expect(apiService.getRandomScopeTracks).not.toHaveBeenCalled();
   });
 });
 
@@ -323,7 +389,7 @@ describe('scope shuffle top-up', () => {
     await act(async () => {
       usePlayerStore.setState({
         playbackMode: 'shuffle',
-        scopeContext: { type: 'collection', id: 7 },
+        queueSource: { type: 'collection', id: 7 },
         playlist: [{ id: 1, title: 'T1', url: '/stream/1' }],
         currentTrackIndex: 0,
       });
@@ -332,7 +398,7 @@ describe('scope shuffle top-up', () => {
     expect(apiService.getRandomScopeTracks).not.toHaveBeenCalled();
   });
 
-  test('does nothing without an active scopeContext', async () => {
+  test('does nothing without an active queueSource', async () => {
     const audioRefA = makeAudioRef();
     const audioRefB = makeAudioRef();
     renderHook(() => usePlayerEngine(audioRefA, audioRefB));
@@ -340,7 +406,7 @@ describe('scope shuffle top-up', () => {
     await act(async () => {
       usePlayerStore.setState({
         playbackMode: 'shuffle-scope',
-        scopeContext: null,
+        queueSource: null,
         playlist: [{ id: 1, title: 'T1', url: '/stream/1' }],
         currentTrackIndex: 0,
       });
@@ -358,7 +424,7 @@ describe('scope shuffle top-up', () => {
     await act(async () => {
       usePlayerStore.setState({
         playbackMode: 'shuffle-scope',
-        scopeContext: { type: 'artist', id: 3 },
+        queueSource: { type: 'artist', id: 3 },
         playlist,
         currentTrackIndex: 0, // 7 tracks remain after this one
       });
@@ -378,7 +444,7 @@ describe('scope shuffle top-up', () => {
     await act(async () => {
       usePlayerStore.setState({
         playbackMode: 'shuffle-scope',
-        scopeContext: { type: 'artist', id: 3 },
+        queueSource: { type: 'artist', id: 3 },
         playlist,
         currentTrackIndex: 0, // 2 tracks remain after this one
       });
@@ -402,7 +468,7 @@ describe('scope shuffle top-up', () => {
     await act(async () => {
       usePlayerStore.setState({
         playbackMode: 'shuffle-scope',
-        scopeContext: { type: 'artist', id: 3 },
+        queueSource: { type: 'artist', id: 3 },
         playlist,
         currentTrackIndex: 0,
       });
