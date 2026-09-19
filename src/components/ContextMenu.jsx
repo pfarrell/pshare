@@ -1,5 +1,6 @@
 import { Children, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import MenuItem from './MenuItem';
 
 const MENU_WIDTH = 240; // clamp estimate used before layout; comfortably covers the mobile breakpoint's 200px min-width plus longer labels (e.g. "★ Remove from Favorites") at its larger 1rem font/padding
 const BUTTON_HEIGHT = 44;
@@ -7,10 +8,11 @@ const MENU_PADDING = 16;
 const JUST_OPENED_GUARD_MS = 350; // matches useContextMenu's justOpenedByLongPress window
 
 // Portals and positions the action menu opened by useContextMenu, clamped to
-// stay on-screen. Children are the menu's own <button> elements — this
-// component only owns the backdrop, portal, and positioning; callers own
-// what the menu contains (button labels, styles, per-action behavior).
-const ContextMenu = ({ open, position, openedViaTouch = false, onDismiss, onSwallowTouch, testId = 'context-menu-backdrop', children }) => {
+// stay on-screen. Children are the menu's own <button> elements, or pass
+// `actions` to have the menu render them — this component only owns the
+// backdrop, portal, and positioning; callers own what the menu contains
+// (button labels, styles, per-action behavior).
+const ContextMenu = ({ open, position, openedViaTouch = false, onDismiss, onSwallowTouch, onClose, actions, testId = 'context-menu-backdrop', children }) => {
   const justOpened = useRef(false);
   const clearGuardTimer = useRef(null);
 
@@ -30,6 +32,20 @@ const ContextMenu = ({ open, position, openedViaTouch = false, onDismiss, onSwal
 
   if (!open) return null;
 
+  // Data-driven menus (actions) and hand-built menus (children) share the
+  // same portal, positioning, and early-tap guard.
+  const items = actions
+    ? actions.filter(Boolean).map((action) => (
+        <MenuItem
+          key={action.key}
+          className={action.className}
+          onSelect={() => { onClose?.(); action.onClick(); }}
+        >
+          {action.icon} {action.label}
+        </MenuItem>
+      ))
+    : children;
+
   // Swallows the very first click/touchend the menu receives right after a
   // long-press opens it — the finger's release can land on whichever item
   // the menu opened under, and without this guard that stray tail event
@@ -43,7 +59,7 @@ const ContextMenu = ({ open, position, openedViaTouch = false, onDismiss, onSwal
     }
   };
 
-  const menuHeight = Children.toArray(children).filter(Boolean).length * BUTTON_HEIGHT + MENU_PADDING;
+  const menuHeight = Children.toArray(items).filter(Boolean).length * BUTTON_HEIGHT + MENU_PADDING;
   let left = position.x;
   let top = position.y;
   if (left + MENU_WIDTH > window.innerWidth) left = window.innerWidth - MENU_WIDTH - 10;
@@ -55,18 +71,18 @@ const ContextMenu = ({ open, position, openedViaTouch = false, onDismiss, onSwal
     <>
       <div
         data-testid={testId}
-        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1150 }}
+        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 'var(--z-menu-backdrop)' }}
         onClick={onDismiss}
         onTouchStart={onSwallowTouch}
         onTouchEnd={onDismiss}
       />
       <div
         className="track-dropdown"
-        style={{ position: 'fixed', left: `${left}px`, top: `${top}px`, zIndex: 1200 }}
+        style={{ position: 'fixed', left: `${left}px`, top: `${top}px`, zIndex: 'var(--z-menu)' }}
         onClickCapture={guardEarlyTap}
         onTouchEndCapture={guardEarlyTap}
       >
-        {children}
+        {items}
       </div>
     </>,
     document.body

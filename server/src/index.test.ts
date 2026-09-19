@@ -46,3 +46,20 @@ for (const path of GATED_ROUTES) {
     assert.strictEqual(res.status, 401, `${path} returned ${res.status} instead of 401 — this route must stay gated`)
   })
 }
+
+// Session-only auth endpoints: anonymous calls must be rejected with 401.
+const GATED_AUTH_ROUTES: Array<[string, string]> = [
+  ['PUT', '/auth/default-tag'],
+  ['GET', '/auth/recall/connect'],
+  ['DELETE', '/auth/recall/connect'],
+  ['PUT', '/auth/set-password'],
+  ['PUT', '/auth/change-password'],
+  ['DELETE', '/auth/google/disconnect'],
+]
+
+for (const [method, path] of GATED_AUTH_ROUTES) {
+  test(`${method} ${path} rejects a request without a cookie (401)`, async () => {
+    const res = await app.request(path, { method, body: method === 'GET' ? undefined : '{}', headers: { 'Content-Type': 'application/json' } })
+    assert.strictEqual(res.status, 401)
+  })
+}

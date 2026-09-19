@@ -150,3 +150,45 @@ test('uses custom testId on backdrop', () => {
 
   expect(screen.getByTestId('my-custom-backdrop')).toBeInTheDocument();
 });
+
+describe('ContextMenu — actions prop', () => {
+  const baseProps = { open: true, position: { x: 10, y: 10 }, onDismiss: vi.fn(), onSwallowTouch: vi.fn() };
+
+  test('renders one item per truthy action, as "icon label"', () => {
+    render(
+      <ContextMenu
+        {...baseProps}
+        actions={[
+          { key: 'edit', icon: '✎', label: 'Edit', onClick: vi.fn() },
+          false,
+          null,
+          { key: 'share', icon: '📤', label: 'Share', onClick: vi.fn() },
+        ]}
+      />
+    );
+    expect(screen.getByText('✎ Edit')).toBeInTheDocument();
+    expect(screen.getByText('📤 Share')).toBeInTheDocument();
+    expect(screen.getAllByRole('button')).toHaveLength(2);
+  });
+
+  test('selecting an action calls onClose before onClick', () => {
+    const calls = [];
+    render(
+      <ContextMenu
+        {...baseProps}
+        onClose={() => calls.push('close')}
+        actions={[{ key: 'edit', icon: '✎', label: 'Edit', onClick: () => calls.push('edit') }]}
+      />
+    );
+    fireEvent.click(screen.getByText('✎ Edit'));
+    expect(calls).toEqual(['close', 'edit']);
+  });
+
+  test('without onClose, only onClick runs', () => {
+    const onClick = vi.fn();
+    render(<ContextMenu {...baseProps} actions={[{ key: 'a', icon: 'A', label: 'Alpha', onClick, className: 'menu-btn-pressed' }]} />);
+    fireEvent.click(screen.getByText('A Alpha'));
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('A Alpha')).toHaveClass('menu-btn-pressed');
+  });
+});

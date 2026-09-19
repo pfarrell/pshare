@@ -9,15 +9,20 @@ vi.mock('../components/TagsSection', () => ({ default: () => null }));
 vi.mock('../services/api', () => ({
   apiService: {
     getArtist: vi.fn(),
-    getArtistImages: vi.fn(),
     getArtistSecondaryAlbums: vi.fn(),
     getRelatedArtists: vi.fn(),
+    search: vi.fn(),
     searchAdminArtists: vi.fn(),
     previewArtistStubs: vi.fn(),
     mergeArtists: vi.fn(),
     createArtist: vi.fn(),
     updateArtist: vi.fn(),
     deleteArtist: vi.fn(),
+    addRelatedArtist: vi.fn(),
+    getImageUrl: vi.fn(() => ''),
+    entityImages: {
+      artist: { list: vi.fn(), add: vi.fn(), setPrimary: vi.fn(), remove: vi.fn() },
+    },
   },
 }));
 
@@ -43,7 +48,7 @@ beforeEach(() => {
       albums: [{ id: 1, track_count: 10 }, { id: 2, track_count: 4 }],
     },
   });
-  apiService.getArtistImages.mockResolvedValue({ data: [] });
+  apiService.entityImages.artist.list.mockResolvedValue({ data: [] });
   apiService.getArtistSecondaryAlbums.mockResolvedValue({ data: [] });
   apiService.getRelatedArtists.mockResolvedValue({ data: [] });
   vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -221,5 +226,33 @@ describe('AdminArtist — delete confirmation', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => expect(apiService.deleteArtist).toHaveBeenCalledWith('5'));
+  });
+});
+
+describe('AdminArtist — count pluralization', () => {
+  test('shows "1 album" (singular) when the API returns album_count as the string "1"', async () => {
+    apiService.searchAdminArtists.mockResolvedValue({ data: [{ id: 999, name: 'Other Artist', album_count: '1' }] });
+    const user = userEvent.setup();
+    renderAdminArtist();
+    const input = await screen.findByPlaceholderText('Search for another artist...');
+    await user.type(input, 'Other');
+    await user.click(within(input.closest('form')).getByRole('button', { name: 'Search' }));
+    expect(await screen.findByText('1 album · ID 999')).toBeInTheDocument();
+  });
+});
+
+describe('AdminArtist — add relation search', () => {
+  test('"Similar Artist (Manual)" searches artists, not albums', async () => {
+    apiService.searchAdminArtists.mockResolvedValue({ data: [{ id: 42, name: 'Kool & the Gang', album_count: 3 }] });
+    apiService.search.mockResolvedValue({ data: { results: [], tracks: [] } });
+    const user = userEvent.setup();
+    renderAdminArtist();
+    await user.click(await screen.findByRole('button', { name: '+ Add Relation' }));
+    await user.selectOptions(screen.getByDisplayValue('Related Artist'), 'similar_artist');
+    await user.type(screen.getByPlaceholderText('Search artist name...'), 'Kool');
+    await user.click(within(screen.getByPlaceholderText('Search artist name...').closest('form')).getByRole('button', { name: 'Search' }));
+    expect(apiService.searchAdminArtists).toHaveBeenCalledWith('Kool');
+    expect(apiService.search).not.toHaveBeenCalled();
+    expect(await screen.findByText('Kool & the Gang')).toBeInTheDocument();
   });
 });

@@ -1,5 +1,5 @@
 // src/pages/Artist.jsx
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useState } from 'react';
 import ImageLightbox from '../components/ImageLightbox';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
@@ -11,14 +11,16 @@ import Track from '../components/Track';
 import AboutSection from '../components/AboutSection';
 import Loading from '../components/Loading';
 import Retry from '../components/Retry';
+import PageError from '../components/PageError';
 import TagsSection from '../components/TagsSection';
 import PlayActionsMenu from '../components/PlayActionsMenu';
 import ContextMenu from '../components/ContextMenu';
 import CardGrid from '../components/CardGrid';
 import { useContextMenu } from '../hooks/useContextMenu';
-import { useFavoritesStore } from '../stores/favoritesStore';
 import { useOvertoneAction } from '../hooks/useOvertoneAction';
-import { shareLink } from '../utils/shareLink';
+import { useFetch } from '../hooks/useFetch';
+import { useEntityHeaderActions } from '../hooks/useEntityHeaderActions';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 const Artist = () => {
   const { id } = useParams();
@@ -26,32 +28,25 @@ const Artist = () => {
   const { isAdmin, isAuthenticated } = useAuthStore();
   const addTracks = usePlayerStore((s) => s.addTracks);
   const currentTrack = usePlayerStore((s) => s.currentTrack);
-  const [artistData, setArtistData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { data: artistData, loading, error } = useFetch(
+    () => apiService.getArtist(id).then((response) => response.data),
+    [id]
+  );
   const [showAllSimilar, setShowAllSimilar] = useState(false);
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+  const isMobile = useIsMobile();
   const [showArtistModal, setShowArtistModal] = useState(false);
-  const isFavorite = useFavoritesStore((s) => s.isFavorite('artist', parseInt(id)));
-  const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
   const startScopeShuffle = usePlayerStore((s) => s.startScopeShuffle);
   const [shuffleLoading, setShuffleLoading] = useState(false);
   const { overflowAction: overtoneAction, modal: overtoneModal } = useOvertoneAction(artistData?.artist?.musicbrainz_id);
-  // Edit/Favorite/Share are all account-gated, so unless Overtone applies
-  // (musicbrainz_id present — no login needed for that one), a logged-out
-  // visitor's long-press would open an empty menu. Suppress it entirely in
-  // that case rather than popping up nothing.
-  const ctxMenu = useContextMenu({ shouldIgnore: (e) => (!isAuthenticated && !overtoneAction) || e.target.tagName === 'A' || !!e.target.closest('button') });
-
-  const handleToggleFavorite = () => {
-    if (!artistData?.artist) return;
-    toggleFavorite('artist', artistData.artist.id, {
-      id: artistData.artist.id,
-      name: artistData.artist.name,
-      image_path: artistData.artist.image_path,
-    });
-    ctxMenu.close();
-  };
+  const { actions: headerActions, shouldIgnore } = useEntityHeaderActions({
+    kind: 'artist',
+    entity: artistData?.artist ?? null,
+    canEdit: isAdmin,
+    isAuthenticated,
+    overtoneAction,
+    share: artistData?.artist ? { title: artistData.artist.name, text: artistData.artist.name } : null,
+  });
+  const ctxMenu = useContextMenu({ shouldIgnore });
 
   const handleShuffleArtist = async () => {
     setShuffleLoading(true);
@@ -61,32 +56,6 @@ const Artist = () => {
       setShuffleLoading(false);
     }
   };
-
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
-  }, []);
-
-  useEffect(() => {
-    const fetchArtistData = async () => {
-      try {
-        setLoading(true);
-        const response = await apiService.getArtist(id);
-        console.log('Artist API Response:', response.data);
-        setArtistData(response.data);
-      } catch (error) {
-        console.error('Error fetching artist data:', error);
-        setError('Failed to load artist');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (id) {
-      fetchArtistData();
-    }
-  }, [id]);
 
   const handleAlbumClick = (album) => {
     navigate(`/album/${album.id}`);
@@ -99,27 +68,7 @@ const Artist = () => {
   }
 
   if (error || !artistData || !artistData.artist) {
-    return (
-      <div className="loading-container">
-        <div style={{ textAlign: 'center' }}>
-          <p style={{ color: '#ef4444', fontSize: '1.25rem' }}>{error || 'Artist not found'}</p>
-          <button 
-            onClick={() => navigate('/')}
-            style={{ 
-              marginTop: '1rem', 
-              padding: '0.5rem 1rem', 
-              backgroundColor: '#3b82f6', 
-              color: 'white', 
-              borderRadius: '4px',
-              border: 'none',
-              cursor: 'pointer'
-            }}
-          >
-            Go Home
-          </button>
-        </div>
-      </div>
-    );
+    return <PageError message={error ? 'Failed to load artist' : 'Artist not found'} />;
   }
 
   const { artist, summary, albums, singles, appears_on, performances, related_artists, members, group_albums, similar_artists } = artistData;
@@ -167,17 +116,7 @@ const Artist = () => {
               <PlayActionsMenu
                 onPlay={(albums?.length > 0 || singles?.length > 0) ? handleShuffleArtist : undefined}
                 disabled={shuffleLoading}
-                overflowActions={[
-                  isAdmin && { key: 'edit', icon: '✎', label: 'Edit', onClick: () => navigate(`/admin/artist/${id}`) },
-                  isAuthenticated && {
-                    key: 'favorite',
-                    icon: isFavorite ? '★' : '☆',
-                    label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
-                    onClick: handleToggleFavorite,
-                  },
-                  overtoneAction,
-                  isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: () => shareLink({ title: artist.name, text: artist.name }) },
-                ].filter(Boolean)}
+                overflowActions={headerActions}
               />
               {overtoneModal}
             </div>
@@ -275,41 +214,10 @@ const Artist = () => {
         position={ctxMenu.position}
         onDismiss={ctxMenu.dismiss}
         onSwallowTouch={ctxMenu.swallowTouch}
+        onClose={ctxMenu.close}
+        actions={headerActions}
         testId="artist-header-menu-backdrop"
-      >
-        {isAdmin && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); navigate(`/admin/artist/${id}`); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); navigate(`/admin/artist/${id}`); }}
-          >
-            ✎ Edit
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={(e) => { e.stopPropagation(); handleToggleFavorite(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleToggleFavorite(); }}
-          >
-            {isFavorite ? '★ Remove from Favorites' : '☆ Add to Favorites'}
-          </button>
-        )}
-        {overtoneAction && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); overtoneAction.onClick(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); overtoneAction.onClick(); }}
-          >
-            {overtoneAction.icon} {overtoneAction.label}
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); shareLink({ title: artist.name, text: artist.name }); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); shareLink({ title: artist.name, text: artist.name }); }}
-          >
-            📤 Share
-          </button>
-        )}
-      </ContextMenu>
+      />
 
       {/* Albums Grid */}
       {albums && albums.length > 0 && (

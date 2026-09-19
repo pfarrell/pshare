@@ -1,5 +1,5 @@
 // src/pages/Collection.jsx
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import ImageLightbox from '../components/ImageLightbox';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
@@ -16,24 +16,33 @@ import ContextMenu from '../components/ContextMenu';
 import CardGrid from '../components/CardGrid';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { useIsMobile } from '../hooks/useIsMobile';
-import { useFavoritesStore } from '../stores/favoritesStore';
 import { usePlayerStore } from '../stores/playerStore';
-import { shareLink } from '../utils/shareLink';
+import { useFetch } from '../hooks/useFetch';
+import { useEntityHeaderActions } from '../hooks/useEntityHeaderActions';
+import { formatCount } from '../utils/formatters';
 
 export default function Collection() {
   const { id } = useParams();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { user, isAdmin, isAuthenticated } = useAuthStore();
-  const [collectionData, setCollectionData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { data: collectionData, loading, error, reload: loadCollection } = useFetch(
+    () => apiService.getCollection(id).then((response) => response.data),
+    [id]
+  );
   const [showImageModal, setShowImageModal] = useState(false);
-  const isFavorite = useFavoritesStore((s) => s.isFavorite('collection', parseInt(id)));
-  const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
   const startScopeShuffle = usePlayerStore((s) => s.startScopeShuffle);
   const [shuffleLoading, setShuffleLoading] = useState(false);
-  const ctxMenu = useContextMenu({ shouldIgnore: (e) => !isAuthenticated || e.target.tagName === 'A' || !!e.target.closest('button') });
+  const canEdit = isAdmin || (user && collectionData?.collection?.user_id === user.id);
+  const { actions: headerActions, shouldIgnore } = useEntityHeaderActions({
+    kind: 'collection',
+    entity: collectionData?.collection ?? null,
+    favoriteExtras: { album_count: collectionData?.albums?.length },
+    canEdit,
+    isAuthenticated,
+    share: collectionData?.collection ? { title: collectionData.collection.name, text: `${collectionData.collection.name} collection` } : null,
+  });
+  const ctxMenu = useContextMenu({ shouldIgnore });
 
   const handleShuffleAll = async () => {
     setShuffleLoading(true);
@@ -44,36 +53,11 @@ export default function Collection() {
     }
   };
 
-  const handleToggleFavorite = () => {
-    if (!collectionData?.collection) return;
-    const { collection: c } = collectionData;
-    toggleFavorite('collection', c.id, { id: c.id, name: c.name, image_path: c.image_path, album_count: collectionData.albums?.length });
-    ctxMenu.close();
-  };
-
-  useEffect(() => {
-    loadCollection();
-  }, [id]);
-
-  const loadCollection = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await apiService.getCollection(id);
-      setCollectionData(response.data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   if (loading) return <Loading />;
-  if (error) return <Retry message={error} onRetry={loadCollection} />;
+  if (error) return <Retry message={error.message} onRetry={loadCollection} />;
   if (!collectionData) return <div>Collection not found</div>;
 
   const { collection, albums, stubs, notes, summary } = collectionData;
-  const canEdit = isAdmin || (user && collection.user_id === user.id);
 
   return (
     <div style={{ padding: '.5rem', maxWidth: '1400px', margin: '0 auto' }}>
@@ -100,20 +84,11 @@ export default function Collection() {
               <PlayActionsMenu
                 onPlay={albums?.length > 0 ? handleShuffleAll : undefined}
                 disabled={shuffleLoading}
-                overflowActions={[
-                  canEdit && { key: 'edit', icon: '✎', label: 'Edit', onClick: () => navigate(`/admin/collection/${id}`) },
-                  isAuthenticated && {
-                    key: 'favorite',
-                    icon: isFavorite ? '★' : '☆',
-                    label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
-                    onClick: handleToggleFavorite,
-                  },
-                  isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: () => shareLink({ title: collection.name, text: `${collection.name} collection` }) },
-                ].filter(Boolean)}
+                overflowActions={headerActions}
               />
             );
 
-            const countLabel = `${albums?.length || 0} ${albums?.length === 1 ? 'album' : 'albums'}`;
+            const countLabel = formatCount(albums?.length || 0, 'album');
 
             return isMobile ? (
               <>
@@ -159,33 +134,10 @@ export default function Collection() {
         position={ctxMenu.position}
         onDismiss={ctxMenu.dismiss}
         onSwallowTouch={ctxMenu.swallowTouch}
+        onClose={ctxMenu.close}
+        actions={headerActions}
         testId="collection-header-menu-backdrop"
-      >
-        {canEdit && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); navigate(`/admin/collection/${id}`); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); navigate(`/admin/collection/${id}`); }}
-          >
-            ✎ Edit
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={(e) => { e.stopPropagation(); handleToggleFavorite(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleToggleFavorite(); }}
-          >
-            {isFavorite ? '★ Remove from Favorites' : '☆ Add to Favorites'}
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); shareLink({ title: collection.name, text: `${collection.name} collection` }); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); shareLink({ title: collection.name, text: `${collection.name} collection` }); }}
-          >
-            📤 Share
-          </button>
-        )}
-      </ContextMenu>
+      />
 
       {showImageModal && collection.image_path && (
         <ImageLightbox

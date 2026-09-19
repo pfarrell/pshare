@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
 import { setCookie, getCookie, deleteCookie } from 'hono/cookie'
 import type { Variables } from '../types.js'
+import { requireAuth } from '../middleware/auth.js'
 import { authService } from '../services/authService.js'
 import { signupLogService } from '../services/signupLogService.js'
 import { sendPasswordResetEmail } from '../services/emailService.js'
@@ -400,9 +401,8 @@ auth.get('/me', async (c) => {
 })
 
 // PUT /auth/default-tag — save a default tag for the current user
-auth.put('/default-tag', async (c) => {
-  const user = c.get('user')
-  if (!user) return c.json({ error: 'Authentication required' }, 401)
+auth.put('/default-tag', requireAuth, async (c) => {
+  const user = c.get('user')!
 
   const body = await c.req.json()
   const raw = body.tag ?? null
@@ -416,9 +416,8 @@ auth.put('/default-tag', async (c) => {
 })
 
 // GET /auth/recall/connect — redirect to Recall's authorize page
-auth.get('/recall/connect', async (c) => {
-  const user = c.get('user')
-  if (!user) return c.json({ error: 'Authentication required' }, 401)
+auth.get('/recall/connect', requireAuth, async (c) => {
+  const user = c.get('user')!
 
   const callbackUrl = process.env.RECALL_CALLBACK_URL
   if (!callbackUrl) return c.json({ error: 'RECALL_CALLBACK_URL not configured' }, 500)
@@ -461,18 +460,16 @@ auth.get('/recall/callback', async (c) => {
 })
 
 // DELETE /auth/recall/connect — disconnect locally; does not revoke the token on Recall's side
-auth.delete('/recall/connect', async (c) => {
-  const user = c.get('user')
-  if (!user) return c.json({ error: 'Authentication required' }, 401)
+auth.delete('/recall/connect', requireAuth, async (c) => {
+  const user = c.get('user')!
 
   await notesService.deleteConnection(user.id)
   return c.json({ ok: true })
 })
 
 // PUT /auth/set-password — for accounts created via Google with no password yet
-auth.put('/set-password', async (c) => {
-  const user = c.get('user')
-  if (!user) return c.json({ error: 'Authentication required' }, 401)
+auth.put('/set-password', requireAuth, async (c) => {
+  const user = c.get('user')!
 
   const body = await c.req.json()
   const { password } = body
@@ -490,9 +487,8 @@ auth.put('/set-password', async (c) => {
 })
 
 // PUT /auth/change-password — for accounts that already have a password
-auth.put('/change-password', async (c) => {
-  const user = c.get('user')
-  if (!user) return c.json({ error: 'Authentication required' }, 401)
+auth.put('/change-password', requireAuth, async (c) => {
+  const user = c.get('user')!
 
   const body = await c.req.json()
   const { currentPassword, newPassword } = body
@@ -610,9 +606,8 @@ auth.post('/reset-password', async (c) => {
 })
 
 // DELETE /auth/google/disconnect — unlink Google; blocked if it would lock the user out
-auth.delete('/google/disconnect', async (c) => {
-  const user = c.get('user')
-  if (!user) return c.json({ error: 'Authentication required' }, 401)
+auth.delete('/google/disconnect', requireAuth, async (c) => {
+  const user = c.get('user')!
 
   const hasPassword = await authService.hasPassword(user.id)
   if (!hasPassword) {

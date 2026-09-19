@@ -5,15 +5,16 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { usePlayerStore } from '../stores/playerStore';
 import { useAuthStore } from '../stores/authStore';
-import { useFavoritesStore } from '../stores/favoritesStore';
 import { useContextMenu } from '../hooks/useContextMenu';
+import { useEntityHeaderActions } from '../hooks/useEntityHeaderActions';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { useFetch } from '../hooks/useFetch';
 import PlayButton from '../components/PlayButton';
 import Loading from '../components/Loading';
+import PageError from '../components/PageError';
 import ContextMenu from '../components/ContextMenu';
 import AddToPlaylistModal from '../components/AddToPlaylistModal';
 import TrackNotesModal from '../components/TrackNotesModal';
-import { shareLink } from '../utils/shareLink';
 
 // Matches the basename App.jsx's <Router> uses — needed here because
 // login/signup's return_to is a raw browser redirect (window.location.href),
@@ -29,39 +30,32 @@ const TrackPage = () => {
   const addTrack = usePlayerStore((s) => s.addTrack);
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const setPageTracks = usePlayerStore((s) => s.setPageTracks);
-  const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
   const downloadsEnabled = import.meta.env.VITE_ENABLE_DOWNLOADS !== 'false';
   const isMobile = useIsMobile();
-  const [track, setTrack] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { data: track, loading, error } = useFetch(
+    () => apiService.getTrack(id).then((response) => response.data.track),
+    [id]
+  );
   const [showImageModal, setShowImageModal] = useState(false);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [showNotesModal, setShowNotesModal] = useState(false);
-  const isFavorite = useFavoritesStore((s) => (track ? s.isFavorite('track', track.id) : false));
-  // Nothing in this menu applies to a logged-out visitor (Favorite/Add to
-  // Playlist/Notes/Download all need an account, Edit needs admin, which
-  // implies an account too) — suppress the long-press entirely rather than
-  // opening an empty menu, matching Playlist.jsx/Collection.jsx.
-  const ctxMenu = useContextMenu({ shouldIgnore: (e) => !isAuthenticated || e.target.tagName === 'A' || !!e.target.closest('button') });
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    apiService.getTrack(id)
-      .then((response) => {
-        if (!cancelled) setTrack(response.data.track);
-      })
-      .catch((err) => {
-        console.error('Error fetching track data:', err);
-        if (!cancelled) setError('Failed to load track');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [id]);
+  const { actions: headerActions, shouldIgnore } = useEntityHeaderActions({
+    kind: 'track',
+    entity: track,
+    canEdit: isAdmin,
+    isAuthenticated,
+    share: track ? { title: track.title, text: track.artist?.name ? `${track.title} by ${track.artist.name}` : track.title } : null,
+    extras: [
+      isAuthenticated && { key: 'playlist', icon: '📋', label: 'Add to Playlist', onClick: () => setShowPlaylistModal(true) },
+      isAuthenticated && { key: 'notes', icon: '📝', label: 'Notes', onClick: () => setShowNotesModal(true) },
+    ],
+    afterFavorite: [
+      downloadsEnabled && isAuthenticated && track?.download_url && !isMobile && {
+        key: 'download', icon: '⬇', label: 'Download', onClick: () => { window.location.href = track.download_url; },
+      },
+    ],
+  });
+  const ctxMenu = useContextMenu({ shouldIgnore });
 
   useEffect(() => {
     // Lets the footer play button fall back to "Play Now" behavior when the
@@ -73,14 +67,6 @@ const TrackPage = () => {
   const handlePlayNow = () => {
     if (!track) return;
     addTrack(track, { flashActivity: true }); // store auto-starts playback if idle
-  };
-
-  const handleShare = () => {
-    if (!track) return;
-    shareLink({
-      title: track.title,
-      text: track.artist?.name ? `${track.title} by ${track.artist.name}` : track.title,
-    });
   };
 
   // A logged-out visitor can view and play the shared track itself (the
@@ -95,72 +81,12 @@ const TrackPage = () => {
     }
   };
 
-  const handleEdit = (e) => {
-    e.stopPropagation();
-    ctxMenu.close();
-    navigate(`/admin/track/${id}`);
-  };
-
-  const handleAddToPlaylist = (e) => {
-    e.stopPropagation();
-    ctxMenu.close();
-    setShowPlaylistModal(true);
-  };
-
-  const handleShowNotes = (e) => {
-    e.stopPropagation();
-    ctxMenu.close();
-    setShowNotesModal(true);
-  };
-
-  const handleToggleFavorite = (e) => {
-    e.stopPropagation();
-    if (!track) return;
-    toggleFavorite('track', track.id, {
-      id: track.id,
-      title: track.title,
-      track_number: track.track_number,
-      duration: track.duration,
-      artist: track.artist,
-      album: track.album,
-      download_url: track.download_url,
-    });
-    ctxMenu.close();
-  };
-
-  const handleDownload = (e) => {
-    e.stopPropagation();
-    if (!track) return;
-    window.location.href = track.download_url;
-    ctxMenu.close();
-  };
-
   if (loading) {
     return <Loading message="Loading track" />;
   }
 
   if (error || !track) {
-    return (
-      <div className="loading-container">
-        <div style={{ textAlign: 'center' }}>
-          <p style={{ color: '#ef4444', fontSize: '1.25rem' }}>{error || 'Track not found'}</p>
-          <button
-            onClick={() => navigate('/')}
-            style={{
-              marginTop: '1rem',
-              padding: '0.5rem 1rem',
-              backgroundColor: '#3b82f6',
-              color: 'white',
-              borderRadius: '4px',
-              border: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            Go Home
-          </button>
-        </div>
-      </div>
-    );
+    return <PageError message={error ? 'Failed to load track' : 'Track not found'} />;
   }
 
   const isPlaying = Boolean(currentTrack && currentTrack.id === track.id);
@@ -235,57 +161,10 @@ const TrackPage = () => {
         openedViaTouch={ctxMenu.openedViaTouch}
         onDismiss={ctxMenu.dismiss}
         onSwallowTouch={ctxMenu.swallowTouch}
+        onClose={ctxMenu.close}
+        actions={headerActions}
         testId="track-page-header-menu-backdrop"
-      >
-        {isAdmin && (
-          <button
-            onClick={handleEdit}
-            onTouchEnd={(e) => { e.preventDefault(); handleEdit(e); }}
-          >
-            ✎ Edit
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={handleAddToPlaylist}
-            onTouchEnd={(e) => { e.preventDefault(); handleAddToPlaylist(e); }}
-          >
-            📋 Add to Playlist
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={handleShowNotes}
-            onTouchEnd={(e) => { e.preventDefault(); handleShowNotes(e); }}
-          >
-            📝 Notes
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={handleToggleFavorite}
-            onTouchEnd={(e) => { e.preventDefault(); handleToggleFavorite(e); }}
-          >
-            {isFavorite ? '★ Remove from Favorites' : '☆ Add to Favorites'}
-          </button>
-        )}
-        {downloadsEnabled && isAuthenticated && track.download_url && !isMobile && (
-          <button
-            onClick={handleDownload}
-            onTouchEnd={(e) => { e.preventDefault(); handleDownload(e); }}
-          >
-            ⬇ Download
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); handleShare(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); handleShare(); }}
-          >
-            📤 Share
-          </button>
-        )}
-      </ContextMenu>
+      />
 
       {showPlaylistModal && (
         <AddToPlaylistModal

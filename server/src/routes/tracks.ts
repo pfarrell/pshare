@@ -3,9 +3,10 @@ import { Hono } from 'hono'
 import type { Variables } from '../types.js'
 import { db } from '../db/database.js'
 import { notesService } from '../services/notesService.js'
-import { createRecallNote, getRecallItem, decryptRecallToken, appendBacklink, stripBacklink } from '../services/recallService.js'
+import { getRecallItem, decryptRecallToken, stripBacklink } from '../services/recallService.js'
 import { requireAuth } from '../middleware/auth.js'
 import { fetchTracksForIds } from './playlists.js'
+import { createNotesRoutes } from './notesRoutes.js'
 
 const tracks = new Hono<{ Variables: Variables }>()
 
@@ -63,59 +64,20 @@ tracks.get('/:id/notes', requireAuth, async (c) => {
   return c.json({ notes })
 })
 
-// POST /track/:id/notes — requires a connected Recall account; creates a new journal-style note
-tracks.post('/:id/notes', async (c) => {
-  const user = c.get('user')
-  if (!user) return c.json({ error: 'Authentication required' }, 401)
 
-  const trackId = parseInt(c.req.param('id'))
-  const connection = await notesService.getConnection(user.id)
-  if (!connection) return c.json({ error: 'Recall not connected' }, 403)
 
-  const body = await c.req.json()
-  const content = typeof body.content === 'string' ? body.content.trim() : ''
-  if (!content) return c.json({ error: 'content is required' }, 400)
-
-  const track = await db
-    .selectFrom('tracks')
-    .leftJoin('albums', 'albums.id', 'tracks.album_id')
-    .select(['tracks.id', 'tracks.title', 'tracks.album_id', 'albums.title as album_title'])
-    .where('tracks.id', '=', trackId)
-    .executeTakeFirst()
-  if (!track) return c.json({ error: 'Track not found' }, 404)
-
-  const token = decryptRecallToken(connection.recall_token)
-  let item
-  try {
-    item = await createRecallNote(token, {
-      title: track.album_title ? `${track.title} — ${track.album_title}` : track.title,
-      contentText: appendBacklink(content, `/track/${trackId}`),
-      tags: ['bemused'],
-    })
-  } catch (err) {
-    console.error('Failed to create Recall note:', err)
-    return c.json({ error: 'Failed to save note to Recall' }, 502)
-  }
-
-  const note = await notesService.createNote('track', trackId, user.id, item.id)
-  return c.json({ id: note.id, recall_item_id: item.id }, 201)
-})
-
-// DELETE /track/:id/notes/:noteId — unlinks only; the Recall item itself is untouched
-tracks.delete('/:id/notes/:noteId', async (c) => {
-  const user = c.get('user')
-  if (!user) return c.json({ error: 'Authentication required' }, 401)
-
-  const noteId = parseInt(c.req.param('noteId'))
-  const note = await notesService.findNoteById(noteId)
-  if (!note) return c.json({ error: 'Not found' }, 404)
-
-  if (note.author_user_id !== user.id && !user.admin) {
-    return c.json({ error: 'Not permitted' }, 403)
-  }
-
-  await notesService.deleteNote(noteId)
-  return c.json({ ok: true })
-})
+tracks.route('/', createNotesRoutes({
+  kind: 'track',
+  loadEntityTitle: async (id) => {
+    const track = await db
+      .selectFrom('tracks')
+      .leftJoin('albums', 'albums.id', 'tracks.album_id')
+      .select(['tracks.title', 'albums.title as album_title'])
+      .where('tracks.id', '=', id)
+      .executeTakeFirst()
+    if (!track) return null
+    return track.album_title ? `${track.title} — ${track.album_title}` : track.title
+  },
+}))
 
 export default tracks

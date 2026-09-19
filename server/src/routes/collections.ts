@@ -3,22 +3,13 @@ import { sql } from 'kysely'
 import { db } from '../db/database.js'
 import type { Variables } from '../types.js'
 import { notesService } from '../services/notesService.js'
-import { createRecallNote, getRecallItem, decryptRecallToken, appendBacklink, stripBacklink } from '../services/recallService.js'
+import { getRecallItem, decryptRecallToken, stripBacklink } from '../services/recallService.js'
 import { getCollectionSummary } from '../services/wikipedia.js'
 import { streamBase } from '../db/streamUrl.js'
 import { requireAuth } from '../middleware/auth.js'
-import { canModify } from '../utils/ownership.js'
-import fs from 'fs'
-import path from 'path'
-import { fileURLToPath } from 'url'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-// In production, we're deployed to /var/www/bemused-node/current, use that
-// In development, calculate from __dirname
-const projectRoot = process.env.NODE_ENV === 'production'
-  ? '/var/www/bemused-node/current'
-  : path.resolve(__dirname, '../../..')
+import { loadOwned } from '../utils/http.js'
+import { downloadToDisk, ImageStorageError } from '../services/imageStorage.js'
+import { createNotesRoutes } from './notesRoutes.js'
 
 const collections = new Hono<{ Variables: Variables }>()
 
@@ -203,43 +194,29 @@ collections.post('/', requireAuth, async (c) => {
 })
 
 // PUT /collection/:id
-collections.put('/:id', requireAuth, async (c) => {
-  const id = parseInt(c.req.param('id'))
-  const user = c.get('user')!
-
-  const collection = await db.selectFrom('collections').selectAll().where('id', '=', id).executeTakeFirst()
-  if (!collection) return c.json({ error: 'Not found' }, 404)
-  if (!canModify(user, collection)) return c.json({ error: 'Not permitted' }, 403)
+collections.put('/:id', requireAuth, loadOwned('collections'), async (c) => {
+  const collection = c.get('owned')!
 
   const { name, image_path, wikipedia } = await c.req.json()
 
-  await db.updateTable('collections').set({ name, image_path, wikipedia }).where('id', '=', id).execute()
+  await db.updateTable('collections').set({ name, image_path, wikipedia }).where('id', '=', collection.id).execute()
   return c.json({ success: true })
 })
 
 // DELETE /collection/:id — deletes only the collection row; collection_albums and
 // album_stubs rows referencing it cascade via FK (ON DELETE CASCADE), but the
 // albums/artists themselves are untouched.
-collections.delete('/:id', requireAuth, async (c) => {
-  const id = parseInt(c.req.param('id'))
-  const user = c.get('user')!
+collections.delete('/:id', requireAuth, loadOwned('collections'), async (c) => {
+  const collection = c.get('owned')!
 
-  const collection = await db.selectFrom('collections').selectAll().where('id', '=', id).executeTakeFirst()
-  if (!collection) return c.json({ error: 'Not found' }, 404)
-  if (!canModify(user, collection)) return c.json({ error: 'Not permitted' }, 403)
-
-  await db.deleteFrom('collections').where('id', '=', id).execute()
+  await db.deleteFrom('collections').where('id', '=', collection.id).execute()
   return c.json({ success: true })
 })
 
 // POST /collection/:id/albums
-collections.post('/:id/albums', requireAuth, async (c) => {
-  const collectionId = parseInt(c.req.param('id'))
-  const user = c.get('user')!
-
-  const collection = await db.selectFrom('collections').selectAll().where('id', '=', collectionId).executeTakeFirst()
-  if (!collection) return c.json({ error: 'Not found' }, 404)
-  if (!canModify(user, collection)) return c.json({ error: 'Not permitted' }, 403)
+collections.post('/:id/albums', requireAuth, loadOwned('collections'), async (c) => {
+  const collection = c.get('owned')!
+  const collectionId = collection.id
 
   const { album_id } = await c.req.json()
 
@@ -260,13 +237,10 @@ collections.post('/:id/albums', requireAuth, async (c) => {
 })
 
 // POST /collection/:id/stubs — add a placeholder for an album not yet owned
-collections.post('/:id/stubs', requireAuth, async (c) => {
-  const collectionId = parseInt(c.req.param('id'))
+collections.post('/:id/stubs', requireAuth, loadOwned('collections'), async (c) => {
+  const collection = c.get('owned')!
+  const collectionId = collection.id
   const user = c.get('user')!
-
-  const collection = await db.selectFrom('collections').selectAll().where('id', '=', collectionId).executeTakeFirst()
-  if (!collection) return c.json({ error: 'Not found' }, 404)
-  if (!canModify(user, collection)) return c.json({ error: 'Not permitted' }, 403)
 
   const { title, artist_name } = await c.req.json()
 
@@ -299,14 +273,10 @@ collections.post('/:id/stubs', requireAuth, async (c) => {
 })
 
 // DELETE /collection/:id/stubs/:stubId
-collections.delete('/:id/stubs/:stubId', requireAuth, async (c) => {
-  const collectionId = parseInt(c.req.param('id'))
+collections.delete('/:id/stubs/:stubId', requireAuth, loadOwned('collections'), async (c) => {
+  const collection = c.get('owned')!
+  const collectionId = collection.id
   const stubId = parseInt(c.req.param('stubId'))
-  const user = c.get('user')!
-
-  const collection = await db.selectFrom('collections').selectAll().where('id', '=', collectionId).executeTakeFirst()
-  if (!collection) return c.json({ error: 'Not found' }, 404)
-  if (!canModify(user, collection)) return c.json({ error: 'Not permitted' }, 403)
 
   const result = await db
     .deleteFrom('album_stubs')
@@ -322,14 +292,10 @@ collections.delete('/:id/stubs/:stubId', requireAuth, async (c) => {
 })
 
 // POST /collection/:id/stubs/:stubId/resolve — replace a stub with a real album at the same position
-collections.post('/:id/stubs/:stubId/resolve', requireAuth, async (c) => {
-  const collectionId = parseInt(c.req.param('id'))
+collections.post('/:id/stubs/:stubId/resolve', requireAuth, loadOwned('collections'), async (c) => {
+  const collection = c.get('owned')!
+  const collectionId = collection.id
   const stubId = parseInt(c.req.param('stubId'))
-  const user = c.get('user')!
-
-  const collection = await db.selectFrom('collections').selectAll().where('id', '=', collectionId).executeTakeFirst()
-  if (!collection) return c.json({ error: 'Not found' }, 404)
-  if (!canModify(user, collection)) return c.json({ error: 'Not permitted' }, 403)
 
   const { album_id } = await c.req.json()
 
@@ -368,14 +334,10 @@ collections.post('/:id/stubs/:stubId/resolve', requireAuth, async (c) => {
 })
 
 // DELETE /collection/:id/albums/:albumId
-collections.delete('/:id/albums/:albumId', requireAuth, async (c) => {
-  const collectionId = parseInt(c.req.param('id'))
+collections.delete('/:id/albums/:albumId', requireAuth, loadOwned('collections'), async (c) => {
+  const collection = c.get('owned')!
+  const collectionId = collection.id
   const albumId = parseInt(c.req.param('albumId'))
-  const user = c.get('user')!
-
-  const collection = await db.selectFrom('collections').selectAll().where('id', '=', collectionId).executeTakeFirst()
-  if (!collection) return c.json({ error: 'Not found' }, 404)
-  if (!canModify(user, collection)) return c.json({ error: 'Not permitted' }, 403)
 
   await db
     .deleteFrom('collection_albums')
@@ -386,64 +348,12 @@ collections.delete('/:id/albums/:albumId', requireAuth, async (c) => {
   return c.json({ success: true })
 })
 
-// POST /collection/:id/notes — requires a connected Recall account; creates a new journal-style note
-collections.post('/:id/notes', async (c) => {
-  const user = c.get('user')
-  if (!user) return c.json({ error: 'Authentication required' }, 401)
 
-  const collectionId = parseInt(c.req.param('id'))
-  const connection = await notesService.getConnection(user.id)
-  if (!connection) return c.json({ error: 'Recall not connected' }, 403)
-
-  const body = await c.req.json()
-  const content = typeof body.content === 'string' ? body.content.trim() : ''
-  if (!content) return c.json({ error: 'content is required' }, 400)
-
-  const collection = await db.selectFrom('collections').selectAll().where('id', '=', collectionId).executeTakeFirst()
-  if (!collection) return c.json({ error: 'Collection not found' }, 404)
-
-  const token = decryptRecallToken(connection.recall_token)
-  let item
-  try {
-    item = await createRecallNote(token, {
-      title: `${collection.name} (collection)`,
-      contentText: appendBacklink(content, `/collection/${collectionId}`),
-      tags: ['bemused'],
-    })
-  } catch (err) {
-    console.error('Failed to create Recall note:', err)
-    return c.json({ error: 'Failed to save note to Recall' }, 502)
-  }
-
-  const note = await notesService.createNote('collection', collectionId, user.id, item.id)
-  return c.json({ id: note.id, recall_item_id: item.id }, 201)
-})
-
-// DELETE /collection/:id/notes/:noteId — unlinks only; the Recall item itself is untouched
-collections.delete('/:id/notes/:noteId', async (c) => {
-  const user = c.get('user')
-  if (!user) return c.json({ error: 'Authentication required' }, 401)
-
-  const noteId = parseInt(c.req.param('noteId'))
-  const note = await notesService.findNoteById(noteId)
-  if (!note) return c.json({ error: 'Not found' }, 404)
-
-  if (note.author_user_id !== user.id && !user.admin) {
-    return c.json({ error: 'Not permitted' }, 403)
-  }
-
-  await notesService.deleteNote(noteId)
-  return c.json({ ok: true })
-})
 
 // PATCH /collection/:id/albums/reorder
-collections.patch('/:id/albums/reorder', requireAuth, async (c) => {
-  const collectionId = parseInt(c.req.param('id'))
-  const user = c.get('user')!
-
-  const collection = await db.selectFrom('collections').selectAll().where('id', '=', collectionId).executeTakeFirst()
-  if (!collection) return c.json({ error: 'Not found' }, 404)
-  if (!canModify(user, collection)) return c.json({ error: 'Not permitted' }, 403)
+collections.patch('/:id/albums/reorder', requireAuth, loadOwned('collections'), async (c) => {
+  const collection = c.get('owned')!
+  const collectionId = collection.id
 
   const { album_orders, stub_orders } = await c.req.json() // [{ album_id, order }], [{ stub_id, order }]
 
@@ -470,13 +380,8 @@ collections.patch('/:id/albums/reorder', requireAuth, async (c) => {
 })
 
 // POST /collection/:id/image — download and save a collection image from a URL
-collections.post('/:id/image', requireAuth, async (c) => {
-  const id = parseInt(c.req.param('id'))
-  const user = c.get('user')!
-
-  const collection = await db.selectFrom('collections').selectAll().where('id', '=', id).executeTakeFirst()
-  if (!collection) return c.json({ error: 'Not found' }, 404)
-  if (!canModify(user, collection)) return c.json({ error: 'Not permitted' }, 403)
+collections.post('/:id/image', requireAuth, loadOwned('collections'), async (c) => {
+  const collection = c.get('owned')!
 
   const body = await c.req.json()
   const { image_url, image_name } = body
@@ -486,29 +391,30 @@ collections.post('/:id/image', requireAuth, async (c) => {
   }
 
   try {
-    const response = await fetch(image_url)
-    if (!response.ok) return c.json({ error: 'Failed to download image from URL' }, 400)
-
-    const buffer = Buffer.from(await response.arrayBuffer())
-    const imageDir = path.join(projectRoot, 'public', 'images', 'albums')
-    if (!fs.existsSync(imageDir)) fs.mkdirSync(imageDir, { recursive: true })
-
-    const imagePath = path.join(imageDir, image_name)
-    fs.writeFileSync(imagePath, buffer)
+    await downloadToDisk(image_url, image_name, 'albums')
 
     const updated = await db
       .updateTable('collections')
       .set({ image_path: image_name, updated_at: new Date() })
-      .where('id', '=', id)
+      .where('id', '=', collection.id)
       .returningAll()
       .executeTakeFirst()
 
     if (!updated) return c.json({ error: 'Collection not found' }, 404)
     return c.json({ success: true, collection: updated })
   } catch (error) {
+    if (error instanceof ImageStorageError) return c.json({ error: error.message }, 400)
     console.error('Error downloading/saving collection image:', error)
     return c.json({ error: 'Failed to save image' }, 500)
   }
 })
+
+collections.route('/', createNotesRoutes({
+  kind: 'collection',
+  loadEntityTitle: async (id) => {
+    const collection = await db.selectFrom('collections').select('name').where('id', '=', id).executeTakeFirst()
+    return collection ? `${collection.name} (collection)` : null
+  },
+}))
 
 export default collections

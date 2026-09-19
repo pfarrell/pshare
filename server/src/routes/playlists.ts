@@ -6,18 +6,8 @@ import { sql } from 'kysely'
 import type { Variables } from '../types.js'
 import { countsService } from '../services/countsService.js'
 import { requireAuth } from '../middleware/auth.js'
-import { canModify } from '../utils/ownership.js'
-import fs from 'fs'
-import path from 'path'
-import { fileURLToPath } from 'url'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-// In production, we're deployed to /var/www/bemused-node/current, use that
-// In development, calculate from __dirname
-const projectRoot = process.env.NODE_ENV === 'production'
-  ? '/var/www/bemused-node/current'
-  : path.resolve(__dirname, '../../..')
+import { loadOwned } from '../utils/http.js'
+import { downloadToDisk, ImageStorageError } from '../services/imageStorage.js'
 
 const playlists = new Hono<{ Variables: Variables }>()
 
@@ -217,13 +207,9 @@ playlists.get('/surprise', requireAuth, async (c) => {
 })
 
 // POST /playlist/:id/tracks - Add a track to playlist
-playlists.post('/:id/tracks', requireAuth, async (c) => {
-  const playlistId = parseInt(c.req.param('id'))
-  const user = c.get('user')!
-
-  const playlist = await db.selectFrom('playlists').selectAll().where('id', '=', playlistId).executeTakeFirst()
-  if (!playlist) return c.json({ error: 'Not found' }, 404)
-  if (!canModify(user, playlist)) return c.json({ error: 'Not permitted' }, 403)
+playlists.post('/:id/tracks', requireAuth, loadOwned('playlists'), async (c) => {
+  const playlist = c.get('owned')!
+  const playlistId = playlist.id
 
   const { track_id } = await c.req.json()
 
@@ -256,14 +242,10 @@ playlists.post('/:id/tracks', requireAuth, async (c) => {
 })
 
 // DELETE /playlist/:playlistId/tracks/:trackId - Remove a track from playlist
-playlists.delete('/:playlistId/tracks/:trackId', requireAuth, async (c) => {
-  const playlistId = parseInt(c.req.param('playlistId'))
+playlists.delete('/:playlistId/tracks/:trackId', requireAuth, loadOwned('playlists', 'playlistId'), async (c) => {
+  const playlist = c.get('owned')!
+  const playlistId = playlist.id
   const trackId = parseInt(c.req.param('trackId'))
-  const user = c.get('user')!
-
-  const playlist = await db.selectFrom('playlists').selectAll().where('id', '=', playlistId).executeTakeFirst()
-  if (!playlist) return c.json({ error: 'Not found' }, 404)
-  if (!canModify(user, playlist)) return c.json({ error: 'Not permitted' }, 403)
 
   await db
     .deleteFrom('playlist_tracks')
@@ -275,13 +257,9 @@ playlists.delete('/:playlistId/tracks/:trackId', requireAuth, async (c) => {
 })
 
 // PATCH /playlist/:id/tracks/reorder - Update track order
-playlists.patch('/:id/tracks/reorder', requireAuth, async (c) => {
-  const playlistId = parseInt(c.req.param('id'))
-  const user = c.get('user')!
-
-  const playlist = await db.selectFrom('playlists').selectAll().where('id', '=', playlistId).executeTakeFirst()
-  if (!playlist) return c.json({ error: 'Not found' }, 404)
-  if (!canModify(user, playlist)) return c.json({ error: 'Not permitted' }, 403)
+playlists.patch('/:id/tracks/reorder', requireAuth, loadOwned('playlists'), async (c) => {
+  const playlist = c.get('owned')!
+  const playlistId = playlist.id
 
   const { track_orders } = await c.req.json() // Array of { track_id, order }
 
@@ -299,33 +277,23 @@ playlists.patch('/:id/tracks/reorder', requireAuth, async (c) => {
 })
 
 // PUT /playlist/:id - Update playlist metadata
-playlists.put('/:id', requireAuth, async (c) => {
-  const id = parseInt(c.req.param('id'))
-  const user = c.get('user')!
-
-  const playlist = await db.selectFrom('playlists').selectAll().where('id', '=', id).executeTakeFirst()
-  if (!playlist) return c.json({ error: 'Not found' }, 404)
-  if (!canModify(user, playlist)) return c.json({ error: 'Not permitted' }, 403)
+playlists.put('/:id', requireAuth, loadOwned('playlists'), async (c) => {
+  const playlist = c.get('owned')!
 
   const { name, image_path } = await c.req.json()
 
   await db
     .updateTable('playlists')
     .set({ name, image_path })
-    .where('id', '=', id)
+    .where('id', '=', playlist.id)
     .execute()
 
   return c.json({ success: true })
 })
 
 // POST /playlist/:id/image — download and save a playlist image from a URL
-playlists.post('/:id/image', requireAuth, async (c) => {
-  const id = parseInt(c.req.param('id'))
-  const user = c.get('user')!
-
-  const playlist = await db.selectFrom('playlists').selectAll().where('id', '=', id).executeTakeFirst()
-  if (!playlist) return c.json({ error: 'Not found' }, 404)
-  if (!canModify(user, playlist)) return c.json({ error: 'Not permitted' }, 403)
+playlists.post('/:id/image', requireAuth, loadOwned('playlists'), async (c) => {
+  const playlist = c.get('owned')!
 
   const body = await c.req.json()
   const { image_url, image_name } = body
@@ -335,30 +303,7 @@ playlists.post('/:id/image', requireAuth, async (c) => {
   }
 
   try {
-    // Download the image
-    console.log(`Downloading playlist image from: ${image_url}`)
-    const response = await fetch(image_url)
-    if (!response.ok) {
-      return c.json({ error: 'Failed to download image from URL' }, 400)
-    }
-
-    const buffer = Buffer.from(await response.arrayBuffer())
-
-    // Determine the image directory (use albums directory for playlists too)
-    const imageDir = path.join(projectRoot, 'public', 'images', 'albums')
-    console.log(`Saving playlist image to directory: ${imageDir}`)
-
-    // Create directory if it doesn't exist
-    if (!fs.existsSync(imageDir)) {
-      console.log(`Creating directory: ${imageDir}`)
-      fs.mkdirSync(imageDir, { recursive: true })
-    }
-
-    // Save the image
-    const imagePath = path.join(imageDir, image_name)
-    console.log(`Writing playlist image to: ${imagePath}`)
-    fs.writeFileSync(imagePath, buffer)
-    console.log(`Playlist image saved successfully: ${imagePath}`)
+    await downloadToDisk(image_url, image_name, 'albums')
 
     // Update the playlist record
     const updated = await db
@@ -367,7 +312,7 @@ playlists.post('/:id/image', requireAuth, async (c) => {
         image_path: image_name,
         updated_at: new Date(),
       })
-      .where('id', '=', id)
+      .where('id', '=', playlist.id)
       .returningAll()
       .executeTakeFirst()
 
@@ -377,6 +322,7 @@ playlists.post('/:id/image', requireAuth, async (c) => {
 
     return c.json({ success: true, playlist: updated })
   } catch (error) {
+    if (error instanceof ImageStorageError) return c.json({ error: error.message }, 400)
     console.error('Error downloading/saving playlist image:', error)
     return c.json({ error: 'Failed to save image' }, 500)
   }

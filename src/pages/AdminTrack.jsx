@@ -2,11 +2,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
-import { useUnsavedChangesStore } from '../stores/unsavedChangesStore';
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import Loading from '../components/Loading';
 import TrackArtistPicker from '../components/TrackArtistPicker';
 import MusicBrainzPicker from '../components/MusicBrainzPicker';
 import MusicBrainzModal from '../components/MusicBrainzModal';
+import AdminFormActions from '../components/admin/AdminFormActions';
+import { formatDuration } from '../utils/formatters';
 import toast from 'react-hot-toast';
 
 const AdminTrack = () => {
@@ -76,17 +78,6 @@ const AdminTrack = () => {
     setHasUnsavedChanges(hasChanges);
   }, [title, trackNumber, releaseYear, wikipedia, albumId, artistId, recordingMbid, detail]);
 
-  useEffect(() => {
-    const handleBeforeUnload = (e) => {
-      if (hasUnsavedChanges) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasUnsavedChanges]);
-
   const saveTrack = useCallback(async () => {
     await apiService.updateTrack(id, {
       title,
@@ -102,64 +93,18 @@ const AdminTrack = () => {
     setHasUnsavedChanges(false);
   }, [id, title, trackNumber, albumId, artistId, releaseYear, wikipedia, recordingMbid, detail]);
 
-  useEffect(() => {
-    const handleClick = async (e) => {
-      if (!hasUnsavedChanges) return;
-      const link = e.target.closest('a');
-      if (!link) return;
-      const href = link.getAttribute('href');
-      if (!href || href.startsWith('http') || href.startsWith('#')) return;
-      if (link.classList.contains('admin-back-link')) return;
-
-      e.preventDefault();
-      e.stopPropagation();
-
-      const choice = window.confirm('You have unsaved changes. Click OK to save and leave, or Cancel to stay on this page.');
-      if (choice) {
-        try {
-          await saveTrack();
-          setTimeout(() => navigate(href), 0);
-        } catch (err) {
-          console.error('Error saving track:', err);
-          setError(err.response?.data?.error || 'Failed to save track');
-        }
-      }
-    };
-    document.addEventListener('click', handleClick, true);
-    return () => document.removeEventListener('click', handleClick, true);
-  }, [hasUnsavedChanges, saveTrack, navigate]);
-
-  // Registered so Layout's pull-to-refresh can prompt to save before
-  // remounting this page (see stores/unsavedChangesStore).
-  useEffect(() => {
-    useUnsavedChangesStore.getState().setUnsavedChanges(hasUnsavedChanges, saveTrack);
-    return () => useUnsavedChangesStore.getState().clear();
-  }, [hasUnsavedChanges, saveTrack]);
-
-  const handleNavigateAway = async (destination) => {
-    if (hasUnsavedChanges) {
-      const choice = window.confirm('You have unsaved changes. Click OK to save and leave, or Cancel to stay on this page.');
-
-      if (choice) {
-        // User clicked OK - save and navigate
-        try {
-          await saveTrack();
-          navigate(destination);
-        } catch (err) {
-          console.error('Error saving track:', err);
-          setError(err.response?.data?.error || 'Failed to save track');
-        }
-      }
-      // If Cancel, do nothing (stay on page)
-    } else {
-      // No unsaved changes, just navigate
-      navigate(destination);
-    }
-  };
+  const { navigateAway } = useUnsavedChangesGuard({
+    isDirty: hasUnsavedChanges,
+    save: saveTrack,
+    onSaveError: (err) => {
+      console.error('Error saving track:', err);
+      setError(err.response?.data?.error || 'Failed to save track');
+    },
+  });
 
   const handleNavigateBack = (e) => {
     e.preventDefault();
-    handleNavigateAway(`/album/${detail.track.album_id}`);
+    navigateAway(`/album/${detail.track.album_id}`);
   };
 
   const handleAddCollaborator = async (newArtistId, newArtistName) => {
@@ -310,16 +255,14 @@ const AdminTrack = () => {
           />
         </div>
 
-        <button type="submit" disabled={saving} style={{ padding: '0.5rem 1.5rem', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: saving ? 'not-allowed' : 'pointer' }}>
-          {saving ? 'Saving...' : 'Save'}
-        </button>
+        <AdminFormActions saving={saving} />
       </form>
 
       <div style={{ marginTop: '2rem', padding: '1rem', backgroundColor: 'var(--color-bg-surface)', borderRadius: '4px', fontSize: '0.875rem' }}>
         <h2 style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '0.75rem' }}>File Info (read-only)</h2>
         <div><strong>Track ID:</strong> {detail.track.id}</div>
         <div><strong>Media File ID:</strong> {detail.track.media_file_id ?? '—'}</div>
-        <div><strong>Duration:</strong> {detail.track.duration_sec ? `${Math.floor(detail.track.duration_sec / 60)}:${String(detail.track.duration_sec % 60).padStart(2, '0')}` : '—'}</div>
+        <div><strong>Duration:</strong> {formatDuration(detail.track.duration_sec) || '—'}</div>
         <div><strong>Approved:</strong> {String(detail.track.approved)}</div>
         <div><strong>Track Created:</strong> {detail.track.created_at}</div>
         <div><strong>Track Updated:</strong> {detail.track.updated_at}</div>

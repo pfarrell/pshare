@@ -9,7 +9,6 @@ vi.mock('../components/TagsSection', () => ({ default: () => null }));
 vi.mock('../services/api', () => ({
   apiService: {
     getAlbum: vi.fn(),
-    getAlbumImages: vi.fn(),
     getAlbumSecondaryArtists: vi.fn(),
     updateAlbum: vi.fn(),
     updateTrack: vi.fn(),
@@ -17,6 +16,10 @@ vi.mock('../services/api', () => ({
     getReprocessPreview: vi.fn(),
     makeTrackSingle: vi.fn(),
     deleteAlbum: vi.fn(),
+    getImageUrl: vi.fn(() => ''),
+    entityImages: {
+      album: { list: vi.fn(), add: vi.fn(), setPrimary: vi.fn(), remove: vi.fn() },
+    },
   },
 }));
 
@@ -50,7 +53,7 @@ const renderAdminAlbum = () =>
 beforeEach(() => {
   vi.clearAllMocks();
   apiService.getAlbum.mockResolvedValue({ data: albumPayload });
-  apiService.getAlbumImages.mockResolvedValue({ data: [] });
+  apiService.entityImages.album.list.mockResolvedValue({ data: [] });
   apiService.getAlbumSecondaryArtists.mockResolvedValue({ data: [] });
 });
 

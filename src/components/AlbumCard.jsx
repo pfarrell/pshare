@@ -1,55 +1,24 @@
 import { useState } from 'react';
-import AddToCollectionModal from './AddToCollectionModal';
 import { useNavigate } from 'react-router-dom';
-import ResultRow from './ResultRow';
+import AddToCollectionModal from './AddToCollectionModal';
+import EntityCard from './EntityCard';
 import PlayButton from './PlayButton';
-import ContextMenu from './ContextMenu';
-import { useContextMenu } from '../hooks/useContextMenu';
-import { useIsMobile } from '../hooks/useIsMobile';
 import { useIsCurrentPage } from '../hooks/useIsCurrentPage';
-import { useViewModeStore } from '../stores/viewModeStore';
+import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
+import { useQueueActions } from '../hooks/useQueueActions';
 import { apiService } from '../services/api';
 import { usePlayerStore } from '../stores/playerStore';
 import { useAuthStore } from '../stores/authStore';
-import { useFavoritesStore } from '../stores/favoritesStore';
 import { formatCount, getAlbumYear } from '../utils/formatters';
 
 const AlbumCard = ({ album, artist, onClick, imageUrl, hideArtist = false, collectionId = null }) => {
   const [showCollectionModal, setShowCollectionModal] = useState(false);
-  const [playLoading, setPlayLoading] = useState(false);
-  const isMobile = useIsMobile();
-  const viewMode = useViewModeStore((s) => s.mode);
   const navigate = useNavigate();
-  const addTracks = usePlayerStore((s) => s.addTracks);
-  const setPlaylist = usePlayerStore((s) => s.setPlaylist);
   const setCollectionContext = usePlayerStore((s) => s.setCollectionContext);
   const { isAuthenticated } = useAuthStore();
-  const isFavorite = useFavoritesStore((s) => s.isFavorite('album', album.id));
-  const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
+  const favorite = useFavoriteToggle('album', album, { track_count: album.track_count, artist });
   const onThisArtist = useIsCurrentPage(artist?.id ? `/artist/${artist.id}` : null);
-  const showGoToArtist = artist?.id && !onThisArtist;
-  const ctxMenu = useContextMenu({
-    shouldIgnore: (e) => e.target.closest('[data-result-row-play]') || (!isAuthenticated && !showGoToArtist),
-  });
-
-  const handleImageError = (e) => {
-    if (e.target.src.includes('/sm/')) {
-      e.target.src = e.target.src.replace('/sm/', '/');
-      e.target.onerror = null;
-    }
-  };
-
-  const withAlbumTracks = async (dispatch) => {
-    setPlayLoading(true);
-    try {
-      const response = await apiService.getAlbum(album.id);
-      dispatch(response.data.tracks);
-    } catch (err) {
-      console.error('Failed to play album', err);
-    } finally {
-      setPlayLoading(false);
-    }
-  };
+  const showGoToArtist = Boolean(artist?.id && !onThisArtist);
 
   // Mirrors Album.jsx's tagCollectionContext(): when this card is played from
   // a collection's grid, tag the queue so usePlayerEngine can auto-advance
@@ -60,41 +29,10 @@ const AlbumCard = ({ album, artist, onClick, imageUrl, hideArtist = false, colle
     }
   };
 
-  const handlePlayAll = () => withAlbumTracks((tracks) => {
-    addTracks(tracks, false, { flashActivity: true }); // store auto-starts playback if idle
-    tagCollectionContext();
-  });
-
-  const handlePlayNow = () => withAlbumTracks((tracks) => {
-    setPlaylist(tracks);
-    tagCollectionContext();
-  });
-
-  const handlePlayNext = () => withAlbumTracks((tracks) => {
-    addTracks(tracks, true, { flashActivity: true });
-    tagCollectionContext();
-  });
-
-  const handleAddToQueue = () => withAlbumTracks((tracks) => {
-    addTracks(tracks, false, { flashActivity: true });
-    tagCollectionContext();
-  });
-
-  const handleToggleFavorite = () => {
-    toggleFavorite('album', album.id, {
-      id: album.id,
-      title: album.title,
-      image_path: album.image_path,
-      track_count: album.track_count,
-      artist: artist ? { id: artist.id, name: artist.name } : null,
-    });
-    ctxMenu.close();
-  };
-
-  const handleGoToArtist = () => {
-    navigate(`/artist/${artist.id}`);
-    ctxMenu.close();
-  };
+  const queue = useQueueActions(
+    () => apiService.getAlbum(album.id).then((response) => response.data.tracks),
+    { afterEnqueue: tagCollectionContext, errorLabel: 'Failed to play album' }
+  );
 
   const trackCount = formatCount(album.track_count || null, 'track');
   const trackCountSuffix = trackCount ? ` (${trackCount})` : '';
@@ -107,43 +45,23 @@ const AlbumCard = ({ album, artist, onClick, imageUrl, hideArtist = false, colle
 
   return (
     <>
-      {(isMobile || viewMode === 'list') ? (
-        <ResultRow
-          imageUrl={imageUrl}
-          imageShape="square"
-          title={album.title}
-          subtitle={subtitle}
-          onClick={() => !ctxMenu.open && onClick(album)}
-          onImageError={handleImageError}
-          onContextMenu={ctxMenu.triggerProps.onContextMenu}
-          onTouchStart={ctxMenu.triggerProps.onTouchStart}
-          onTouchMove={ctxMenu.triggerProps.onTouchMove}
-          onTouchEnd={ctxMenu.triggerProps.onTouchEnd}
-          play={{
-            loading: playLoading,
-            onPlay: handlePlayAll,
-            onPlayNow: handlePlayNow,
-            onPlayNext: handlePlayNext,
-            onAddToQueue: handleAddToQueue,
-            label: `Play ${album.title}`,
-          }}
-        />
-      ) : (
-        <div
-          className="artist-card"
-          onClick={() => !ctxMenu.open && onClick(album)}
-          {...ctxMenu.triggerProps}
-        >
-          <div className="artist-card-image">
-            <img
-              src={imageUrl}
-              alt={`${album.title}, ${artist?.name || ''}`}
-              style={{ cursor: 'pointer' }}
-              onError={handleImageError}
-            />
-          </div>
-          <div className="artist-card-title">
-            <h3>{album.title}</h3>
+      <EntityCard
+        title={album.title}
+        imageUrl={imageUrl}
+        imageAlt={`${album.title}, ${artist?.name || ''}`}
+        cardImageStyle={{ cursor: 'pointer' }}
+        listSubtitle={subtitle}
+        onClick={() => onClick(album)}
+        play={{
+          loading: queue.loading,
+          onPlay: queue.playAll,
+          onPlayNow: queue.playNow,
+          onPlayNext: queue.playNext,
+          onAddToQueue: queue.addToQueue,
+          label: `Play ${album.title}`,
+        }}
+        cardFooter={(
+          <>
             {!hideArtist && (
               <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '0.25rem 0 0 0', cursor: 'pointer' }}>
                 {artist?.name}{album.has_collaborators && ' +'}
@@ -154,60 +72,23 @@ const AlbumCard = ({ album, artist, onClick, imageUrl, hideArtist = false, colle
               <PlayButton
                 size={22}
                 data-result-row-play="true"
-                onClick={(e) => { e.stopPropagation(); handlePlayAll(); }}
-                loading={playLoading}
+                onClick={(e) => { e.stopPropagation(); queue.playAll(); }}
+                loading={queue.loading}
                 aria-label={`Play ${album.title}`}
               />
             </div>
-          </div>
-        </div>
-      )}
-
-      <ContextMenu
-        open={ctxMenu.open}
-        position={ctxMenu.position}
-        openedViaTouch={ctxMenu.openedViaTouch}
-        onDismiss={ctxMenu.dismiss}
-        onSwallowTouch={ctxMenu.swallowTouch}
-        testId="album-card-menu-backdrop"
-      >
-        <button
-          onClick={(e) => { e.stopPropagation(); ctxMenu.close(); handlePlayNext(); }}
-          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); handlePlayNext(); }}
-        >
-          ⏭ Play Next
-        </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); ctxMenu.close(); handleAddToQueue(); }}
-          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); handleAddToQueue(); }}
-        >
-          ➕ Add to Queue
-        </button>
-        {showGoToArtist && (
-          <button
-            onClick={(e) => { e.stopPropagation(); handleGoToArtist(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleGoToArtist(); }}
-          >
-            🎤 Go to Artist
-          </button>
+          </>
         )}
-        {isAuthenticated && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); setShowCollectionModal(true); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); setShowCollectionModal(true); }}
-          >
-            ▣ Add to Collection
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={(e) => { e.stopPropagation(); handleToggleFavorite(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleToggleFavorite(); }}
-          >
-            {isFavorite ? '★ Remove from Favorites' : '☆ Add to Favorites'}
-          </button>
-        )}
-      </ContextMenu>
+        actions={[
+          { key: 'play-next', icon: '⏭', label: 'Play Next', onClick: queue.playNext },
+          { key: 'add-queue', icon: '➕', label: 'Add to Queue', onClick: queue.addToQueue },
+          showGoToArtist && { key: 'artist', icon: '🎤', label: 'Go to Artist', onClick: () => navigate(`/artist/${artist.id}`) },
+          isAuthenticated && { key: 'collection', icon: '▣', label: 'Add to Collection', onClick: () => setShowCollectionModal(true) },
+          isAuthenticated && { key: 'favorite', icon: favorite.icon, label: favorite.label, onClick: favorite.toggle },
+        ]}
+        shouldIgnore={() => !isAuthenticated && !showGoToArtist}
+        menuTestId="album-card-menu-backdrop"
+      />
 
       {showCollectionModal && (
         <AddToCollectionModal

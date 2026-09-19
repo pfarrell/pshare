@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { apiService } from '../services/api';
 import jsmediatags from 'jsmediatags';
 import { useUploadTabTitle } from '../hooks/useUploadTabTitle';
+import { formatCount } from '../utils/formatters';
 
 const VARIOUS_ARTISTS = { id: 161, name: 'Various Artists' };
 
@@ -669,7 +670,7 @@ const AdminUpload = () => {
                       >
                         <span style={{ fontWeight: '500' }}>{artist.name}</span>
                         <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                          {Number(artist.album_count)} album{Number(artist.album_count) !== 1 ? 's' : ''}
+                          {formatCount(Number(artist.album_count), 'album')}
                         </span>
                       </div>
                     ))}
@@ -794,7 +795,7 @@ const AdminUpload = () => {
                       >
                         <div style={{ fontWeight: '500' }}>{album.title}</div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                          {album.artist_name}{album.release_year ? ` · ${album.release_year}` : ''} · {Number(album.track_count)} track{Number(album.track_count) !== 1 ? 's' : ''}
+                          {album.artist_name}{album.release_year ? ` · ${album.release_year}` : ''} · {formatCount(Number(album.track_count), 'track')}
                         </div>
                       </div>
                     ))}

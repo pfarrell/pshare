@@ -19,7 +19,36 @@ const api = axios.create({
 // Enable credentials for httpOnly cookie
 api.defaults.withCredentials = true;
 
+// Builds "?a=1&b=2", skipping null/undefined/'' values. Uses
+// encodeURIComponent (not URLSearchParams, which encodes spaces as '+')
+// so URLs stay byte-identical to the hand-built ones this replaced.
+export const qs = (params) => {
+  const parts = Object.entries(params)
+    .filter(([, value]) => value !== null && value !== undefined && value !== '')
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
+  return parts.length ? `?${parts.join('&')}` : '';
+};
+
+const entityImages = (kind) => ({
+  list: (id) => api.get(`/admin/${kind}/${id}/images`),
+  add: (id, image_url, image_name, set_primary = false) =>
+    api.post(`/admin/${kind}/${id}/images`, { image_url, image_name, set_primary }),
+  setPrimary: (id, imgId) => api.patch(`/admin/${kind}/${id}/images/${imgId}/primary`),
+  remove: (id, imgId) => api.delete(`/admin/${kind}/${id}/images/${imgId}`),
+});
+
+const notes = (kind) => ({
+  add: (id, content) => api.post(`/${kind}/${id}/notes`, { content }),
+  remove: (id, noteId) => api.delete(`/${kind}/${id}/notes/${noteId}`),
+});
+
+const images = { album: entityImages('album'), artist: entityImages('artist') };
+const noteApis = { album: notes('album'), collection: notes('collection'), track: notes('track') };
+
 export const apiService = {
+  entityImages: images,
+  notes: noteApis,
+
   // Auth
   signup: (username, password, email = null) => api.post('/auth/signup', { username, password, email }),
   login: (username, password) => api.post('/auth/login', { username, password }),
@@ -43,29 +72,29 @@ export const apiService = {
   setPassword: (password) => api.put('/auth/set-password', { password }),
   changePassword: (currentPassword, newPassword) => api.put('/auth/change-password', { currentPassword, newPassword }),
   forgotPassword: (username) => api.post('/auth/forgot-password', { username }),
-  validateResetToken: (token) => api.get(`/auth/reset-password/validate?token=${encodeURIComponent(token)}`),
+  validateResetToken: (token) => api.get(`/auth/reset-password/validate${qs({ token })}`),
   resetPassword: (token, newPassword) => api.post('/auth/reset-password', { token, newPassword }),
 
   // Artists
-  getRandomArtists: (size = 60, tag = null) => api.get(`/artists/random?size=${size}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`),
+  getRandomArtists: (size = 60, tag = null) => api.get(`/artists/random${qs({ size, tag })}`),
   getArtist: (id) => api.get(`/artist/${id}`), // Returns { artist, summary, albums }
 
   // Albums
   getAlbum: (id) => api.get(`/album/${id}`), // Returns { artist, album, tracks }
-  getRandomAlbums: (size = 30, tag = null) => api.get(`/albums/random?size=${size}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`),
-  getAdjacentAlbums: (id, collectionId = null) => api.get(`/album/${id}/adjacent${collectionId ? `?collection_id=${collectionId}` : ''}`), // Returns { prev, next }
+  getRandomAlbums: (size = 30, tag = null) => api.get(`/albums/random${qs({ size, tag })}`),
+  getAdjacentAlbums: (id, collectionId = null) => api.get(`/album/${id}/adjacent${qs({ collection_id: collectionId })}`), // Returns { prev, next }
 
   // Tracks
   getTrack: (id) => api.get(`/track/${id}`), // Returns { track }
 
   // Recall notes
   getRecallConnectUrl: () => `${getBaseURL()}/auth/recall/connect`,
-  addAlbumNote: (albumId, content) => api.post(`/album/${albumId}/notes`, { content }),
-  deleteAlbumNote: (albumId, noteId) => api.delete(`/album/${albumId}/notes/${noteId}`),
-  addCollectionNote: (collectionId, content) => api.post(`/collection/${collectionId}/notes`, { content }),
-  deleteCollectionNote: (collectionId, noteId) => api.delete(`/collection/${collectionId}/notes/${noteId}`),
-  addTrackNote: (trackId, content) => api.post(`/track/${trackId}/notes`, { content }),
-  deleteTrackNote: (trackId, noteId) => api.delete(`/track/${trackId}/notes/${noteId}`),
+  addAlbumNote: noteApis.album.add,
+  deleteAlbumNote: noteApis.album.remove,
+  addCollectionNote: noteApis.collection.add,
+  deleteCollectionNote: noteApis.collection.remove,
+  addTrackNote: noteApis.track.add,
+  deleteTrackNote: noteApis.track.remove,
   getTrackNotes: (trackId) => api.get(`/track/${trackId}/notes`),
   getRecallItemUrl: (itemId) => `https://patf.com/recall/items/${itemId}`,
 
@@ -81,36 +110,33 @@ export const apiService = {
   setDefaultTag: (tag) => api.put('/auth/default-tag', { tag }),
 
   // Search
-  search: (query, offset) => api.get(`/search?q=${encodeURIComponent(query)}${offset ? `&offset=${offset}` : ''}`),
+  search: (query, offset) => api.get(`/search${qs({ q: query, offset: offset || undefined })}`),
 
   // log
   log: (id) => api.get(`/log/${id}`),
-  getLogs: (page = 1, limit = 25) => api.get(`/log/admin?page=${page}&limit=${limit}`),
+  getLogs: (page = 1, limit = 25) => api.get(`/log/admin${qs({ page, limit })}`),
 
   // Admin
   createArtist: (name) => api.post('/admin/artist', { name }),
   createAlbum: (title, artist_id) => api.post('/admin/album', { title, artist_id }),
-  searchAdminArtists: (q) => api.get(`/admin/artists/search?q=${encodeURIComponent(q)}`),
-  searchAdminAlbums: (q) => api.get(`/admin/albums/search?q=${encodeURIComponent(q)}`),
+  searchAdminArtists: (q) => api.get(`/admin/artists/search${qs({ q })}`),
+  searchAdminAlbums: (q) => api.get(`/admin/albums/search${qs({ q })}`),
   getAdminTags: () => api.get('/admin/tags'),
   deleteAdminTag: (id) => api.delete(`/admin/tags/${id}`),
-  searchMusicbrainzArtist: (q) => api.get(`/admin/musicbrainz/search-artist?q=${encodeURIComponent(q)}`),
-  searchMusicbrainzRelease: (q) => api.get(`/admin/musicbrainz/search-release?q=${encodeURIComponent(q)}`),
+  searchMusicbrainzArtist: (q) => api.get(`/admin/musicbrainz/search-artist${qs({ q })}`),
+  searchMusicbrainzRelease: (q) => api.get(`/admin/musicbrainz/search-release${qs({ q })}`),
   updateArtist: (id, data) => api.put(`/admin/artist/${id}`, data),
   deleteArtist: (id) => api.delete(`/admin/artist/${id}`),
   updateAlbum: (id, data) => api.put(`/admin/album/${id}`, data),
   deleteAlbum: (id) => api.delete(`/admin/album/${id}`),
-  downloadArtistImage: (id, image_url, image_name) => api.post(`/admin/artist/${id}/image`, { image_url, image_name }),
-  downloadAlbumImage: (id, image_url, image_name) => api.post(`/admin/album/${id}/image`, { image_url, image_name }),
   updateTrack: (id, data) => api.put(`/admin/track/${id}`, data),
   deleteTrack: (id) => api.delete(`/admin/track/${id}`),
   makeTrackSingle: (id) => api.post(`/admin/track/${id}/make-single`),
-  searchMusicbrainzRecording: (q, artist) => api.get(`/admin/musicbrainz/search-recording?q=${encodeURIComponent(q)}${artist ? `&artist=${encodeURIComponent(artist)}` : ''}`),
+  searchMusicbrainzRecording: (q, artist) => api.get(`/admin/musicbrainz/search-recording${qs({ q, artist })}`),
   getTrackAdminDetail: (id) => api.get(`/admin/track/${id}`),
   addTrackCollaborator: (trackId, artistId, role) => api.post(`/admin/track/${trackId}/collaborators`, { artist_id: artistId, role }),
   removeTrackCollaborator: (trackId, collaboratorId) => api.delete(`/admin/track/${trackId}/collaborators/${collaboratorId}`),
   updateTrackRecordingMbid: (trackId, musicbrainzRecordingId) => api.put(`/admin/track/${trackId}/recording-mbid`, { musicbrainz_recording_id: musicbrainzRecordingId }),
-  bulkUpdateTracks: (album_id, data) => api.patch(`/admin/album/${album_id}/tracks`, data),
   moveAlbumToArtist: (id, target_artist_id) => api.post(`/admin/album/${id}/move-to-artist`, { target_artist_id }),
   mergeAlbum: (id, destination_album_id, track_offset) => api.post(`/admin/album/${id}/merge`, { destination_album_id, track_offset }),
   getReprocessPreview: (albumId) => api.get(`/admin/album/${albumId}/reprocess-preview`),
@@ -128,11 +154,10 @@ export const apiService = {
   mergeArtists: (id, loser_ids) => api.post(`/admin/artist/${id}/merge`, { loser_ids }),
   addRelatedArtist: (artistId, relatedArtistId, kind = 'related') => api.post(`/admin/artist/${artistId}/related`, { related_artist_id: relatedArtistId, kind }),
   removeRelatedArtist: (artistId, relatedArtistId, kind) => api.delete(`/admin/artist/${artistId}/related/${relatedArtistId}`, { params: { kind } }),
-  getErrors: (page = 1, limit = 25, source = null) =>
-    api.get(`/admin/errors?page=${page}&limit=${limit}${source ? `&source=${encodeURIComponent(source)}` : ''}`),
+  getErrors: (page = 1, limit = 25, source = null) => api.get(`/admin/errors${qs({ page, limit, source })}`),
   dismissError: (id) => api.delete(`/admin/errors/${id}`),
   clearErrors: () => api.delete('/admin/errors'),
-  getSignups: (page = 1, limit = 25) => api.get(`/admin/signups?page=${page}&limit=${limit}`),
+  getSignups: (page = 1, limit = 25) => api.get(`/admin/signups${qs({ page, limit })}`),
   getSignupUnseenCount: () => api.get('/admin/signups/unseen-count'),
   markSignupsSeen: () => api.post('/admin/signups/seen'),
 
@@ -141,7 +166,7 @@ export const apiService = {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
   getUploadStatus: () => api.get('/admin/upload/status'),
-  getRecentUploads: (limit = 50) => api.get(`/admin/upload/recent?limit=${limit}`),
+  getRecentUploads: (limit = 50) => api.get(`/admin/upload/recent${qs({ limit })}`),
   retryUpload: (id) => api.post(`/admin/upload/${id}/retry`),
   dismissUpload: (id) => api.delete(`/admin/upload/${id}`),
   clearFailedUploads: () => api.delete('/admin/upload/failed'),
@@ -182,26 +207,20 @@ export const apiService = {
   },
 
   // Favorites
-  getFavorites: (kind = null) => api.get(`/favorites${kind ? `?kind=${encodeURIComponent(kind)}` : ''}`),
+  getFavorites: (kind = null) => api.get(`/favorites${qs({ kind })}`),
   addFavorite: (kind, target_id) => api.post('/favorites', { kind, target_id }),
   removeFavorite: (kind, target_id) => api.delete('/favorites', { data: { kind, target_id } }),
 
   // Image management
-  getAlbumImages: (albumId) => api.get(`/admin/album/${albumId}/images`),
-  addAlbumImage: (albumId, image_url, image_name, set_primary = false) =>
-    api.post(`/admin/album/${albumId}/images`, { image_url, image_name, set_primary }),
-  setAlbumImagePrimary: (albumId, imgId) =>
-    api.patch(`/admin/album/${albumId}/images/${imgId}/primary`),
-  deleteAlbumImage: (albumId, imgId) =>
-    api.delete(`/admin/album/${albumId}/images/${imgId}`),
+  getAlbumImages: images.album.list,
+  addAlbumImage: images.album.add,
+  setAlbumImagePrimary: images.album.setPrimary,
+  deleteAlbumImage: images.album.remove,
 
-  getArtistImages: (artistId) => api.get(`/admin/artist/${artistId}/images`),
-  addArtistImage: (artistId, image_url, image_name, set_primary = false) =>
-    api.post(`/admin/artist/${artistId}/images`, { image_url, image_name, set_primary }),
-  setArtistImagePrimary: (artistId, imgId) =>
-    api.patch(`/admin/artist/${artistId}/images/${imgId}/primary`),
-  deleteArtistImage: (artistId, imgId) =>
-    api.delete(`/admin/artist/${artistId}/images/${imgId}`),
+  getArtistImages: images.artist.list,
+  addArtistImage: images.artist.add,
+  setArtistImagePrimary: images.artist.setPrimary,
+  deleteArtistImage: images.artist.remove,
 
   // Image URL helpers
   getImageUrl: (imagePath, context = 'base') => {

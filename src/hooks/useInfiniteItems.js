@@ -8,6 +8,8 @@ const WINDOW_SIZE_MOBILE  = 120;
 const COOLDOWN_MS         = 2000;
 
 export function useInfiniteItems(fetchFn, cacheKey) {
+  // Frozen at mount on purpose (not useIsMobile): batch/window sizes feed the
+  // offset math for already-loaded items, so they must not change mid-life.
   const isMobile   = useRef(window.matchMedia('(max-width: 768px)').matches).current;
   const batchSize  = isMobile ? BATCH_SIZE_MOBILE  : BATCH_SIZE_DESKTOP;
   const windowSize = isMobile ? WINDOW_SIZE_MOBILE : WINDOW_SIZE_DESKTOP;

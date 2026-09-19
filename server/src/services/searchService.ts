@@ -1,13 +1,9 @@
 import { Kysely, sql } from 'kysely'
 import type { Context } from 'hono'
 import pg from 'pg'
-import { db, Database } from '../db/database.js'
+import { db, Database, pool } from '../db/database.js'
 import { streamBase } from '../db/streamUrl.js'
 import { countsService } from './countsService.js'
-
-// TODO: standalone pool, separate from the shared `db` instance above — known debt,
-// tracked in follow-up issue "Consolidate search.ts's standalone pg.Pool into the shared db instance"
-const pool = new pg.Pool({ connectionString: process.env.BEMUSED_DB })
 
 const EXACT_MATCH_SCORE = 2.0
 const FUZZY_SIMILARITY_THRESHOLD = 0.24
@@ -104,6 +100,8 @@ function buildSearchClauses(exactOnly: boolean): { exactClauses: string; fuzzyCl
 // SELECT that follows, so the GIN index (built for that threshold's `%` operator)
 // is actually used. `SET` isn't parameterizable, but the threshold is a fixed
 // internal constant, never user input, so inlining it is safe.
+// Uses the shared pool: SET LOCAL is scoped to this BEGIN/COMMIT, so the
+// threshold never leaks onto a connection Kysely later reuses.
 async function runSearchQuery<T extends pg.QueryResultRow>(
   sqlText: string,
   params: unknown[],

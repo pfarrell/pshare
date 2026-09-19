@@ -3,93 +3,26 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
-import { useUnsavedChangesStore } from '../stores/unsavedChangesStore';
-import { useContextMenu } from '../hooks/useContextMenu';
-import ContextMenu from '../components/ContextMenu';
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
+import { useEntitySearch } from '../hooks/useEntitySearch';
+import EntitySearchPicker from '../components/admin/EntitySearchPicker';
+import ReorderableList from '../components/admin/ReorderableList';
 
-// Its own component (rather than inline JSX in a .map()) because
-// useContextMenu is a hook — each row needs its own open/position state.
-// Right-click (desktop) / long-press (mobile) opens a menu that moves the
-// track to either end of the list in one step, without dragging it there.
-// The Delete button is excluded from opening it (shouldIgnore below) since a
-// right-click/long-press there is meant for that button, not the row.
-const PlaylistTrackRow = ({ track, index, isDragged, onDragStart, onDragOver, onDrop, onDelete, onMoveToEdge }) => {
-  const ctxMenu = useContextMenu({ shouldIgnore: (e) => !!e.target.closest('button') });
-  const moveTo = (edge) => {
-    ctxMenu.close();
-    onMoveToEdge(track.id, edge);
-  };
-  return (
-    <div
-      draggable
-      onDragStart={(e) => onDragStart(e, index)}
-      onDragOver={onDragOver}
-      onDrop={(e) => onDrop(e, index)}
-      style={{
-        padding: '1rem',
-        borderBottom: '1px solid var(--color-border)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        cursor: 'move',
-        backgroundColor: isDragged ? 'var(--color-bg-surface-muted)' : 'var(--color-bg-surface)'
-      }}
-      {...ctxMenu.triggerProps}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
-        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', width: '2rem' }}>
-          {index + 1}
-        </span>
-        <span style={{ fontSize: '1.5rem', color: 'var(--color-text-faint)', cursor: 'move' }}>
-          ☰
-        </span>
-        <div>
-          <div style={{ fontWeight: '500' }}>{track.title}</div>
-          <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
-            {track.artist?.name} • {track.album?.title}
-          </div>
+const PlaylistTrackRowContent = ({ track, index, onDelete }) => (
+  <>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
+      <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', width: '2rem' }}>{index + 1}</span>
+      <span style={{ fontSize: '1.5rem', color: 'var(--color-text-faint)', cursor: 'move' }}>☰</span>
+      <div>
+        <div style={{ fontWeight: '500' }}>{track.title}</div>
+        <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
+          {track.artist?.name} • {track.album?.title}
         </div>
       </div>
-      <button
-        onClick={() => onDelete(track.id)}
-        style={{
-          padding: '0.5rem 1rem',
-          backgroundColor: '#ef4444',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-          fontSize: '0.875rem'
-        }}
-      >
-        Delete
-      </button>
-      <ContextMenu
-        open={ctxMenu.open}
-        position={ctxMenu.position}
-        openedViaTouch={ctxMenu.openedViaTouch}
-        onDismiss={ctxMenu.dismiss}
-        onSwallowTouch={ctxMenu.swallowTouch}
-        testId="playlist-row-menu-backdrop"
-      >
-        <button
-          onClick={() => moveTo('top')}
-          onTouchStart={(e) => { e.stopPropagation(); }}
-          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); moveTo('top'); }}
-        >
-          ⬆ Send to Top
-        </button>
-        <button
-          onClick={() => moveTo('bottom')}
-          onTouchStart={(e) => { e.stopPropagation(); }}
-          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); moveTo('bottom'); }}
-        >
-          ⬇ Send to Bottom
-        </button>
-      </ContextMenu>
     </div>
-  );
-};
+    <button type="button" className="btn btn-danger" onClick={() => onDelete(track.id)}>Delete</button>
+  </>
+);
 
 export default function AdminPlaylist() {
   const { id } = useParams();
@@ -101,10 +34,8 @@ export default function AdminPlaylist() {
   const [tracks, setTracks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
+  const trackSearch = useEntitySearch('track', { minLength: 1 });
   const [showSearch, setShowSearch] = useState(false);
-  const [draggedIndex, setDraggedIndex] = useState(null);
 
   // Image download state
   const [imageUrl, setImageUrl] = useState('');
@@ -137,24 +68,12 @@ export default function AdminPlaylist() {
     }
   };
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-
-    try {
-      const response = await apiService.search(searchQuery);
-      setSearchResults(response.data.tracks || []);
-    } catch (err) {
-      console.error('Search failed:', err);
-    }
-  };
-
   const handleAddTrack = async (track) => {
     try {
       await apiService.addTrackToPlaylist(id, track.id);
       setTracks([...tracks, track]);
       setShowSearch(false);
-      setSearchQuery('');
-      setSearchResults([]);
+      trackSearch.reset();
     } catch (err) {
       console.error('Failed to add track:', err);
       alert('Failed to add track');
@@ -171,16 +90,6 @@ export default function AdminPlaylist() {
       console.error('Failed to delete track:', err);
       alert('Failed to delete track');
     }
-  };
-
-  const handleDragStart = (e, index) => {
-    setDraggedIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
   };
 
   // Applies a fully-reordered track list optimistically, then persists it —
@@ -201,33 +110,6 @@ export default function AdminPlaylist() {
     }
   };
 
-  const handleDrop = async (e, dropIndex) => {
-    e.preventDefault();
-
-    if (draggedIndex === null || draggedIndex === dropIndex) return;
-
-    const newTracks = [...tracks];
-    const [movedTrack] = newTracks.splice(draggedIndex, 1);
-    newTracks.splice(dropIndex, 0, movedTrack);
-
-    setDraggedIndex(null);
-    await persistReorder(newTracks);
-  };
-
-  const moveTrackToEdge = async (trackId, edge) => {
-    const fromIndex = tracks.findIndex((t) => t.id === trackId);
-    if (fromIndex === -1) return;
-
-    const newTracks = [...tracks];
-    const [moved] = newTracks.splice(fromIndex, 1);
-    if (edge === 'top') {
-      newTracks.unshift(moved);
-    } else {
-      newTracks.push(moved);
-    }
-    await persistReorder(newTracks);
-  };
-
   // Track changes to the editable fields
   useEffect(() => {
     if (!playlistData || !originalData) return;
@@ -236,18 +118,6 @@ export default function AdminPlaylist() {
       playlistData.image_path !== originalData.image_path;
     setHasUnsavedChanges(hasChanges);
   }, [playlistData, originalData]);
-
-  // Warn user before leaving page with unsaved changes (browser navigation)
-  useEffect(() => {
-    const handleBeforeUnload = (e) => {
-      if (hasUnsavedChanges) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasUnsavedChanges]);
 
   // Just the API call, no navigation — shared by the Save button, the
   // link-click guard below, and the pull-to-refresh save prompt in Layout
@@ -261,38 +131,14 @@ export default function AdminPlaylist() {
     setHasUnsavedChanges(false);
   }, [id, playlistData]);
 
-  useEffect(() => {
-    useUnsavedChangesStore.getState().setUnsavedChanges(hasUnsavedChanges, savePlaylist);
-    return () => useUnsavedChangesStore.getState().clear();
-  }, [hasUnsavedChanges, savePlaylist]);
-
-  // Intercept all link clicks to check for unsaved changes
-  useEffect(() => {
-    const handleClick = async (e) => {
-      if (!hasUnsavedChanges) return;
-      const link = e.target.closest('a');
-      if (!link) return;
-      const href = link.getAttribute('href');
-      if (!href || href.startsWith('http') || href.startsWith('#')) return;
-      if (link.classList.contains('admin-back-link')) return;
-
-      e.preventDefault();
-      e.stopPropagation();
-
-      const choice = window.confirm('You have unsaved changes. Click OK to save and leave, or Cancel to stay on this page.');
-      if (choice) {
-        try {
-          await savePlaylist();
-          setTimeout(() => navigate(href), 0);
-        } catch (err) {
-          console.error('Failed to save playlist:', err);
-          alert('Failed to save playlist');
-        }
-      }
-    };
-    document.addEventListener('click', handleClick, true);
-    return () => document.removeEventListener('click', handleClick, true);
-  }, [hasUnsavedChanges, savePlaylist, navigate]);
+  useUnsavedChangesGuard({
+    isDirty: hasUnsavedChanges,
+    save: savePlaylist,
+    onSaveError: (err) => {
+      console.error('Failed to save playlist:', err);
+      alert('Failed to save playlist');
+    },
+  });
 
   const handleSave = async () => {
     try {
@@ -513,79 +359,22 @@ export default function AdminPlaylist() {
           marginBottom: '2rem',
           boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)'
         }}>
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Search for tracks..."
-                style={{
-                  width: '100%',
-                  boxSizing: 'border-box',
-                  padding: '0.5rem',
-                  border: '1px solid var(--color-border-strong)',
-                  borderRadius: '4px',
-                  fontSize: '1rem'
-                }}
-              />
-            </div>
-            <button
-              onClick={handleSearch}
-              style={{
-                padding: '0.5rem 1rem',
-                backgroundColor: '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
-              Search
-            </button>
-          </div>
-
-          {searchResults.length > 0 && (
-            <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-              {searchResults.map((track) => (
-                <div
-                  key={track.id}
-                  onClick={() => handleAddTrack(track)}
-                  style={{
-                    padding: '0.75rem',
-                    borderBottom: '1px solid var(--color-border)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-bg-surface-muted)'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--color-bg-surface)'}
-                >
-                  <div>
-                    <div style={{ fontWeight: '500' }}>{track.title}</div>
-                    <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
-                      {track.artist?.name} • {track.album?.title}
-                    </div>
-                  </div>
-                  <button
-                    style={{
-                      padding: '0.25rem 0.5rem',
-                      backgroundColor: '#10b981',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      fontSize: '0.75rem',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Add
-                  </button>
+          <EntitySearchPicker
+            search={trackSearch}
+            placeholder="Search for tracks..."
+            maxHeight="300px"
+            renderItem={(track) => (
+              <>
+                <div style={{ fontWeight: '500' }}>{track.title}</div>
+                <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
+                  {track.artist?.name} • {track.album?.title}
                 </div>
-              ))}
-            </div>
-          )}
+              </>
+            )}
+            renderAction={() => <button type="button" className="btn btn-success btn-sm">Add</button>}
+            pickOnRowClick
+            onPick={handleAddTrack}
+          />
         </div>
       )}
 
@@ -605,19 +394,13 @@ export default function AdminPlaylist() {
             No tracks in this playlist. Use the search above to add tracks.
           </div>
         ) : (
-          tracks.map((track, index) => (
-            <PlaylistTrackRow
-              key={track.id}
-              track={track}
-              index={index}
-              isDragged={draggedIndex === index}
-              onDragStart={handleDragStart}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              onDelete={handleDeleteTrack}
-              onMoveToEdge={moveTrackToEdge}
-            />
-          ))
+          <ReorderableList
+            items={tracks}
+            getKey={(track) => track.id}
+            onReorder={persistReorder}
+            menuTestId="playlist-row-menu-backdrop"
+            renderRow={(track, index) => <PlaylistTrackRowContent track={track} index={index} onDelete={handleDeleteTrack} />}
+          />
         )}
       </div>
     </div>

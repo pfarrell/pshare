@@ -2,22 +2,15 @@ import { Hono } from 'hono'
 import { db } from '../db/database.js'
 import fs from 'fs'
 import path from 'path'
-import { fileURLToPath } from 'url'
 import { calculateFileHash } from '../utils/fileHash.js'
 import { errorLogService } from '../services/errorLogService.js'
+import { uploadTmpDir } from '../config/paths.js'
 
 const upload = new Hono()
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
 // Helper to get upload directory
 const getUploadDir = () => {
-  const projectRoot = process.env.NODE_ENV === 'production'
-    ? '/var/www/bemused-node/current'
-    : path.resolve(__dirname, '../../..')
-
-  const uploadDir = path.join(projectRoot, 'public', 'tmp', 'uploads')
+  const uploadDir = uploadTmpDir()
 
   // Create directory if it doesn't exist
   if (!fs.existsSync(uploadDir)) {

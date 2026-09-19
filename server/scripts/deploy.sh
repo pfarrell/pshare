@@ -16,6 +16,7 @@ echo "🚀 Deploying Bemused Node.js API..."
 # Build locally
 echo "📦 Building TypeScript..."
 ./node_modules/.bin/tsc
+node ~/.claude/skills/check-deploy/stamp-version.cjs dist/version.json
 
 # Create directory structure on remote
 echo "📁 Creating remote directories..."

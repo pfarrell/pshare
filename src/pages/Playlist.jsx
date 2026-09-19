@@ -1,7 +1,7 @@
 // src/pages/Playlist.jsx
 import { useEffect, useState } from 'react';
 import ImageLightbox from '../components/ImageLightbox';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { usePlayerStore } from '../stores/playerStore';
 import { useAuthStore } from '../stores/authStore';
@@ -12,35 +12,40 @@ import PlayActionsMenu from '../components/PlayActionsMenu';
 import CoverCollage from '../components/CoverCollage';
 import ContextMenu from '../components/ContextMenu';
 import { useContextMenu } from '../hooks/useContextMenu';
-import { useFavoritesStore } from '../stores/favoritesStore';
-import { shareLink } from '../utils/shareLink';
+import { useFetch } from '../hooks/useFetch';
+import { useEntityHeaderActions } from '../hooks/useEntityHeaderActions';
+import { useQueueActions } from '../hooks/useQueueActions';
+import { formatCount } from '../utils/formatters';
 
 export default function Playlist() {
   const { id } = useParams();
-  const navigate = useNavigate();
-  const addTracks = usePlayerStore((s) => s.addTracks);
-  const setPlaylist = usePlayerStore((s) => s.setPlaylist);
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const setPageTracks = usePlayerStore((s) => s.setPageTracks);
   const { user, isAdmin, isAuthenticated } = useAuthStore();
-  const [playlistData, setPlaylistData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { data: playlistData, loading, error, reload: loadPlaylist } = useFetch(
+    () => apiService.getPlaylist(id).then((response) => {
+      const { playlist, tracks } = response.data;
+      return {
+        ...response.data,
+        tracks: (tracks || []).map((track) => ({
+          ...track,
+          source_playlist: { id: playlist.id, name: playlist.name },
+        })),
+      };
+    }),
+    [id]
+  );
   const [showImageModal, setShowImageModal] = useState(false);
-  const isFavorite = useFavoritesStore((s) => s.isFavorite('playlist', parseInt(id)));
-  const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
-  const ctxMenu = useContextMenu({ shouldIgnore: (e) => !isAuthenticated || e.target.tagName === 'A' || !!e.target.closest('button') });
-
-  const handleToggleFavorite = () => {
-    if (!playlistData?.playlist) return;
-    const { playlist: p } = playlistData;
-    toggleFavorite('playlist', p.id, { id: p.id, name: p.name, image_path: p.image_path, track_count: playlistData.tracks?.length });
-    ctxMenu.close();
-  };
-
-  useEffect(() => {
-    loadPlaylist();
-  }, [id]);
+  const canEdit = isAdmin || (user && playlistData?.playlist?.user_id === user.id);
+  const { actions: headerActions, shouldIgnore } = useEntityHeaderActions({
+    kind: 'playlist',
+    entity: playlistData?.playlist ?? null,
+    favoriteExtras: { track_count: playlistData?.tracks?.length },
+    canEdit,
+    isAuthenticated,
+    share: playlistData?.playlist ? { title: playlistData.playlist.name, text: `${playlistData.playlist.name} playlist` } : null,
+  });
+  const ctxMenu = useContextMenu({ shouldIgnore });
 
   useEffect(() => {
     // Lets the footer play button fall back to "Play Now" behavior when the playlist is
@@ -49,53 +54,13 @@ export default function Playlist() {
     return () => setPageTracks([]);
   }, [playlistData, setPageTracks]);
 
-  const loadPlaylist = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await apiService.getPlaylist(id);
-      const { playlist, tracks } = response.data;
-      setPlaylistData({
-        ...response.data,
-        tracks: (tracks || []).map((track) => ({
-          ...track,
-          source_playlist: { id: playlist.id, name: playlist.name },
-        })),
-      });
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePlayAll = () => {
-    if (!playlistData?.tracks?.length) return;
-    addTracks(playlistData.tracks, false, { flashActivity: true }); // store auto-starts playback if idle
-  };
-
-  const handlePlayNow = () => {
-    if (!playlistData?.tracks?.length) return;
-    setPlaylist(playlistData.tracks);
-  };
-
-  const handlePlayNext = () => {
-    if (!playlistData?.tracks?.length) return;
-    addTracks(playlistData.tracks, true, { flashActivity: true });
-  };
-
-  const handleAddToQueue = () => {
-    if (!playlistData?.tracks?.length) return;
-    addTracks(playlistData.tracks, false, { flashActivity: true });
-  };
+  const queue = useQueueActions(playlistData?.tracks);
 
   if (loading) return <Loading />;
-  if (error) return <Retry message={error} onRetry={loadPlaylist} />;
+  if (error) return <Retry message={error.message} onRetry={loadPlaylist} />;
   if (!playlistData) return <div>Playlist not found</div>;
 
   const { playlist, tracks } = playlistData;
-  // Show edit button if user is admin OR if user owns the playlist
-  const canEdit = isAdmin || (user && playlist.user_id === user.id);
 
   // Distinct albums (by id, in track order) among this playlist's tracks that
   // have a cover — feeds the collage fallback when the playlist has no custom image.
@@ -145,26 +110,17 @@ export default function Playlist() {
           </div>
 
           <p style={{ color: 'var(--color-text-muted)', marginBottom: '1.5rem' }}>
-            {tracks?.length || 0} {tracks?.length === 1 ? 'track' : 'tracks'}
+            {formatCount(tracks?.length || 0, 'track')}
           </p>
 
           {/* Action Buttons */}
           <PlayActionsMenu
-            onPlay={handlePlayAll}
-            onPlayNow={handlePlayNow}
-            onPlayNext={handlePlayNext}
-            onAddToQueue={handleAddToQueue}
+            onPlay={queue.playAll}
+            onPlayNow={queue.playNow}
+            onPlayNext={queue.playNext}
+            onAddToQueue={queue.addToQueue}
             disabled={!tracks?.length}
-            overflowActions={[
-              canEdit && { key: 'edit', icon: '✎', label: 'Edit', onClick: () => navigate(`/admin/playlist/${id}`) },
-              isAuthenticated && {
-                key: 'favorite',
-                icon: isFavorite ? '★' : '☆',
-                label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
-                onClick: handleToggleFavorite,
-              },
-              isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: () => shareLink({ title: playlist.name, text: `${playlist.name} playlist` }) },
-            ].filter(Boolean)}
+            overflowActions={headerActions}
           />
         </div>
       </div>
@@ -174,33 +130,10 @@ export default function Playlist() {
         position={ctxMenu.position}
         onDismiss={ctxMenu.dismiss}
         onSwallowTouch={ctxMenu.swallowTouch}
+        onClose={ctxMenu.close}
+        actions={headerActions}
         testId="playlist-header-menu-backdrop"
-      >
-        {canEdit && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); navigate(`/admin/playlist/${id}`); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); navigate(`/admin/playlist/${id}`); }}
-          >
-            ✎ Edit
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={(e) => { e.stopPropagation(); handleToggleFavorite(); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleToggleFavorite(); }}
-          >
-            {isFavorite ? '★ Remove from Favorites' : '☆ Add to Favorites'}
-          </button>
-        )}
-        {isAuthenticated && (
-          <button
-            onClick={(e) => { e.stopPropagation(); ctxMenu.close(); shareLink({ title: playlist.name, text: `${playlist.name} playlist` }); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); ctxMenu.close(); shareLink({ title: playlist.name, text: `${playlist.name} playlist` }); }}
-          >
-            📤 Share
-          </button>
-        )}
-      </ContextMenu>
+      />
 
       {showImageModal && playlist.image_path && (
         <ImageLightbox

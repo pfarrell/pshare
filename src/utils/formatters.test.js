@@ -1,4 +1,4 @@
-import { formatDuration, formatCount, getAlbumYear } from './formatters';
+import { formatDuration, formatCount, getAlbumYear, formatPlaybackTime } from './formatters';
 
 describe('formatDuration', () => {
   test('returns empty string for 0', () => {
@@ -76,5 +76,24 @@ describe('getAlbumYear', () => {
 
   test('returns null for the sentinel "0"', () => {
     expect(getAlbumYear('0')).toBeNull();
+  });
+});
+
+describe('formatPlaybackTime', () => {
+  test('returns 0:00 for 0, undefined, NaN and Infinity', () => {
+    expect(formatPlaybackTime(0)).toBe('0:00');
+    expect(formatPlaybackTime(undefined)).toBe('0:00');
+    expect(formatPlaybackTime(NaN)).toBe('0:00');
+    expect(formatPlaybackTime(Infinity)).toBe('0:00');
+  });
+
+  test('floors fractional seconds (audio currentTime is fractional)', () => {
+    expect(formatPlaybackTime(65.9)).toBe('1:05');
+  });
+
+  test('pads seconds and does not roll minutes into hours', () => {
+    expect(formatPlaybackTime(9)).toBe('0:09');
+    expect(formatPlaybackTime(600)).toBe('10:00');
+    expect(formatPlaybackTime(3661)).toBe('61:01');
   });
 });
