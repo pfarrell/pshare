@@ -36,12 +36,11 @@ describe('PlayActionsMenu', () => {
     expect(container.querySelector('.play-actions-bar')).toBeEmptyDOMElement();
   });
 
-  test('the toggle opens one combined menu with Play Now, Play Next, Add to Queue, and overflow actions in that order', async () => {
+  test('the toggle opens one combined menu with Play Next, Add to Queue, and overflow actions in that order', async () => {
     const user = userEvent.setup();
     render(
       <PlayActionsMenu
         onPlay={vi.fn()}
-        onPlayNow={vi.fn()}
         onPlayNext={vi.fn()}
         onAddToQueue={vi.fn()}
         overflowActions={[{ key: 'edit', icon: '✎', label: 'Edit', onClick: vi.fn() }]}
@@ -50,30 +49,9 @@ describe('PlayActionsMenu', () => {
 
     await user.click(screen.getByRole('button', { name: 'More options' }));
 
-    const dropdown = screen.getByRole('button', { name: '▶ Play Now' }).closest('.track-dropdown');
+    const dropdown = screen.getByRole('button', { name: '⏭ Play Next' }).closest('.track-dropdown');
     const labels = Array.from(dropdown.querySelectorAll('button')).map((b) => b.textContent);
-    expect(labels).toEqual(['▶ Play Now', '⏭ Play Next', '➕ Add to Queue', '✎ Edit']);
-  });
-
-  test('clicking Play Now in the menu calls onPlayNow and closes the menu', async () => {
-    const onPlayNow = vi.fn();
-    const user = userEvent.setup();
-    render(<PlayActionsMenu onPlay={vi.fn()} onPlayNow={onPlayNow} onPlayNext={vi.fn()} onAddToQueue={vi.fn()} />);
-
-    await user.click(screen.getByRole('button', { name: 'More options' }));
-    await user.click(screen.getByRole('button', { name: '▶ Play Now' }));
-
-    expect(onPlayNow).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('button', { name: '▶ Play Now' })).not.toBeInTheDocument();
-  });
-
-  test('omits the Play Now menu item when onPlayNow is not provided', async () => {
-    const user = userEvent.setup();
-    render(<PlayActionsMenu onPlay={vi.fn()} onPlayNext={vi.fn()} onAddToQueue={vi.fn()} />);
-
-    await user.click(screen.getByRole('button', { name: 'More options' }));
-
-    expect(screen.queryByRole('button', { name: '▶ Play Now' })).not.toBeInTheDocument();
+    expect(labels).toEqual(['⏭ Play Next', '➕ Add to Queue', '✎ Edit']);
   });
 
   test('clicking Play Next in the menu calls onPlayNext and closes the menu', async () => {

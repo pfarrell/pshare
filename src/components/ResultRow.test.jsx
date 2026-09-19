@@ -77,7 +77,6 @@ describe('long-press / right-click play menu', () => {
   const playWithMenu = (overrides = {}) => ({
     loading: false,
     onPlay: vi.fn(),
-    onPlayNow: vi.fn(),
     onPlayNext: vi.fn(),
     onAddToQueue: vi.fn(),
     label: 'Play Test Title',
@@ -102,7 +101,7 @@ describe('long-press / right-click play menu', () => {
     vi.useRealTimers();
   });
 
-  test('long-pressing the play button opens a menu with Play Now / Play Next / Add to Queue', () => {
+  test('long-pressing the play button opens a menu with Play Next / Add to Queue', () => {
     vi.useFakeTimers();
     render(<ResultRow imageUrl="/x.jpg" title="Test Title" onClick={vi.fn()} play={playWithMenu()} />);
     const button = screen.getByRole('button', { name: 'Play Test Title' });
@@ -110,7 +109,6 @@ describe('long-press / right-click play menu', () => {
     fireEvent.touchStart(button, { touches: [{ clientX: 50, clientY: 50 }] });
     act(() => { vi.advanceTimersByTime(500); });
 
-    expect(screen.getByText('▶ Play Now')).toBeInTheDocument();
     expect(screen.getByText('⏭ Play Next')).toBeInTheDocument();
     expect(screen.getByText('➕ Add to Queue')).toBeInTheDocument();
     vi.useRealTimers();
@@ -123,34 +121,9 @@ describe('long-press / right-click play menu', () => {
 
     fireEvent.contextMenu(button, { clientX: 50, clientY: 50 });
 
-    expect(screen.getByText('▶ Play Now')).toBeInTheDocument();
-  });
-
-  test('omits the Play Now item when onPlayNow is not provided, keeping Play Next/Add to Queue', () => {
-    const play = playWithMenu({ onPlayNow: undefined });
-    render(<ResultRow imageUrl="/x.jpg" title="Test Title" onClick={vi.fn()} play={play} />);
-    fireEvent.contextMenu(screen.getByRole('button', { name: 'Play Test Title' }), { clientX: 50, clientY: 50 });
-
-    expect(screen.queryByText('▶ Play Now')).toBeNull();
     expect(screen.getByText('⏭ Play Next')).toBeInTheDocument();
-    expect(screen.getByText('➕ Add to Queue')).toBeInTheDocument();
   });
 
-  test('choosing "Play Now" from the menu calls onPlayNow and closes the menu, without also firing the row onClick', () => {
-    const onRowClick = vi.fn();
-    const play = playWithMenu();
-    render(<ResultRow imageUrl="/x.jpg" title="Test Title" onClick={onRowClick} play={play} />);
-    fireEvent.contextMenu(screen.getByRole('button', { name: 'Play Test Title' }), { clientX: 50, clientY: 50 });
-
-    fireEvent.click(screen.getByText('▶ Play Now'));
-
-    expect(play.onPlayNow).toHaveBeenCalledTimes(1);
-    expect(play.onPlay).not.toHaveBeenCalled();
-    expect(play.onPlayNext).not.toHaveBeenCalled();
-    expect(play.onAddToQueue).not.toHaveBeenCalled();
-    expect(onRowClick).not.toHaveBeenCalled();
-    expect(screen.queryByText('▶ Play Now')).toBeNull();
-  });
 
   test('choosing "Play Next" from the menu calls onPlayNext and closes the menu', () => {
     const play = playWithMenu();
@@ -180,11 +153,11 @@ describe('long-press / right-click play menu', () => {
     const play = playWithMenu();
     render(<ResultRow imageUrl="/x.jpg" title="Test Title" onClick={vi.fn()} play={play} />);
     fireEvent.contextMenu(screen.getByRole('button', { name: 'Play Test Title' }), { clientX: 50, clientY: 50 });
-    expect(screen.getByText('▶ Play Now')).toBeInTheDocument();
+    expect(screen.getByText('⏭ Play Next')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('result-row-play-menu-backdrop'));
 
-    expect(screen.queryByText('▶ Play Now')).toBeNull();
+    expect(screen.queryByText('⏭ Play Next')).toBeNull();
     expect(play.onPlay).not.toHaveBeenCalled();
     expect(play.onPlayNext).not.toHaveBeenCalled();
     expect(play.onAddToQueue).not.toHaveBeenCalled();
