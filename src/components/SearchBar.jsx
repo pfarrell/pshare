@@ -1,11 +1,13 @@
 // src/components/SearchBar.jsx
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { usePlayerStore } from '../stores/playerStore';
 
 const SearchBar = ({ onSearch, className = "" }) => {
   const [query, setQuery] = useState('');
   const navigate = useNavigate();
   const inputRef = useRef(null);
+  const closeDrawer = usePlayerStore((s) => s.closeDrawer);
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -15,6 +17,8 @@ const SearchBar = ({ onSearch, className = "" }) => {
     if (inputRef.current) {
       inputRef.current.blur();
     }
+
+    closeDrawer();
 
     if (onSearch) {
       onSearch(query);

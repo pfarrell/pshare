@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import SearchBar from './SearchBar';
+import { usePlayerStore } from '../stores/playerStore';
 
 // Captures the current location so we can assert navigation happened
 const LocationDisplay = () => {
@@ -83,5 +84,20 @@ describe('SearchBar', () => {
     expect(
       screen.queryByRole('button', { name: 'Clear search' })
     ).not.toBeInTheDocument();
+  });
+
+  test('closes the playlist drawer on submit', async () => {
+    const closeDrawer = vi.fn();
+    usePlayerStore.setState({ closeDrawer });
+    const user = userEvent.setup();
+    renderSearchBar();
+
+    await user.type(
+      screen.getByPlaceholderText('Search for songs, artists, or albums'),
+      'pink floyd'
+    );
+    await user.keyboard('{Enter}');
+
+    expect(closeDrawer).toHaveBeenCalled();
   });
 });
