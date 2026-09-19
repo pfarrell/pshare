@@ -13,6 +13,7 @@ vi.mock('../services/api', () => ({
   apiService: {
     getArtist: vi.fn(),
     getImageUrl: () => 'http://example.com/image.jpg',
+    getRandomScopeTracks: vi.fn(),
   },
 }));
 
@@ -49,7 +50,8 @@ const album = (id, title, release_year) => ({
 beforeEach(() => {
   useAuthStore.setState({ isAdmin: false, isAuthenticated: true });
   useFavoritesStore.setState({ isFavorite: () => false, toggleFavorite: vi.fn() });
-  usePlayerStore.setState({ startScopeShuffle: vi.fn().mockResolvedValue(undefined) });
+  usePlayerStore.setState({ addTracks: vi.fn(), setQueueSource: vi.fn() });
+  apiService.getRandomScopeTracks.mockResolvedValue({ data: { tracks: [] } });
 });
 
 describe('Artist page — Overtone menu item', () => {
@@ -341,9 +343,12 @@ describe('Artist page — Shuffle All', () => {
     expect(screen.queryByRole('button', { name: 'Play' })).not.toBeInTheDocument();
   });
 
-  test('shows a Play button that starts artist scope shuffle when the artist has albums', async () => {
+  test('shows a Play button that fetches a random batch of the artist\'s tracks when the artist has albums', async () => {
     apiService.getArtist.mockResolvedValue({
       data: { ...artistData, albums: [album(1, 'Album One', '2000')] },
+    });
+    apiService.getRandomScopeTracks.mockResolvedValue({
+      data: { tracks: [{ id: 100, title: 'Random Track', url: '/stream/100' }] },
     });
     renderArtist();
     await screen.findByText('Test Artist');
@@ -351,7 +356,13 @@ describe('Artist page — Shuffle All', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Play' }));
 
     await waitFor(() => {
-      expect(usePlayerStore.getState().startScopeShuffle).toHaveBeenCalledWith('artist', artistData.artist.id);
+      expect(apiService.getRandomScopeTracks).toHaveBeenCalledWith('artist', artistData.artist.id);
+      expect(usePlayerStore.getState().addTracks).toHaveBeenCalledWith(
+        [{ id: 100, title: 'Random Track', url: '/stream/100' }],
+        false,
+        { flashActivity: true, playImmediately: true }
+      );
+      expect(usePlayerStore.getState().setQueueSource).toHaveBeenCalledWith({ type: 'artist', id: artistData.artist.id });
     });
   });
 

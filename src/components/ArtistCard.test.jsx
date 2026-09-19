@@ -1,8 +1,16 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import ArtistCard from './ArtistCard';
 import { useAuthStore } from '../stores/authStore';
 import { useFavoritesStore } from '../stores/favoritesStore';
 import { useViewModeStore } from '../stores/viewModeStore';
+import { apiService } from '../services/api';
+import { usePlayerStore } from '../stores/playerStore';
+
+vi.mock('../services/api', () => ({
+  apiService: {
+    getRandomScopeTracks: vi.fn(),
+  },
+}));
 
 const artist = { id: 1, name: 'Test Artist', image_path: 'x.jpg' };
 
@@ -31,11 +39,6 @@ describe('mobile row layout', () => {
     render(<ArtistCard artist={{ ...artist, album_count: 5 }} onClick={vi.fn()} imageUrl="/img/sm/x.jpg" />);
     expect(screen.getByText('Artist')).toBeInTheDocument();
     expect(screen.queryByText(/album/)).toBeNull();
-  });
-
-  test('does not render a play button', () => {
-    render(<ArtistCard artist={artist} onClick={vi.fn()} imageUrl="/img/sm/x.jpg" />);
-    expect(screen.queryByRole('button')).toBeNull();
   });
 
   test('clicking the row calls onClick with the artist', () => {
@@ -107,5 +110,29 @@ describe('ArtistCard — Favorite menu item', () => {
     render(<ArtistCard artist={artist} onClick={vi.fn()} imageUrl="/img/sm/x.jpg" />);
     fireEvent.contextMenu(screen.getByText('Test Artist').closest('.artist-card'));
     expect(screen.getByText('★ Remove from Favorites')).toBeInTheDocument();
+  });
+});
+
+describe('play button', () => {
+  beforeEach(() => {
+    // Play button aria-label lookup below matches the ResultRow (mobile/list)
+    // render path, same as AlbumCard's play-button tests.
+    Object.defineProperty(window, 'innerWidth', { value: 500, configurable: true });
+  });
+
+  test('tapping play fetches a random batch of the artist\'s tracks and tags queueSource', async () => {
+    apiService.getRandomScopeTracks.mockResolvedValue({
+      data: { tracks: [{ id: 1, title: 'Track One', url: 'http://x/1.mp3' }] },
+    });
+    const addTracks = vi.fn();
+    const setQueueSource = vi.fn();
+    usePlayerStore.setState({ addTracks, setQueueSource });
+
+    render(<ArtistCard artist={artist} onClick={vi.fn()} imageUrl="/img/sm/x.jpg" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Play Test Artist' }));
+
+    await waitFor(() => expect(addTracks).toHaveBeenCalled());
+    expect(apiService.getRandomScopeTracks).toHaveBeenCalledWith('artist', 1);
+    expect(setQueueSource).toHaveBeenCalledWith({ type: 'artist', id: 1 });
   });
 });
