@@ -11,7 +11,16 @@ import { downloadToDisk, ImageStorageError } from '../services/imageStorage.js'
 
 const playlists = new Hono<{ Variables: Variables }>()
 
-function buildTrack(t: any, c: Context) {
+interface OtherAlbum {
+  id: number
+  title: string
+  release_year: string | null
+  image_path: string | null
+  artist: { id: number | null, name: string | null }
+  track_count: number
+}
+
+function buildTrack(t: any, c: Context, otherAlbums: OtherAlbum[]) {
   return {
     id: t.id,
     title: t.title,
@@ -22,6 +31,7 @@ function buildTrack(t: any, c: Context) {
     image_path: t.album_image_path,
     url: `${streamBase(c)}/stream/${t.id}`,
     download_url: `${streamBase(c)}/download/${t.id}`,
+    other_albums: otherAlbums,
   }
 }
 
@@ -33,7 +43,7 @@ export async function fetchTracksForIds(trackIds: number[], c: Context) {
     .leftJoin('artists as album_artist', 'album_artist.id', 'albums.artist_id')
     .leftJoin('artists as track_artist', 'track_artist.id', 'tracks.artist_id')
     .select([
-      'tracks.id', 'tracks.title', 'tracks.track_number', 'tracks.duration_sec',
+      'tracks.id', 'tracks.title', 'tracks.track_number', 'tracks.duration_sec', 'tracks.media_file_id',
       'albums.id as album_id', 'albums.title as album_title', 'albums.image_path as album_image_path', 'albums.release_year as album_release_year',
       'album_artist.id as album_artist_id', 'album_artist.name as album_artist_name',
       'track_artist.id as track_artist_id', 'track_artist.name as track_artist_name',
@@ -42,8 +52,72 @@ export async function fetchTracksForIds(trackIds: number[], c: Context) {
     .where('tracks.approved', '=', true)
     .execute()
 
+  // "Also appears on": for every requested track that shares a media_file_id
+  // with some other track (see consolidate-duplicate-media-files.ts), collect
+  // that other track's album(s), excluding this track's own album (already
+  // shown as the track's primary album).
+  const mediaFileIds = [...new Set(rows.map(r => r.media_file_id).filter((id): id is number => id != null))]
+  const otherAlbumsByTrackId = new Map<number, OtherAlbum[]>()
+
+  if (mediaFileIds.length) {
+    const siblingRows = await db
+      .selectFrom('tracks')
+      .innerJoin('albums', 'albums.id', 'tracks.album_id')
+      .leftJoin('artists', 'artists.id', 'albums.artist_id')
+      .select([
+        'tracks.media_file_id',
+        'albums.id as album_id',
+        'albums.title as album_title',
+        'albums.release_year as album_release_year',
+        'albums.image_path as album_image_path',
+        'artists.id as artist_id',
+        'artists.name as artist_name',
+      ])
+      .where('tracks.media_file_id', 'in', mediaFileIds)
+      .where('tracks.approved', '=', true)
+      .execute()
+
+    const albumsByMediaFileId = new Map<number, Map<number, OtherAlbum>>()
+    for (const row of siblingRows) {
+      if (row.media_file_id == null) continue
+      const byAlbum = albumsByMediaFileId.get(row.media_file_id) ?? new Map<number, OtherAlbum>()
+      byAlbum.set(row.album_id, {
+        id: row.album_id,
+        title: row.album_title,
+        release_year: row.album_release_year,
+        image_path: row.album_image_path,
+        artist: { id: row.artist_id, name: row.artist_name },
+        track_count: 0,
+      })
+      albumsByMediaFileId.set(row.media_file_id, byAlbum)
+    }
+
+    const allOtherAlbumIds = new Set<number>()
+    for (const r of rows) {
+      if (r.media_file_id == null) continue
+      const byAlbum = albumsByMediaFileId.get(r.media_file_id)
+      if (!byAlbum) continue
+      for (const albumId of byAlbum.keys()) {
+        if (albumId !== r.album_id) allOtherAlbumIds.add(albumId)
+      }
+    }
+    const trackCounts = await countsService.trackCountsByAlbumIds([...allOtherAlbumIds])
+
+    for (const r of rows) {
+      if (r.media_file_id == null) {
+        otherAlbumsByTrackId.set(r.id, [])
+        continue
+      }
+      const byAlbum = albumsByMediaFileId.get(r.media_file_id)
+      const others = byAlbum
+        ? [...byAlbum.values()].filter(a => a.id !== r.album_id).map(a => ({ ...a, track_count: trackCounts.get(a.id) ?? 0 }))
+        : []
+      otherAlbumsByTrackId.set(r.id, others)
+    }
+  }
+
   const byId = new Map(rows.map((r) => [r.id, r]))
-  return trackIds.map((id) => byId.get(id)).filter(Boolean).map((t) => buildTrack(t, c))
+  return trackIds.map((id) => byId.get(id)).filter(Boolean).map((t) => buildTrack(t, c, otherAlbumsByTrackId.get(t.id) ?? []))
 }
 
 // GET /playlist/:id
