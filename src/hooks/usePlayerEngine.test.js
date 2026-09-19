@@ -378,6 +378,49 @@ describe('queue auto-continue on natural finish', () => {
     expect(apiService.getAdjacentAlbums).not.toHaveBeenCalled();
     expect(apiService.getRandomScopeTracks).not.toHaveBeenCalled();
   });
+
+  test('a superseded fetch resolving late does not mutate the store', async () => {
+    let resolveFirst;
+    apiService.getRandomScopeTracks.mockImplementation((type, id) => {
+      if (id === 7) return new Promise((resolve) => { resolveFirst = resolve; });
+      return Promise.resolve({ data: { tracks: [] } });
+    });
+    const addTracks = vi.fn();
+    const setQueueSource = vi.fn();
+    usePlayerStore.setState({ addTracks, setQueueSource, playlist: [{ id: 1, title: 'T1', url: '/stream/1' }] });
+
+    const audioRefA = makeAudioRef();
+    const audioRefB = makeAudioRef();
+    renderHook(() => usePlayerEngine(audioRefA, audioRefB));
+
+    // Start the effect for queueSource A (collection 7) — its fetch is left pending.
+    await act(async () => {
+      usePlayerStore.setState({ playlistFinished: true, queueSource: { type: 'collection', id: 7 } });
+      await Promise.resolve();
+    });
+    expect(apiService.getRandomScopeTracks).toHaveBeenCalledWith('collection', 7, expect.anything());
+
+    // Supersede it with queueSource B before A's fetch resolves — this re-runs the effect,
+    // which sets the cleanup's `cancelled` flag for the A run and starts a fresh B run
+    // (mocked to resolve with an empty batch, so B itself produces no mutation either).
+    await act(async () => {
+      usePlayerStore.setState({ queueSource: { type: 'collection', id: 8 } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(apiService.getRandomScopeTracks).toHaveBeenCalledWith('collection', 8, expect.anything());
+
+    // Now let A's stale fetch resolve. Because its effect run was cancelled, this must not
+    // reach the store — this is the coverage the `cancelled` guard exists for.
+    await act(async () => {
+      resolveFirst({ data: { tracks: [{ id: 999, title: 'Stale', url: '/stream/999' }] } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(addTracks).not.toHaveBeenCalled();
+    expect(setQueueSource).not.toHaveBeenCalled();
+  });
 });
 
 describe('scope shuffle top-up', () => {

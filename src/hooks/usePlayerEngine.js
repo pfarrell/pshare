@@ -193,7 +193,7 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
       if (type === 'album') {
         const response = await apiService.getAdjacentAlbums(id);
         const next = response.data?.next;
-        if (!next) return null;
+        if (!next || cancelled) return null;
         const albumResponse = await apiService.getAlbum(next.id);
         const tracks = albumResponse.data?.tracks || [];
         return tracks.length > 0 ? { tracks, nextSource: { type: 'album', id: next.id } } : null;
