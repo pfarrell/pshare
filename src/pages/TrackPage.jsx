@@ -15,6 +15,8 @@ import PageError from '../components/PageError';
 import ContextMenu from '../components/ContextMenu';
 import AddToPlaylistModal from '../components/AddToPlaylistModal';
 import TrackNotesModal from '../components/TrackNotesModal';
+import CardGrid from '../components/CardGrid';
+import AlbumCard from '../components/AlbumCard';
 
 // Matches the basename App.jsx's <Router> uses — needed here because
 // login/signup's return_to is a raw browser redirect (window.location.href),
@@ -165,6 +167,25 @@ const TrackPage = () => {
         actions={headerActions}
         testId="track-page-header-menu-backdrop"
       />
+
+      {track.other_albums && track.other_albums.length > 0 && (
+        <div className="artist-grid" style={{ minHeight: 'auto' }}>
+          <h2 style={{ fontSize: '1.125rem', fontWeight: 'bold', margin: '0.75rem 0 0.75rem 0', color: 'var(--color-text-primary)' }}>
+            Also Appears On
+          </h2>
+          <CardGrid>
+            {track.other_albums.map((album) => (
+              <AlbumCard
+                key={`also-${album.id}`}
+                album={album}
+                artist={album.artist}
+                imageUrl={apiService.getImageUrl(album.image_path, 'album_small')}
+                onClick={(a) => handleEntityClick(`/album/${a.id}`)}
+              />
+            ))}
+          </CardGrid>
+        </div>
+      )}
 
       {showPlaylistModal && (
         <AddToPlaylistModal

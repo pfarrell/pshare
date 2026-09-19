@@ -189,6 +189,61 @@ describe('TrackPage — artist/album links', () => {
   });
 });
 
+describe('TrackPage — also appears on', () => {
+  test('renders an album card for each entry in other_albums', async () => {
+    apiService.getTrack.mockResolvedValue({
+      data: {
+        track: {
+          ...trackData.track,
+          other_albums: [
+            { id: 20, title: 'Greatest Hits', release_year: '1999', image_path: 'b.jpg', artist: { id: 5, name: 'Test Artist' }, track_count: 12 },
+          ],
+        },
+      },
+    });
+    renderTrackPage();
+    await screen.findByText('Test Track');
+
+    expect(screen.getByText('Also Appears On')).toBeInTheDocument();
+    expect(screen.getByText('Greatest Hits')).toBeInTheDocument();
+  });
+
+  test('renders nothing when other_albums is empty', async () => {
+    apiService.getTrack.mockResolvedValue({ data: { track: { ...trackData.track, other_albums: [] } } });
+    renderTrackPage();
+    await screen.findByText('Test Track');
+
+    expect(screen.queryByText('Also Appears On')).not.toBeInTheDocument();
+  });
+
+  test('renders nothing when other_albums is absent (back-compat with older responses)', async () => {
+    apiService.getTrack.mockResolvedValue({ data: trackData });
+    renderTrackPage();
+    await screen.findByText('Test Track');
+
+    expect(screen.queryByText('Also Appears On')).not.toBeInTheDocument();
+  });
+
+  test('clicking an also-appears-on album navigates to it', async () => {
+    apiService.getTrack.mockResolvedValue({
+      data: {
+        track: {
+          ...trackData.track,
+          other_albums: [
+            { id: 20, title: 'Greatest Hits', release_year: '1999', image_path: 'b.jpg', artist: { id: 5, name: 'Test Artist' }, track_count: 12 },
+          ],
+        },
+      },
+    });
+    renderTrackPage();
+    await screen.findByText('Test Track');
+
+    fireEvent.click(screen.getByText('Greatest Hits'));
+
+    expect(await screen.findByTestId('location-display')).toHaveTextContent('/album/20');
+  });
+});
+
 describe('TrackPage — header long-press menu', () => {
   const openMenu = async () => {
     await screen.findByText('Test Track');
