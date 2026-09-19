@@ -836,21 +836,8 @@
   box-shadow: none;
 }
 
-/* Artist header: the "▾" toggle sits on the same row as the artist name
-   and stretches to match its height (via flexbox stretch, not a fixed px
-   value) so it scales naturally between the mobile and desktop title
-   sizes instead of needing a separate override per breakpoint. */
 .artist-header-actions {
   flex-shrink: 0;
-}
-
-.artist-header-actions .play-actions-bar {
-  align-items: stretch;
-  height: 100%;
-}
-
-.artist-header-actions .play-oval-toggle {
-  height: 100%;
 }
 
 .about-section {
@@ -2154,13 +2141,12 @@
   .album-header-description { order: 7; }
 
   /* Title + artist + play button share one row, Spotify-mobile style,
-     instead of the button getting its own full-width row below. The text
-     block's natural height (title + artist, tightly stacked) sets the
-     row's height, and the button stretches to match it exactly — no fixed
-     px height, so it stays correct if font sizes change later. */
+     instead of the button getting its own full-width row below. The
+     button keeps its own fixed size and centers on the row regardless of
+     how many lines the title/artist text wraps to. */
   .album-header-title-row {
     display: flex;
-    align-items: stretch;
+    align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
     margin-bottom: 0.5rem;
@@ -2190,24 +2176,16 @@
     margin-bottom: 0 !important;
   }
 
-  .album-header-title-row .play-actions-bar {
-    align-items: stretch;
-    height: 100%;
-  }
-
   .album-header-title-row .play-split {
-    height: 100%;
     border-radius: 999px;
   }
 
   .album-header-title-row .play-split-play {
     width: 52px;
-    height: 100%;
   }
 
   .album-header-title-row .play-split-toggle {
     width: 26px;
-    height: 100%;
   }
 
   .album-header-title-row .play-now-circle-triangle {

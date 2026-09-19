@@ -87,7 +87,7 @@ export default function Collection() {
 
             return isMobile ? (
               <>
-                <div className="artist-header-title-row" style={{ display: 'flex', alignItems: 'stretch', justifyContent: 'space-between', gap: '1rem', marginBottom: '1rem' }}>
+                <div className="artist-header-title-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '1rem' }}>
                   <h1 style={{ fontSize: '2.5rem', fontWeight: 'bold', margin: 0, color: 'var(--color-text-primary)' }}>
                     {collection.name}
                   </h1>
