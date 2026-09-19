@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc && node ~/.claude/skills/check-deploy/stamp-version.cjs dist/version.json",
+    "build": "tsc",
     "test": "NODE_ENV=test tsx --test 'src/**/*.test.ts'",
     "start": "node dist/index.js",
     "deploy": "npm run build && ./scripts/deploy.sh",

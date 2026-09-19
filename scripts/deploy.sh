@@ -10,6 +10,7 @@ BUILD_DIR="dist"
 
 echo "Building frontend for production..."
 NODE_ENV=production npm run build
+node ~/.claude/skills/check-deploy/stamp-version.cjs ${BUILD_DIR}/version.json
 
 echo "Creating remote directory if it doesn't exist..."
 ssh -p ${REMOTE_PORT} ${REMOTE_USER}@${REMOTE_HOST} "mkdir -p ${SHARED_PUBLIC_DIR}"
