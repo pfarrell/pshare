@@ -16,6 +16,20 @@
 // genuinely different recordings would be a real, hard-to-undo mistake.
 // Skipped groups are logged with a SUSPICIOUS prefix for manual review.
 //
+// Known limitation — overlapping groups across the two signals are not
+// union-merged. The two passes run sequentially and independently: if file
+// A and file B share a file_hash, and file B and file C share a
+// musicbrainz_recording_id (but A and C don't directly share either
+// signal), the hash pass merges A+B first, deleting B's media_files row.
+// By the time the recording pass runs its query, B is gone — it only sees
+// C (a group of one) and does nothing. A and C never get merged, even
+// though they're transitively the same recording via B. This under-merges
+// (it is always safe: two files are never merged unless they directly
+// share a signal) but does not fully solve the transitive-duplicate
+// problem the design spec described, which would require full graph/
+// union-find merging across both signals. That is out of scope here and
+// accepted as a known limitation, not a bug.
+//
 // Canonical selection, per group: the file must still exist on disk, then
 // the largest file on disk wins (the available proxy for audio quality —
 // there's no stored bitrate), then oldest created_at, then lowest id. For a
@@ -35,10 +49,23 @@
 //   Default is dry-run (reports what would happen, writes nothing).
 //   --apply is required for any database write — omitting --dry-run alone
 //   is not enough, given the scale of what this touches.
+//   --limit N caps each pass independently (it's applied separately inside
+//   runHashPass and runRecordingPass) — it is NOT a single flat cap across
+//   the whole run. `--limit 50` processes up to 50 hash groups AND up to 50
+//   recording groups, i.e. up to 100 groups total.
 //
 // Progress checkpoints (every --checkpoint groups per pass, default 100)
 // are written to both stdout and the log file, so `tail -f` on the log
 // gives live status during a long unattended run.
+//
+// Dry-run reports are an approximation when read across both passes. In
+// dry-run mode (no --apply) the hash pass never actually repoints any
+// tracks, so when the recording pass runs afterward it still sees each
+// recording-id group's original, pre-hash-pass membership — which can
+// differ from what a real --apply run would see, since there the hash
+// pass's repoints/deletes have already happened by the time the recording
+// pass's query runs. A dry-run report is a close approximation of what
+// --apply would do, not a guaranteed exact preview of it.
 
 import 'dotenv/config'
 import fs from 'fs'
@@ -97,16 +124,25 @@ async function processGroup(mediaFileIds: number[], groupLabel: string): Promise
     .filter(c => c.absolute_path && fs.existsSync(c.absolute_path))
     .map(c => ({ ...c, sizeBytes: fs.statSync(c.absolute_path!).size }))
 
-  if (existing.length < 2) {
-    if (existing.length === 0 && candidates.length > 0) {
-      console.log(`  ⚠️  [${groupLabel}] no candidate row's file exists on disk — skipping group (${candidates.length} row(s))`)
-      groupsSkipped++
-    }
-    // existing.length === 1 (or 0 with no candidates) means there's nothing
-    // left to consolidate in this group — most commonly because an earlier
-    // pass in this same run already merged it down to one surviving row.
+  if (candidates.length <= 1) {
+    // Nothing to merge — most commonly because an earlier pass in this same
+    // run already merged this group down to one surviving row.
     return
   }
+
+  if (existing.length === 0) {
+    console.log(`  ⚠️  [${groupLabel}] no candidate row's file exists on disk — skipping group (${candidates.length} row(s))`)
+    groupsSkipped++
+    return
+  }
+
+  // existing.length >= 1 here: even a single surviving on-disk file (with
+  // one or more other candidate rows whose files are missing) is a real
+  // consolidation case — the single on-disk file becomes canonical and every
+  // missing-file row's tracks get repointed onto it, healing tracks that
+  // were pointing at rows whose files no longer exist. Fall through to
+  // canonical selection below; for existing.length === 1 the sort is a
+  // trivial no-op (the lone element is already at position 0).
 
   existing.sort((a, b) => {
     if (b.sizeBytes !== a.sizeBytes) return b.sizeBytes - a.sizeBytes
@@ -128,7 +164,31 @@ async function processGroup(mediaFileIds: number[], groupLabel: string): Promise
   )
   const totalTracksToRepoint = redundantTrackCounts.reduce((sum, r) => sum + Number(r?.count ?? 0), 0)
 
+  // One query for the whole group's track title/duration, so a human
+  // reviewing a dry-run report can eyeball whether members look like the
+  // same recording before running --apply, without a separate DB lookup.
+  const memberTrackInfo = await db
+    .selectFrom('tracks')
+    .select(['media_file_id', 'title', 'duration_sec'])
+    .where('media_file_id', 'in', candidates.map(c => c.id))
+    .execute()
+  const trackInfoByMediaFileId = new Map<number, { title: string | null; duration_sec: number | null }>()
+  for (const t of memberTrackInfo) {
+    if (t.media_file_id !== null && !trackInfoByMediaFileId.has(t.media_file_id)) {
+      trackInfoByMediaFileId.set(t.media_file_id, { title: t.title, duration_sec: t.duration_sec })
+    }
+  }
+  const sizeBytesById = new Map(existing.map(e => [e.id, e.sizeBytes]))
+
   console.log(`  ✅ [${groupLabel}] canonical: media_files ${canonical.id} (${canonical.absolute_path}, ${canonical.sizeBytes} bytes); repointing ${totalTracksToRepoint} track(s) off ${redundant.length} redundant row(s)${apply ? '' : ' (dry-run, not applied)'}`)
+  for (const row of [canonical, ...redundant]) {
+    const info = trackInfoByMediaFileId.get(row.id)
+    const sizeBytes = sizeBytesById.get(row.id) ?? 0
+    const role = row.id === canonical.id ? 'canonical' : 'redundant'
+    const title = info?.title ? `"${info.title}"` : '(no track title)'
+    const duration = info?.duration_sec != null ? `${info.duration_sec}s` : '(no duration)'
+    console.log(`       media_files ${row.id} (${role})  ${sizeBytes} bytes  ${title} ${duration}`)
+  }
 
   if (apply) {
     await db.transaction().execute(async (trx) => {
