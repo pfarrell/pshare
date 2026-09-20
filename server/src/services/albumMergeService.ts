@@ -34,22 +34,40 @@ export async function mergeAlbumInto(
   const result = await trx.updateTable('tracks').set(trackUpdateSet).where('album_id', '=', loserId).execute()
   const tracksMoved = Number(result[0]?.numUpdatedRows ?? 0)
 
-  // images: transfer, then ensure at most one primary survives
+  // images: dedupe against both partial unique indexes BEFORE transferring, so the bulk
+  // UPDATE never asks either index to hold two rows for targetId at once (both indexes are
+  // plain, non-deferrable, and checked per-row — a mid-statement collision throws).
+  //
+  // idx_images_album_not_found: UNIQUE (album_id, source) WHERE status = 'not_found' — drop
+  // any loser-side not_found row whose source the target already has a not_found row for.
+  await trx
+    .deleteFrom('images')
+    .where((eb) => eb.and([
+      eb('album_id', '=', loserId),
+      eb('status', '=', 'not_found'),
+      eb('source', 'in', trx.selectFrom('images').select('source').where('album_id', '=', targetId).where('status', '=', 'not_found')),
+    ]))
+    .execute()
+
+  // idx_images_album_primary: UNIQUE (album_id, is_primary) WHERE is_primary = true — if the
+  // target already has a primary, demote the loser's own primary (at most one, same index)
+  // before the transfer, so the two never coexist under targetId even transiently.
   const destPrimary = await trx
     .selectFrom('images')
     .select('id')
     .where('album_id', '=', targetId)
     .where('is_primary', '=', true)
     .executeTakeFirst()
-  await trx.updateTable('images').set({ album_id: targetId }).where('album_id', '=', loserId).execute()
   if (destPrimary) {
     await trx
       .updateTable('images')
       .set({ is_primary: false })
-      .where('album_id', '=', targetId)
-      .where('id', '!=', destPrimary.id)
+      .where('album_id', '=', loserId)
+      .where('is_primary', '=', true)
       .execute()
   }
+
+  await trx.updateTable('images').set({ album_id: targetId }).where('album_id', '=', loserId).execute()
 
   // favorites (kind='album'): dedup against UNIQUE(user_id, kind, target_id), then redirect
   await trx
