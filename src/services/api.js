@@ -142,6 +142,7 @@ export const apiService = {
   getReprocessPreview: (albumId) => api.get(`/admin/album/${albumId}/reprocess-preview`),
   applyReprocess: (albumId, data) => api.post(`/admin/album/${albumId}/reprocess-apply`, data),
   dismissDuplicate: (kind, entity_a_id, entity_b_id) => api.post('/admin/duplicates/dismiss', { kind, entity_a_id, entity_b_id }),
+  getDuplicateAlbums: (page = 1, limit = 25) => api.get(`/admin/duplicates/albums${qs({ page, limit })}`),
   getAlbumSecondaryArtists: (id) => api.get(`/admin/album/${id}/artists`),
   addArtistToAlbum: (albumId, artistId, role) => api.post(`/admin/album/${albumId}/artists`, { artist_id: artistId, role }),
   removeArtistFromAlbum: (albumId, artistId) => api.delete(`/admin/album/${albumId}/artists/${artistId}`),
