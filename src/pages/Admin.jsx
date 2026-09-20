@@ -71,6 +71,9 @@ const Admin = () => {
         <button onClick={() => navigate('/admin/errors')} style={buttonStyle}>Errors</button>
       </div>
       <div style={cardStyle}>
+        <button onClick={() => navigate('/admin/duplicates/albums')} style={buttonStyle}>Duplicate Albums</button>
+      </div>
+      <div style={cardStyle}>
         {unseenSignups > 0 && <span style={badgeStyle}>{unseenSignups}</span>}
         <button onClick={() => navigate('/admin/signups')} style={buttonStyle}>Signups</button>
       </div>

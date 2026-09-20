@@ -36,6 +36,7 @@ import AdminTags from './pages/AdminTags';
 import AdminErrors from './pages/AdminErrors';
 import AdminSignups from './pages/AdminSignups';
 import AdminNew from './pages/AdminNew';
+import AdminDuplicateAlbums from './pages/AdminDuplicateAlbums';
 import TagPage from './pages/TagPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import MusicPlayerWrapper from './components/player/MusicPlayerWrapper';
@@ -275,6 +276,11 @@ function App() {
                       <Route path="/admin/errors" element={
                         <ProtectedRoute requireAdmin>
                           <AdminErrors />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/admin/duplicates/albums" element={
+                        <ProtectedRoute requireAdmin>
+                          <AdminDuplicateAlbums />
                         </ProtectedRoute>
                       } />
                       <Route path="/admin/signups" element={
