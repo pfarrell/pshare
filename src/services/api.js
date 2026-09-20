@@ -145,6 +145,7 @@ export const apiService = {
   getDuplicateAlbums: (page = 1, limit = 25) => api.get(`/admin/duplicates/albums${qs({ page, limit })}`),
   getDuplicateTracks: (page = 1, limit = 25) => api.get(`/admin/duplicates/tracks${qs({ page, limit })}`),
   resolveDuplicateAlbum: (targetId, loserId) => api.post(`/admin/duplicates/albums/${targetId}/resolve`, { loser_id: loserId }),
+  resolveDuplicateTrack: (targetId, loserId) => api.post(`/admin/duplicates/tracks/${targetId}/resolve`, { loser_id: loserId }),
   getAlbumSecondaryArtists: (id) => api.get(`/admin/album/${id}/artists`),
   addArtistToAlbum: (albumId, artistId, role) => api.post(`/admin/album/${albumId}/artists`, { artist_id: artistId, role }),
   removeArtistFromAlbum: (albumId, artistId) => api.delete(`/admin/album/${albumId}/artists/${artistId}`),

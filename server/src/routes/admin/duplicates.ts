@@ -3,6 +3,7 @@ import type { Variables } from '../../types.js'
 import { db } from '../../db/database.js'
 import { titlesRoughlyMatch } from '../../utils/titleMatch.js'
 import { mergeAlbumInto } from '../../services/albumMergeService.js'
+import { mergeTrackInto } from '../../services/trackMergeService.js'
 
 const pairKey = (a: number, b: number): string => (a < b ? `${a}-${b}` : `${b}-${a}`)
 
@@ -219,6 +220,22 @@ router.post('/duplicates/albums/:targetId/resolve', async (c) => {
   } catch (error) {
     console.error('Error resolving duplicate album:', error)
     return c.json({ error: 'Failed to merge album' }, 500)
+  }
+})
+
+router.post('/duplicates/tracks/:targetId/resolve', async (c) => {
+  const targetId = parseInt(c.req.param('targetId'))
+  const body = await c.req.json()
+  const loserId = parseInt(body.loser_id)
+  if (!Number.isInteger(targetId) || !Number.isInteger(loserId) || targetId === loserId) {
+    return c.json({ error: 'targetId and loser_id must be distinct integers' }, 400)
+  }
+  try {
+    await db.transaction().execute((trx) => mergeTrackInto(targetId, loserId, trx))
+    return c.json({ success: true })
+  } catch (error) {
+    console.error('Error resolving duplicate track:', error)
+    return c.json({ error: 'Failed to merge track' }, 500)
   }
 })
 
