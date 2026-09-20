@@ -5,6 +5,7 @@ import { MBID_RETRYABLE } from './artists.js'
 import { imagesDir } from '../../config/paths.js'
 import { parseFile } from 'music-metadata'
 import fs from 'fs'
+import { mergeAlbumInto } from '../../services/albumMergeService.js'
 
 const router = new Hono()
 
@@ -558,49 +559,18 @@ router.post('/album/:id/merge', async (c) => {
   const { destination_album_id, track_offset = 0 } = body
 
   if (!destination_album_id) return c.json({ error: 'destination_album_id is required' }, 400)
-  if (sourceAlbumId === parseInt(destination_album_id)) return c.json({ error: 'Cannot merge an album into itself' }, 400)
+  const destId = parseInt(destination_album_id)
+  if (sourceAlbumId === destId) return c.json({ error: 'Cannot merge an album into itself' }, 400)
 
-  const destAlbum = await db
-    .selectFrom('albums')
-    .select(['id', 'artist_id', 'is_compilation'])
-    .where('id', '=', parseInt(destination_album_id))
-    .executeTakeFirst()
-
+  const destAlbum = await db.selectFrom('albums').select('id').where('id', '=', destId).executeTakeFirst()
   if (!destAlbum) return c.json({ error: 'Destination album not found' }, 404)
 
-  const sourceAlbum = await db
-    .selectFrom('albums')
-    .select('id')
-    .where('id', '=', sourceAlbumId)
-    .executeTakeFirst()
-
+  const sourceAlbum = await db.selectFrom('albums').select('id').where('id', '=', sourceAlbumId).executeTakeFirst()
   if (!sourceAlbum) return c.json({ error: 'Source album not found' }, 404)
 
   try {
-    const offset = parseInt(track_offset) || 0
-
-    if (offset > 0) {
-      await db
-        .updateTable('tracks')
-        .set({ track_number: sql`track_number::integer + ${offset}`, updated_at: new Date() })
-        .where('album_id', '=', sourceAlbumId)
-        .execute()
-    }
-
-    const updateSet: Record<string, any> = { album_id: destAlbum.id, updated_at: new Date() }
-    if (!destAlbum.is_compilation) {
-      updateSet.artist_id = destAlbum.artist_id
-    }
-
-    const result = await db
-      .updateTable('tracks')
-      .set(updateSet)
-      .where('album_id', '=', sourceAlbumId)
-      .execute()
-
-    await db.deleteFrom('albums').where('id', '=', sourceAlbumId).execute()
-
-    return c.json({ success: true, tracks_moved: Number(result[0]?.numUpdatedRows || 0) })
+    const result = await db.transaction().execute((trx) => mergeAlbumInto(destId, sourceAlbumId, trx, parseInt(track_offset) || 0))
+    return c.json({ success: true, tracks_moved: result.tracksMoved })
   } catch (error) {
     console.error('Error merging album:', error)
     return c.json({ error: 'Failed to merge album' }, 500)

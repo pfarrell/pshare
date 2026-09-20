@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import type { Variables } from '../../types.js'
 import { db } from '../../db/database.js'
 import { titlesRoughlyMatch } from '../../utils/titleMatch.js'
+import { mergeAlbumInto } from '../../services/albumMergeService.js'
 
 const pairKey = (a: number, b: number): string => (a < b ? `${a}-${b}` : `${b}-${a}`)
 
@@ -203,6 +204,22 @@ router.get('/duplicates/tracks', async (c) => {
   }))
 
   return c.json({ pairs: pageItems, pagination: { page, limit, total, totalPages } })
+})
+
+router.post('/duplicates/albums/:targetId/resolve', async (c) => {
+  const targetId = parseInt(c.req.param('targetId'))
+  const body = await c.req.json()
+  const loserId = parseInt(body.loser_id)
+  if (!Number.isInteger(targetId) || !Number.isInteger(loserId) || targetId === loserId) {
+    return c.json({ error: 'targetId and loser_id must be distinct integers' }, 400)
+  }
+  try {
+    const result = await db.transaction().execute((trx) => mergeAlbumInto(targetId, loserId, trx))
+    return c.json({ success: true, tracks_moved: result.tracksMoved })
+  } catch (error) {
+    console.error('Error resolving duplicate album:', error)
+    return c.json({ error: 'Failed to merge album' }, 500)
+  }
 })
 
 export default router
