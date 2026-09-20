@@ -69,6 +69,26 @@ export async function mergeAlbumInto(
 
   await trx.updateTable('images').set({ album_id: targetId }).where('album_id', '=', loserId).execute()
 
+  // albums.image_path is denormalized off the primary images row (kept in sync by
+  // entityImagesService's syncParentImagePath whenever a primary image is set directly) —
+  // it is NOT a live join, so the transfer above doesn't update it on its own. Only the
+  // "target had no primary before" case needs fixing up: the surviving primary is then the
+  // loser's former primary, which the target's image_path was never pointed at.
+  if (!destPrimary) {
+    const newPrimary = await trx
+      .selectFrom('images')
+      .leftJoin('media_files', (join) =>
+        join.onRef('media_files.entity_id', '=', 'images.id').on('media_files.entity_type', '=', 'image')
+      )
+      .select('media_files.absolute_path as path')
+      .where('images.album_id', '=', targetId)
+      .where('images.is_primary', '=', true)
+      .executeTakeFirst()
+    if (newPrimary?.path) {
+      await trx.updateTable('albums').set({ image_path: newPrimary.path, updated_at: new Date() }).where('id', '=', targetId).execute()
+    }
+  }
+
   // favorites (kind='album'): dedup against UNIQUE(user_id, kind, target_id), then redirect
   await trx
     .deleteFrom('favorites')
@@ -102,6 +122,19 @@ export async function mergeAlbumInto(
     ]))
     .execute()
   await trx.updateTable('collection_albums').set({ album_id: targetId }).where('album_id', '=', loserId).execute()
+
+  // artist_albums (secondary artist credits: featured/guest/collaborator/composer/performer,
+  // plus the loser's own primary-artist row): ON DELETE CASCADE on album_id would otherwise
+  // silently drop these when the loser album is deleted below. Dedup against
+  // UNIQUE(artist_id, album_id), then redirect the rest — same shape as collection_albums.
+  await trx
+    .deleteFrom('artist_albums')
+    .where((eb) => eb.and([
+      eb('album_id', '=', loserId),
+      eb('artist_id', 'in', trx.selectFrom('artist_albums').select('artist_id').where('album_id', '=', targetId)),
+    ]))
+    .execute()
+  await trx.updateTable('artist_albums').set({ album_id: targetId }).where('album_id', '=', loserId).execute()
 
   await trx.deleteFrom('albums').where('id', '=', loserId).execute()
 

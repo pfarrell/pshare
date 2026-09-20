@@ -24,7 +24,11 @@ export default function AdminDuplicateAlbums() {
     try {
       await apiService.resolveDuplicateAlbum(keepId, loseId);
       toast.success(`Merged "${loseTitle}" into "${keepTitle}".`);
-      setPairs((prev) => prev.filter((p) => pairKey(p) !== key));
+      // A 3+-member duplicate group can produce multiple overlapping pairs sharing an
+      // id (e.g. [t1,t2] and [t2,t3]) — drop every pair referencing either id involved
+      // in this merge, not just the exact pair just resolved, since the other pair's
+      // row is now stale (one of its two ids no longer exists).
+      setPairs((prev) => prev.filter((p) => p.a.id !== keepId && p.a.id !== loseId && p.b.id !== keepId && p.b.id !== loseId));
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to merge albums'));
     } finally {

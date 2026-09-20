@@ -107,7 +107,11 @@ router.get('/duplicates/albums', async (c) => {
       }
     }
 
-    for (const cluster of clusterByTitle(artistAlbums)) {
+    // A null/empty title can't participate in title-based matching — titlesRoughlyMatch()
+    // calls .toLowerCase() with no null check, and albums.title is nullable in the actual
+    // schema (despite the Kysely type saying string), so this isn't just theoretical.
+    const titledAlbums = artistAlbums.filter((a) => a.title)
+    for (const cluster of clusterByTitle(titledAlbums)) {
       for (const [a, b] of chainPairs(cluster)) {
         const key = pairKey(a.id, b.id)
         if (dismissedSet.has(key) || tier1Keys.has(key)) continue
@@ -183,7 +187,9 @@ router.get('/duplicates/tracks', async (c) => {
       }
     }
 
-    for (const cluster of clusterByTitle(albumTracks)) {
+    // Same null-title guard as the albums route above — tracks.title is nullable too.
+    const titledTracks = albumTracks.filter((t) => t.title)
+    for (const cluster of clusterByTitle(titledTracks)) {
       for (const [a, b] of chainPairs(cluster)) {
         const key = pairKey(a.id, b.id)
         if (dismissedSet.has(key) || tier1Keys.has(key)) continue
@@ -214,6 +220,19 @@ router.post('/duplicates/albums/:targetId/resolve', async (c) => {
   if (!Number.isInteger(targetId) || !Number.isInteger(loserId) || targetId === loserId) {
     return c.json({ error: 'targetId and loser_id must be distinct integers' }, 400)
   }
+  // The review-queue UI can show a now-stale pair (e.g. after another pair from the
+  // same 3+-member group was already resolved) — verify both rows still exist before
+  // starting the merge, rather than letting the transaction silently mis-point rows
+  // onto a deleted id (see chainPairs()'s doc comment above).
+  const existing = await db
+    .selectFrom('albums')
+    .select('id')
+    .where('id', 'in', [targetId, loserId])
+    .execute()
+  const existingIds = new Set(existing.map((r) => r.id))
+  if (!existingIds.has(targetId) || !existingIds.has(loserId)) {
+    return c.json({ error: 'Album not found (it may have already been merged)' }, 404)
+  }
   try {
     const result = await db.transaction().execute((trx) => mergeAlbumInto(targetId, loserId, trx))
     return c.json({ success: true, tracks_moved: result.tracksMoved })
@@ -229,6 +248,16 @@ router.post('/duplicates/tracks/:targetId/resolve', async (c) => {
   const loserId = parseInt(body.loser_id)
   if (!Number.isInteger(targetId) || !Number.isInteger(loserId) || targetId === loserId) {
     return c.json({ error: 'targetId and loser_id must be distinct integers' }, 400)
+  }
+  // Same stale-row protection as the album resolve route above.
+  const existing = await db
+    .selectFrom('tracks')
+    .select('id')
+    .where('id', 'in', [targetId, loserId])
+    .execute()
+  const existingIds = new Set(existing.map((r) => r.id))
+  if (!existingIds.has(targetId) || !existingIds.has(loserId)) {
+    return c.json({ error: 'Track not found (it may have already been merged)' }, 404)
   }
   try {
     await db.transaction().execute((trx) => mergeTrackInto(targetId, loserId, trx))
