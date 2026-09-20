@@ -307,6 +307,15 @@ interface NoteTable {
   created_at: ColumnType<Date, string | Date | undefined, never>
 }
 
+interface DismissedDuplicateTable {
+  id: Generated<number>
+  kind: 'album' | 'track'
+  entity_a_id: number
+  entity_b_id: number
+  dismissed_by: number | null
+  dismissed_at: ColumnType<Date, string | Date | undefined, never>
+}
+
 interface ErrorLogTable {
   id: Generated<number>
   source: string
@@ -352,6 +361,7 @@ export interface Database {
   discovery_sources: DiscoverySourceTable
   user_recall_tokens: UserRecallTokenTable
   notes: NoteTable
+  dismissed_duplicates: DismissedDuplicateTable
   oauth_identities: OAuthIdentityTable
   error_log: ErrorLogTable
   signup_log: SignupLogTable
