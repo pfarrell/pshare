@@ -129,4 +129,80 @@ router.get('/duplicates/albums', async (c) => {
   return c.json({ pairs: pageItems, pagination: { page, limit, total, totalPages } })
 })
 
+router.get('/duplicates/tracks', async (c) => {
+  const page = Math.max(1, parseInt(c.req.query('page') ?? '1') || 1)
+  const limit = Math.max(1, parseInt(c.req.query('limit') ?? '25') || 1)
+
+  const dismissedRows = await db
+    .selectFrom('dismissed_duplicates')
+    .select(['entity_a_id', 'entity_b_id'])
+    .where('kind', '=', 'track')
+    .execute()
+  const dismissedSet = new Set(dismissedRows.map((d) => pairKey(d.entity_a_id, d.entity_b_id)))
+
+  const tracks = await db
+    .selectFrom('tracks')
+    .leftJoin('albums', 'albums.id', 'tracks.album_id')
+    .select([
+      'tracks.id', 'tracks.album_id', 'tracks.title', 'tracks.media_file_id', 'tracks.duration_sec',
+      'albums.title as album_title',
+    ])
+    .where('tracks.approved', '=', true)
+    .where('tracks.album_id', 'is not', null)
+    .execute()
+
+  const byAlbum = new Map<number, typeof tracks>()
+  for (const t of tracks) {
+    const list = byAlbum.get(t.album_id!) ?? []
+    list.push(t)
+    byAlbum.set(t.album_id!, list)
+  }
+
+  type TrackRow = (typeof tracks)[number]
+  type Pair = { tier: 1 | 2; a: TrackRow; b: TrackRow }
+  const pairs: Pair[] = []
+  const tier1Keys = new Set<string>()
+
+  for (const albumTracks of byAlbum.values()) {
+    const byMediaFile = new Map<number, TrackRow[]>()
+    for (const t of albumTracks) {
+      if (!t.media_file_id) continue
+      const list = byMediaFile.get(t.media_file_id) ?? []
+      list.push(t)
+      byMediaFile.set(t.media_file_id, list)
+    }
+    for (const group of byMediaFile.values()) {
+      if (group.length < 2) continue
+      for (const [a, b] of chainPairs(group)) {
+        const key = pairKey(a.id, b.id)
+        if (dismissedSet.has(key)) continue
+        pairs.push({ tier: 1, a, b })
+        tier1Keys.add(key)
+      }
+    }
+
+    for (const cluster of clusterByTitle(albumTracks)) {
+      for (const [a, b] of chainPairs(cluster)) {
+        const key = pairKey(a.id, b.id)
+        if (dismissedSet.has(key) || tier1Keys.has(key)) continue
+        pairs.push({ tier: 2, a, b })
+      }
+    }
+  }
+
+  pairs.sort((x, y) => x.tier - y.tier)
+
+  const total = pairs.length
+  const totalPages = Math.max(1, Math.ceil(total / limit))
+  const shape = (row: TrackRow) => ({
+    id: row.id, title: row.title, duration_sec: row.duration_sec,
+    album_id: row.album_id, album_title: row.album_title,
+  })
+  const pageItems = pairs.slice((page - 1) * limit, page * limit).map((p) => ({
+    tier: p.tier, a: shape(p.a), b: shape(p.b),
+  }))
+
+  return c.json({ pairs: pageItems, pagination: { page, limit, total, totalPages } })
+})
+
 export default router
