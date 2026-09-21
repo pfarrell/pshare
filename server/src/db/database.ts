@@ -155,6 +155,13 @@ interface PasswordResetTokenTable {
   created_at: ColumnType<Date, never, never>
 }
 
+interface JukeboxDeviceTable {
+  id: Generated<number>
+  user_id: number
+  name: string
+  created_at: ColumnType<Date, string | undefined, never>
+}
+
 interface UserPlaylistTable {
   id: Generated<number>
   user_id: number
@@ -345,6 +352,7 @@ export interface Database {
   upload_queue: UploadQueueTable
   users: UserTable
   password_reset_tokens: PasswordResetTokenTable
+  jukebox_devices: JukeboxDeviceTable
   user_playlists: UserPlaylistTable
   artist_albums: ArtistAlbumTable
   track_artists: TrackArtistTable

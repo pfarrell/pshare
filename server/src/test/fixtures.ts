@@ -32,6 +32,12 @@ export const createTrack = (label: string, albumId: number, artistId: number | n
     .returningAll()
     .executeTakeFirstOrThrow()
 
+export const createUser = (label: string, { password = null, admin = false }: { password?: string | null, admin?: boolean } = {}) =>
+  db.insertInto('users')
+    .values({ username: fixtureName(label), password, admin, email: null })
+    .returningAll()
+    .executeTakeFirstOrThrow()
+
 export async function cleanupFixtures(): Promise<void> {
   const like = `${PREFIX}%`
   const artistIds = (await db.selectFrom('artists').select('id').where('name', 'like', like).execute()).map((r) => r.id)
@@ -57,4 +63,10 @@ export async function cleanupFixtures(): Promise<void> {
   if (albumIds.length > 0) await db.deleteFrom('albums').where('id', 'in', albumIds).execute()
   await db.deleteFrom('media_files').where('name', 'like', like).execute()
   if (artistIds.length > 0) await db.deleteFrom('artists').where('id', 'in', artistIds).execute()
+
+  const userIds = (await db.selectFrom('users').select('id').where('username', 'like', like).execute()).map((r) => r.id)
+  if (userIds.length > 0) {
+    await db.deleteFrom('jukebox_devices').where('user_id', 'in', userIds).execute()
+    await db.deleteFrom('users').where('id', 'in', userIds).execute()
+  }
 }
