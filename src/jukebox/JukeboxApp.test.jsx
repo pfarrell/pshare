@@ -10,16 +10,13 @@ vi.mock('../components/player/MusicPlayerWrapper', () => ({ default: () => <div 
 vi.mock('./JukeboxBrowsePanel', () => ({ default: ({ onClose }) => <div data-testid="jukebox-browse-panel"><button onClick={onClose}>close-panel</button></div> }));
 vi.mock('./JukeboxKeyboard', () => ({ default: ({ targetElement }) => (targetElement ? <div data-testid="jukebox-keyboard" /> : null) }));
 vi.mock('./useJukeboxKeyboardFocus', () => ({ useJukeboxKeyboardFocus: vi.fn() }));
-vi.mock('../stores/playerStore', () => ({ usePlayerStore: vi.fn() }));
 
 import { useAuthStore } from '../stores/authStore';
-import { usePlayerStore } from '../stores/playerStore';
 import { useJukeboxKeyboardFocus } from './useJukeboxKeyboardFocus';
 
 const renderApp = () => render(<MemoryRouter><JukeboxApp /></MemoryRouter>);
 
 beforeEach(() => {
-  usePlayerStore.mockImplementation((selector) => selector({ drawerOpen: false, closeDrawer: vi.fn() }));
   useJukeboxKeyboardFocus.mockReturnValue(null);
 });
 
@@ -57,23 +54,10 @@ test('tapping the browse button opens the browse panel', () => {
   expect(screen.getByTestId('jukebox-browse-panel')).toBeInTheDocument();
 });
 
-test('opening the browse panel closes the queue drawer if it was open', () => {
+test('tapping the browse panel\'s close button closes it', () => {
   useAuthStore.mockReturnValue(true);
-  const closeDrawer = vi.fn();
-  usePlayerStore.mockImplementation((selector) => selector({ drawerOpen: true, closeDrawer }));
   renderApp();
   fireEvent.click(screen.getByRole('button', { name: 'Browse' }));
-  expect(closeDrawer).toHaveBeenCalled();
-});
-
-test('the browse panel closes itself when the drawer opens', () => {
-  useAuthStore.mockReturnValue(true);
-  usePlayerStore.mockImplementation((selector) => selector({ drawerOpen: false, closeDrawer: vi.fn() }));
-  const { rerender } = renderApp();
-  fireEvent.click(screen.getByRole('button', { name: 'Browse' }));
-  expect(screen.getByTestId('jukebox-browse-panel')).toBeInTheDocument();
-
-  usePlayerStore.mockImplementation((selector) => selector({ drawerOpen: true, closeDrawer: vi.fn() }));
-  rerender(<MemoryRouter><JukeboxApp /></MemoryRouter>);
+  fireEvent.click(screen.getByText('close-panel'));
   expect(screen.queryByTestId('jukebox-browse-panel')).not.toBeInTheDocument();
 });

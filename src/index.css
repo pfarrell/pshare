@@ -2762,15 +2762,21 @@ body:has(.jukebox-app) {
   z-index: 50;
 }
 
-/* Move the queue/hamburger toggle from the left end of the footer's
-   transport row to the right end — every other button stays at its default
-   `order: 0`, so this alone reorders it last. Reorder only; no component
+/* The queue/hamburger toggle is hidden here — Next Up is a tab in the
+   browse panel now (JukeboxNextUpTab.jsx) instead of its own floating
+   drawer triggered from the footer. Hide rather than remove: no component
    change (MusicPlayerWrapper is untouched, same as everywhere else in this
-   section). */
+   section), and its underlying drawerOpen/PlaylistDrawer machinery is
+   simply unused in Jukebox Mode now, not broken. */
 .jukebox-app .hamburger-btn {
-  order: 1;
-  margin-right: 0;
-  margin-left: 1rem;
+  display: none;
+}
+/* Shuffle renders as an empty box on this hardware (🔀 needs a color-emoji
+   font that isn't installed; the other transport glyphs are plain Unicode
+   symbols that don't need one) — hidden rather than chasing a font fix,
+   since it's not an essential control for this kiosk. */
+.jukebox-app .shuffle-btn {
+  display: none;
 }
 
 /* Quick Hit: a touch-draggable horizontal row of recently-played albums.

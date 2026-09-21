@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import QuickHitTab from './QuickHitTab';
 import SearchTab from './SearchTab';
+import JukeboxNextUpTab from './JukeboxNextUpTab';
 import JukeboxArtistView from './JukeboxArtistView';
 import JukeboxAlbumView from './JukeboxAlbumView';
 import { useTouchScroll } from './useTouchScroll';
@@ -38,6 +39,12 @@ const JukeboxBrowsePanel = ({ onClose }) => {
         >
           Search
         </button>
+        <button
+          className={tab === 'nextup' ? 'active' : ''}
+          onClick={() => selectTab('nextup')}
+        >
+          Next Up
+        </button>
         <button onClick={onClose} aria-label="Close">✕</button>
       </div>
       {currentView?.type === 'artist' && (
@@ -59,6 +66,7 @@ const JukeboxBrowsePanel = ({ onClose }) => {
           onSelectAlbum={(album) => pushView({ type: 'album', data: album })}
         />
       )}
+      {!currentView && tab === 'nextup' && <JukeboxNextUpTab />}
     </div>
   );
 };

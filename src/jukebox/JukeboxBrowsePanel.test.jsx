@@ -34,6 +34,7 @@ vi.mock('./JukeboxAlbumView', () => ({
     </div>
   ),
 }));
+vi.mock('./JukeboxNextUpTab', () => ({ default: () => <div data-testid="jukebox-next-up-tab" /> }));
 
 test('renders the Quick Hit tab by default', () => {
   render(<JukeboxBrowsePanel onClose={vi.fn()} />);
@@ -51,6 +52,13 @@ test('switches to the Search tab', () => {
   render(<JukeboxBrowsePanel onClose={vi.fn()} />);
   fireEvent.click(screen.getByRole('button', { name: 'Search' }));
   expect(screen.getByTestId('search-tab')).toBeInTheDocument();
+  expect(screen.queryByTestId('quick-hit-tab')).not.toBeInTheDocument();
+});
+
+test('switches to the Next Up tab', () => {
+  render(<JukeboxBrowsePanel onClose={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Next Up' }));
+  expect(screen.getByTestId('jukebox-next-up-tab')).toBeInTheDocument();
   expect(screen.queryByTestId('quick-hit-tab')).not.toBeInTheDocument();
 });
 
