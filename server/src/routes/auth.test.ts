@@ -14,15 +14,16 @@ const app = () => new Hono().route('/auth', auth)
 
 test('POST /auth/jukebox-login: wrong password is rejected', async () => {
   const passwordHash = await bcrypt.hash('correct-horse', 4)
-  await createUser('jukebox-login-badpw', { password: passwordHash })
+  const user = await createUser('jukebox-login-badpw', { password: passwordHash })
 
   const res = await app().request('/auth/jukebox-login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: 'jukebox-login-badpw', password: 'wrong', deviceName: 'Kitchen' }),
+    body: JSON.stringify({ username: user.username, password: 'wrong', deviceName: 'Kitchen' }),
   })
   // findUserForLogin looks up by exact username, but createUser prefixes the
-  // label — use the same prefixed name the fixture actually created.
+  // label — use the same prefixed name the fixture actually created, so this
+  // reaches the bcrypt.compare mismatch branch rather than "user not found".
   assert.equal(res.status, 401)
 })
 
