@@ -63,13 +63,33 @@ export default defineConfig({
   },
   base: process.env.NODE_ENV === 'production' ? '/pshare/app/' : '/',
   server: {
-    proxy: {
-      '/api': {
-        target: 'http://localhost:3939',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
-      }
-    },
+    // Opt-in: DEV_PROD_PROXY=1 points /api and /images at production (patf.com /
+    // patf.net) so the UI can be developed against the real library — used for the
+    // Pi jukebox, reached at http://localhost:5173 through `ssh -R 5173:localhost:5173`
+    // (localhost counts as a secure context, so prod's Secure cookies still work).
+    // Default is the local backend on :3939.
+    proxy: process.env.DEV_PROD_PROXY
+      ? {
+          '/api': {
+            target: 'https://patf.com',
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/api/, '/pshare/api'),
+            // Prod cookies are scoped to .patf.com; strip the domain so the browser
+            // keeps them for the dev origin instead of discarding them.
+            cookieDomainRewrite: '',
+          },
+          '/images': {
+            target: 'https://patf.net',
+            changeOrigin: true,
+          },
+        }
+      : {
+          '/api': {
+            target: 'http://localhost:3939',
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/api/, '')
+          }
+        },
     historyApiFallback: true
   },
   build: {
