@@ -83,6 +83,7 @@ export const apiService = {
   // Albums
   getAlbum: (id) => api.get(`/album/${id}`), // Returns { artist, album, tracks }
   getRandomAlbums: (size = 30, tag = null) => api.get(`/albums/random${qs({ size, tag })}`),
+  getRecentAlbums: (size = 20) => api.get(`/albums/recent${qs({ size })}`),
   getAdjacentAlbums: (id, collectionId = null) => api.get(`/album/${id}/adjacent${qs({ collection_id: collectionId })}`), // Returns { prev, next }
 
   // Tracks
