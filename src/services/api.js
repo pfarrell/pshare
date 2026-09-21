@@ -52,6 +52,7 @@ export const apiService = {
   // Auth
   signup: (username, password, email = null) => api.post('/auth/signup', { username, password, email }),
   login: (username, password) => api.post('/auth/login', { username, password }),
+  jukeboxLogin: (username, password, deviceName) => api.post('/auth/jukebox-login', { username, password, deviceName }),
   logout: () => api.post('/auth/logout'),
   getMe: () => api.get('/auth/me'),
   getGoogleStartUrl: (returnTo = null, intent = null) => {
