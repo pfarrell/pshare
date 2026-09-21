@@ -2739,6 +2739,17 @@ body:has(.jukebox-app) {
   max-height: none !important;
   box-sizing: border-box;
 }
+/* The tabs live inside the scrolling panel, so pin them: without this a long
+   Quick Hit grid scrolls the tabs (and the ✕ close button) out of view. The
+   opaque background matches .jukebox-browse-panel so content slides under it. */
+.jukebox-app .jukebox-panel-header {
+  position: sticky;
+  top: -1rem; /* cancels the panel's 1rem padding so it pins flush to the top edge */
+  z-index: 1;
+  margin: -1rem -1rem 1rem;
+  padding: 1rem 1rem 0.5rem;
+  background: #2a3540;
+}
 .jukebox-app .jukebox-panel-header button {
   min-height: 3rem;
   min-width: 3rem;
@@ -2782,16 +2793,68 @@ body:has(.jukebox-app) {
 /* Quick Hit: a touch-draggable horizontal row of recently-played albums.
    Previously had no rules at all, so there was no scroll container to drag —
    AlbumCard's children just stacked in normal block flow. */
-.jukebox-app .jukebox-quick-hit-row {
-  display: flex;
-  gap: 1rem;
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: 0.5rem;
+/* The panel scrolls by touch (useTouchScroll sets scrollTop directly), so the
+   native OS-styled scrollbar is just visual noise on a kiosk. */
+.jukebox-app .jukebox-browse-panel {
+  scrollbar-width: none;
 }
-.jukebox-app .jukebox-quick-hit-row > * {
-  flex: 0 0 auto;
+.jukebox-app .jukebox-browse-panel::-webkit-scrollbar {
+  display: none;
+}
+
+/* Quick Hit: a plain 2-column grid of cover tiles. No scroller of its own —
+   .jukebox-browse-panel scrolls vertically (see QuickHitTab.jsx). */
+.jukebox-app .jukebox-quick-hit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem 1rem;
+}
+.jukebox-app .jukebox-quick-hit-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: white;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.jukebox-app .jukebox-quick-hit-art,
+.jukebox-app .jukebox-quick-hit-art-placeholder {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 6px;
+  background: #3c4a57;
+}
+.jukebox-app .jukebox-quick-hit-art {
+  display: block;
+  object-fit: cover;
+}
+.jukebox-app .jukebox-quick-hit-art-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  color: rgba(255, 255, 255, 0.4);
+}
+.jukebox-app .jukebox-quick-hit-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.jukebox-app .jukebox-quick-hit-artist {
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.65);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Search results: album and track lists. .jukebox-browse-panel (above)

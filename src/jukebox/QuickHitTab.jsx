@@ -1,16 +1,15 @@
 import { useState, useEffect } from 'react';
 import { apiService } from '../services/api';
-import AlbumCard from '../components/AlbumCard';
-import { useTouchScroll } from './useTouchScroll';
+import QuickHitAlbumTile from './QuickHitAlbumTile';
 
-// AlbumCard already has its own tap-to-play PlayButton (see
-// src/components/AlbumCard.jsx) wired through useQueueActions — the card
-// body's onClick instead drills into that album's track list, via
-// onSelectAlbum (owned by JukeboxBrowsePanel), same as Search's album tap.
+// A plain vertical grid of tiles: tapping one drills into that album's track
+// list via onSelectAlbum (owned by JukeboxBrowsePanel, same as Search's album
+// tap). There is deliberately no scroller here — the browse panel itself
+// scrolls vertically (see useTouchScroll in JukeboxBrowsePanel), which avoids
+// the nested horizontal-inside-vertical scroll conflict the old row had.
 const QuickHitTab = ({ onSelectAlbum }) => {
   const [albums, setAlbums] = useState(null);
   const [error, setError] = useState(false);
-  const rowRef = useTouchScroll({ axis: 'x' });
 
   const load = () => {
     setError(false);
@@ -42,14 +41,13 @@ const QuickHitTab = ({ onSelectAlbum }) => {
   }
 
   return (
-    <div className="jukebox-quick-hit-row" ref={rowRef}>
+    <div className="jukebox-quick-hit-grid">
       {albums.map((album) => (
-        <AlbumCard
+        <QuickHitAlbumTile
           key={album.id}
           album={album}
-          artist={album.artist}
           imageUrl={apiService.getImageUrl(album.image_path, 'album_small')}
-          onClick={() => onSelectAlbum(album)}
+          onSelect={onSelectAlbum}
         />
       ))}
     </div>

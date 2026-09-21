@@ -29,6 +29,23 @@ test('fetches and renders recently-played albums', async () => {
   });
 });
 
+test('renders albums as a vertical grid of plain tiles with no play buttons', async () => {
+  apiService.getRecentAlbums.mockResolvedValue({
+    data: [
+      { id: 1, title: 'Album One', image_path: 'a.jpg', artist: { id: 1, name: 'Artist One' }, track_count: 10 },
+      { id: 2, title: 'Album Two', image_path: 'b.jpg', artist: { id: 2, name: 'Artist Two' }, track_count: 8 },
+    ],
+  });
+  const { container } = renderTab();
+  await waitFor(() => screen.getByText('Album One'));
+
+  expect(container.querySelector('.jukebox-quick-hit-grid')).not.toBeNull();
+  expect(container.querySelector('.jukebox-quick-hit-row')).toBeNull();
+  // One button per album, and nothing else interactive (no ▶ / ⋯ menu).
+  expect(screen.getAllByRole('button')).toHaveLength(2);
+  expect(screen.queryByRole('button', { name: /^Play / })).toBeNull();
+});
+
 test('tapping an album calls onSelectAlbum with that album', async () => {
   apiService.getRecentAlbums.mockResolvedValue({
     data: [{ id: 1, title: 'Album One', image_path: 'a.jpg', artist: { id: 1, name: 'Artist One' }, track_count: 10 }],
