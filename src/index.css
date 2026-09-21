@@ -2542,3 +2542,28 @@
   background-color: var(--color-success-pill-bg);
   color: var(--color-success-text);
 }
+
+/* ---- Jukebox Mode ----
+   Scoped under .jukebox-app so these overrides never leak into the normal
+   desktop/mobile layout. Larger touch targets on the reused footer
+   (MusicPlayerWrapper + its built-in PlaylistDrawer) for a 10"+ touchscreen —
+   no behavior changes, sizing only. See
+   docs/superpowers/specs/2026-09-20-jukebox-mode-design.md. */
+.jukebox-app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #3a4853;
+}
+.jukebox-app .jukebox-footer {
+  flex-shrink: 0;
+}
+.jukebox-app .player-btn {
+  min-width: 3.5rem;
+  min-height: 3.5rem;
+  font-size: 1.75rem;
+}
+.jukebox-app .music-player-playlist-container .track-item {
+  min-height: 3.5rem;
+  font-size: 1.1rem;
+}
