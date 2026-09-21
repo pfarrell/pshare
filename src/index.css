@@ -2549,6 +2549,17 @@
    (MusicPlayerWrapper + its built-in PlaylistDrawer) for a 10"+ touchscreen —
    no behavior changes, sizing only. See
    docs/superpowers/specs/2026-09-20-jukebox-mode-design.md. */
+/* There's no base (non-media-query) body/html margin reset anywhere in this
+   file — the browser default `body { margin: 8px }` was never overridden at
+   the top level (only inside mobile breakpoints, which don't apply to a
+   fullscreen kiosk viewport). .jukebox-app is height:100vh, so that 16px of
+   unreset margin (8px top + 8px bottom) pushed the page 16px taller than the
+   viewport, producing a vertical scrollbar. Scoped with :has() so it only
+   ever applies while Jukebox Mode is actually mounted — the normal app's
+   body styling is untouched. */
+body:has(.jukebox-app) {
+  margin: 0;
+}
 .jukebox-app {
   /* Single source of truth for the footer's height: the footer sets it as its
      own height, and both slide-out right-edge panels (.jukebox-browse-panel
@@ -2782,4 +2793,58 @@
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+}
+
+/* In-app on-screen keyboard (JukeboxKeyboard.jsx) — the platform's own
+   (squeekboard + labwc) proved unreliable on the actual kiosk hardware.
+   Fixed to the bottom of the viewport, above everything else (browse panel,
+   Next Up, the floating Browse button), the same way a real OS keyboard
+   overlays whatever's on screen rather than making room for itself. */
+.jukebox-app .jukebox-keyboard {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 80;
+  background: #1a252f;
+  border-top: 1px solid #2c3e50;
+  padding: 0.5rem;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.jukebox-app .jukebox-keyboard-row {
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+}
+.jukebox-app .jukebox-keyboard-key {
+  flex: 1;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  max-width: 4rem;
+  font-size: 1.25rem;
+  border: 1px solid #2c3e50;
+  border-radius: 0.375rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  cursor: pointer;
+}
+.jukebox-app .jukebox-keyboard-key:active {
+  background: rgba(255, 255, 255, 0.2);
+}
+.jukebox-app .jukebox-keyboard-shift.active {
+  background: rgba(59, 130, 246, 0.8);
+  border-color: rgba(59, 130, 246, 1);
+}
+.jukebox-app .jukebox-keyboard-space {
+  flex: 4;
+  max-width: none;
+}
+.jukebox-app .jukebox-keyboard-done {
+  flex: 1.5;
+  max-width: none;
+  background: rgba(59, 130, 246, 0.8);
+  border-color: rgba(59, 130, 246, 1);
 }

@@ -4,6 +4,8 @@ import { usePlayerStore } from '../stores/playerStore';
 import JukeboxLogin from './JukeboxLogin';
 import JukeboxNowPlaying from './JukeboxNowPlaying';
 import JukeboxBrowsePanel from './JukeboxBrowsePanel';
+import JukeboxKeyboard from './JukeboxKeyboard';
+import { useJukeboxKeyboardFocus } from './useJukeboxKeyboardFocus';
 import MusicPlayerWrapper from '../components/player/MusicPlayerWrapper';
 
 const JukeboxApp = () => {
@@ -11,6 +13,11 @@ const JukeboxApp = () => {
   const drawerOpen = usePlayerStore((s) => s.drawerOpen);
   const closeDrawer = usePlayerStore((s) => s.closeDrawer);
   const [activePanel, setActivePanel] = useState(null); // 'browse' | null
+  // The platform's own on-screen keyboard (squeekboard + labwc) proved
+  // unreliable on the actual kiosk hardware, so this shell provides its own —
+  // see JukeboxKeyboard.jsx. Called unconditionally (before the early return
+  // below) since it's a hook.
+  const focusedInput = useJukeboxKeyboardFocus();
 
   // Only one right-edge panel at a time: if the queue drawer (owned by
   // MusicPlayerWrapper's own hamburger button) opens, close ours.
@@ -25,6 +32,7 @@ const JukeboxApp = () => {
     return (
       <div className="jukebox-app">
         <JukeboxLogin />
+        <JukeboxKeyboard targetElement={focusedInput} />
       </div>
     );
   }
@@ -46,6 +54,7 @@ const JukeboxApp = () => {
       <div className="jukebox-footer">
         <MusicPlayerWrapper />
       </div>
+      <JukeboxKeyboard targetElement={focusedInput} />
     </div>
   );
 };
