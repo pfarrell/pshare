@@ -2,6 +2,7 @@ import { Context, Next } from 'hono'
 import { getCookie } from 'hono/cookie'
 import jwt from 'jsonwebtoken'
 import { authService } from '../services/authService.js'
+import { jukeboxDeviceService } from '../services/jukeboxDeviceService.js'
 import type { Variables } from '../types.js'
 
 const JWT_SECRET = process.env.BEMUSED_JWT_SECRET || 'default-secret-change-me'
@@ -11,6 +12,7 @@ interface JWTPayload {
   username: string
   admin: boolean
   iat: number
+  deviceId?: number
 }
 
 type AppContext = Context<{ Variables: Variables }>
@@ -50,7 +52,17 @@ export async function authMiddleware(c: AppContext, next: Next) {
     user?.password_changed_at != null &&
     Math.floor(new Date(user.password_changed_at).getTime() / 1000) > decoded.iat
 
-  if (user && !passwordChangedAfterToken) {
+  // Jukebox device tokens carry a deviceId claim; if that jukebox_devices
+  // row has been deleted (manual revocation — see
+  // docs/superpowers/specs/2026-09-20-jukebox-mode-design.md), the token is
+  // treated as invalid even though its JWT signature/expiry still check out.
+  let deviceRevoked = false
+  if (decoded.deviceId != null) {
+    const device = await jukeboxDeviceService.findById(decoded.deviceId)
+    deviceRevoked = !device
+  }
+
+  if (user && !passwordChangedAfterToken && !deviceRevoked) {
     c.set('user', user)
   }
 
