@@ -2742,3 +2742,44 @@
   font-size: 1.1rem;
   z-index: 50;
 }
+
+/* Move the queue/hamburger toggle from the left end of the footer's
+   transport row to the right end — every other button stays at its default
+   `order: 0`, so this alone reorders it last. Reorder only; no component
+   change (MusicPlayerWrapper is untouched, same as everywhere else in this
+   section). */
+.jukebox-app .hamburger-btn {
+  order: 1;
+  margin-right: 0;
+  margin-left: 1rem;
+}
+
+/* Quick Hit: a touch-draggable horizontal row of recently-played albums.
+   Previously had no rules at all, so there was no scroll container to drag —
+   AlbumCard's children just stacked in normal block flow. */
+.jukebox-app .jukebox-quick-hit-row {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 0.5rem;
+}
+.jukebox-app .jukebox-quick-hit-row > * {
+  flex: 0 0 auto;
+}
+
+/* Search results: album and track lists. .jukebox-browse-panel (above)
+   already provides the scrolling container (overflow-y: auto) — these rules
+   are layout only, giving AlbumCard/Track a defined flow instead of bare
+   unstyled divs. */
+.jukebox-app .jukebox-search-albums {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.jukebox-app .jukebox-search-tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
