@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useTouchScroll } from './useTouchScroll';
 
@@ -118,4 +119,207 @@ test('detaches old listeners when the ref moves to a different element', () => {
 test('does nothing when called with null', () => {
   const { result } = renderHook(() => useTouchScroll({ axis: 'y' }));
   expect(() => result.current(null)).not.toThrow();
+});
+
+// --- Mouse-like pointer input -------------------------------------------
+// The Pi kiosk's touchscreen reaches Chromium as a *mouse* (recorded from real
+// drags: pointerdown/mousedown/pointermove/mouseup/click, zero touch events),
+// so touch-event handling alone never fires there.
+const makePointerEvent = (type, x, y, extra = {}) => {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperties(event, {
+    clientX: { value: x, enumerable: true },
+    clientY: { value: y, enumerable: true },
+    pointerType: { value: extra.pointerType ?? 'mouse', enumerable: true },
+    pointerId: { value: 1, enumerable: true },
+    button: { value: extra.button ?? 0, enumerable: true },
+  });
+  return event;
+};
+
+describe('mouse-like pointer input', () => {
+  test('dragging with a mouse pointer scrolls, like a touch drag', () => {
+    const el = makeScrollableDiv('scrollTop');
+    const { result } = renderHook(() => useTouchScroll({ axis: 'y' }));
+    result.current(el);
+
+    el.dispatchEvent(makePointerEvent('pointerdown', 100, 100));
+    el.dispatchEvent(makePointerEvent('pointermove', 100, 70));
+    expect(el.scrollTop).toBe(30);
+    el.dispatchEvent(makePointerEvent('pointermove', 100, 40));
+    expect(el.scrollTop).toBe(60);
+    el.dispatchEvent(makePointerEvent('pointerup', 100, 40));
+    document.body.removeChild(el);
+  });
+
+  test('horizontal axis drags scrollLeft with a mouse pointer', () => {
+    const el = makeScrollableDiv('scrollLeft');
+    const { result } = renderHook(() => useTouchScroll({ axis: 'x' }));
+    result.current(el);
+
+    el.dispatchEvent(makePointerEvent('pointerdown', 200, 50));
+    el.dispatchEvent(makePointerEvent('pointermove', 170, 50));
+
+    expect(el.scrollLeft).toBe(30);
+    document.body.removeChild(el);
+  });
+
+  test('does not scroll for pointer movement under the drag threshold', () => {
+    const el = makeScrollableDiv('scrollTop');
+    const { result } = renderHook(() => useTouchScroll({ axis: 'y' }));
+    result.current(el);
+
+    el.dispatchEvent(makePointerEvent('pointerdown', 100, 100));
+    el.dispatchEvent(makePointerEvent('pointermove', 100, 97));
+
+    expect(el.scrollTop).toBe(0);
+    document.body.removeChild(el);
+  });
+
+  test('does not move the scroll position on pointermove without a preceding pointerdown', () => {
+    const el = makeScrollableDiv('scrollTop');
+    const { result } = renderHook(() => useTouchScroll({ axis: 'y' }));
+    result.current(el);
+
+    el.dispatchEvent(makePointerEvent('pointermove', 100, 100));
+    el.dispatchEvent(makePointerEvent('pointermove', 100, 40));
+
+    expect(el.scrollTop).toBe(0);
+    document.body.removeChild(el);
+  });
+
+  test('stops scrolling after pointerup', () => {
+    const el = makeScrollableDiv('scrollTop');
+    const { result } = renderHook(() => useTouchScroll({ axis: 'y' }));
+    result.current(el);
+
+    el.dispatchEvent(makePointerEvent('pointerdown', 100, 100));
+    el.dispatchEvent(makePointerEvent('pointermove', 100, 70));
+    el.dispatchEvent(makePointerEvent('pointerup', 100, 70));
+    el.dispatchEvent(makePointerEvent('pointermove', 100, 10));
+
+    expect(el.scrollTop).toBe(30);
+    document.body.removeChild(el);
+  });
+
+  test('ignores touch-type pointers (real touch events already handle those; handling both would double-scroll)', () => {
+    const el = makeScrollableDiv('scrollTop');
+    const { result } = renderHook(() => useTouchScroll({ axis: 'y' }));
+    result.current(el);
+
+    el.dispatchEvent(makePointerEvent('pointerdown', 100, 100, { pointerType: 'touch' }));
+    el.dispatchEvent(makePointerEvent('pointermove', 100, 70, { pointerType: 'touch' }));
+
+    expect(el.scrollTop).toBe(0);
+    document.body.removeChild(el);
+  });
+
+  test('ignores non-primary mouse buttons', () => {
+    const el = makeScrollableDiv('scrollTop');
+    const { result } = renderHook(() => useTouchScroll({ axis: 'y' }));
+    result.current(el);
+
+    el.dispatchEvent(makePointerEvent('pointerdown', 100, 100, { button: 2 }));
+    el.dispatchEvent(makePointerEvent('pointermove', 100, 70));
+
+    expect(el.scrollTop).toBe(0);
+    document.body.removeChild(el);
+  });
+
+  test('does not hijack a drag that starts inside a text input', () => {
+    const el = makeScrollableDiv('scrollTop');
+    const input = document.createElement('input');
+    el.appendChild(input);
+    const { result } = renderHook(() => useTouchScroll({ axis: 'y' }));
+    result.current(el);
+
+    input.dispatchEvent(makePointerEvent('pointerdown', 100, 100));
+    input.dispatchEvent(makePointerEvent('pointermove', 100, 70));
+
+    expect(el.scrollTop).toBe(0);
+    document.body.removeChild(el);
+  });
+
+  test('suppresses the click that follows a drag so it cannot activate what is under the finger', () => {
+    const el = makeScrollableDiv('scrollTop');
+    const button = document.createElement('button');
+    el.appendChild(button);
+    const onClick = vi.fn();
+    button.addEventListener('click', onClick);
+    const { result } = renderHook(() => useTouchScroll({ axis: 'y' }));
+    result.current(el);
+
+    button.dispatchEvent(makePointerEvent('pointerdown', 100, 100));
+    button.dispatchEvent(makePointerEvent('pointermove', 100, 60));
+    button.dispatchEvent(makePointerEvent('pointerup', 100, 60));
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+    expect(onClick).not.toHaveBeenCalled();
+    document.body.removeChild(el);
+  });
+
+  test('a plain tap (no drag) still produces a click', () => {
+    const el = makeScrollableDiv('scrollTop');
+    const button = document.createElement('button');
+    el.appendChild(button);
+    const onClick = vi.fn();
+    button.addEventListener('click', onClick);
+    const { result } = renderHook(() => useTouchScroll({ axis: 'y' }));
+    result.current(el);
+
+    button.dispatchEvent(makePointerEvent('pointerdown', 100, 100));
+    button.dispatchEvent(makePointerEvent('pointerup', 100, 100));
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+    expect(onClick).toHaveBeenCalledTimes(1);
+    document.body.removeChild(el);
+  });
+
+  test('a click after a later, separate tap is not swallowed by an earlier drag', async () => {
+    const el = makeScrollableDiv('scrollTop');
+    const button = document.createElement('button');
+    el.appendChild(button);
+    const onClick = vi.fn();
+    button.addEventListener('click', onClick);
+    const { result } = renderHook(() => useTouchScroll({ axis: 'y' }));
+    result.current(el);
+
+    button.dispatchEvent(makePointerEvent('pointerdown', 100, 100));
+    button.dispatchEvent(makePointerEvent('pointermove', 100, 60));
+    button.dispatchEvent(makePointerEvent('pointerup', 100, 60));
+    await new Promise((r) => setTimeout(r, 10)); // the drag's click never came; suppression must expire
+
+    button.dispatchEvent(makePointerEvent('pointerdown', 100, 100));
+    button.dispatchEvent(makePointerEvent('pointerup', 100, 100));
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+    expect(onClick).toHaveBeenCalledTimes(1);
+    document.body.removeChild(el);
+  });
+
+  test('prevents text selection while a pointer is held down on the scroller', () => {
+    const el = makeScrollableDiv('scrollTop');
+    const { result } = renderHook(() => useTouchScroll({ axis: 'y' }));
+    result.current(el);
+
+    el.dispatchEvent(makePointerEvent('pointerdown', 100, 100));
+    const selectStart = new Event('selectstart', { bubbles: true, cancelable: true });
+    el.dispatchEvent(selectStart);
+
+    expect(selectStart.defaultPrevented).toBe(true);
+    document.body.removeChild(el);
+  });
+
+  test('detaches the pointer listeners when the ref is cleared', () => {
+    const el = makeScrollableDiv('scrollTop');
+    const { result } = renderHook(() => useTouchScroll({ axis: 'y' }));
+    result.current(el);
+    result.current(null);
+
+    el.dispatchEvent(makePointerEvent('pointerdown', 100, 100));
+    el.dispatchEvent(makePointerEvent('pointermove', 100, 50));
+
+    expect(el.scrollTop).toBe(0);
+    document.body.removeChild(el);
+  });
 });
