@@ -7,6 +7,7 @@ import { setCookie, getCookie, deleteCookie } from 'hono/cookie'
 import type { Variables } from '../types.js'
 import { requireAuth } from '../middleware/auth.js'
 import { authService } from '../services/authService.js'
+import { jukeboxDeviceService } from '../services/jukeboxDeviceService.js'
 import { signupLogService } from '../services/signupLogService.js'
 import { sendPasswordResetEmail } from '../services/emailService.js'
 import { isLanHost } from '../db/streamUrl.js'
@@ -39,6 +40,22 @@ function generateToken(userId: number, username: string, admin: boolean): string
   )
 }
 
+// Jukebox kiosks have no keyboard to re-authenticate with, so their session
+// is deliberately long-lived instead of expiring like a normal login — see
+// docs/superpowers/specs/2026-09-20-jukebox-mode-design.md. Revocation is by
+// deleting the device's jukebox_devices row (checked in authMiddleware),
+// not by this token expiring.
+const JUKEBOX_JWT_EXPIRES_IN = '3650d'
+const JUKEBOX_COOKIE_MAX_AGE = 86400 * 3650
+
+function generateJukeboxToken(userId: number, username: string, admin: boolean, deviceId: number): string {
+  return jwt.sign(
+    { id: userId, username, admin, deviceId },
+    JWT_SECRET,
+    { expiresIn: JUKEBOX_JWT_EXPIRES_IN }
+  )
+}
+
 // Cookie scoping differs by which host the request came in on (nginx passes the
 // real Host through unchanged). The LAN IP gets a host-only, non-Secure cookie
 // since it's plain HTTP; patf.com keeps the existing Secure, domain-scoped cookie.
@@ -53,6 +70,23 @@ function cookieOptionsForRequest(c: Context): { secure: boolean; domain: string 
     secure: !isLan,
     domain: isLan ? undefined : '.patf.com',
   }
+}
+
+// Hono's setCookie() helper hard-throws for any Max-Age over 400 days
+// (node_modules/hono/dist/utils/cookie.js enforces RFC 6265bis's SHOULD-NOT
+// guidance as an unconditional error, with no opt-out). A kiosk's ~10-year
+// session legitimately needs to exceed that, so this cookie is written by
+// hand instead of via setCookie(), mirroring the same attributes setCookie()
+// would otherwise produce for the given cookieOptionsForRequest() result.
+function setJukeboxAuthCookie(c: Context, token: string, maxAge: number) {
+  const { secure, domain } = cookieOptionsForRequest(c)
+  const parts = [`auth=${encodeURIComponent(token)}`, `Max-Age=${Math.floor(maxAge)}`]
+  if (domain) parts.push(`Domain=${domain}`)
+  parts.push('Path=/')
+  parts.push('HttpOnly')
+  if (secure) parts.push('Secure')
+  parts.push('SameSite=Lax')
+  c.header('Set-Cookie', parts.join('; '), { append: true })
 }
 
 // Path must be '/', not a sub-path like '/auth/google': both nginx
@@ -368,6 +402,45 @@ auth.post('/login', async (c) => {
   } catch (error: any) {
     console.error('Login error:', error)
     return c.json({ error: 'Authentication failed' }, 500)
+  }
+})
+
+// POST /auth/jukebox-login — same credential check as /auth/login, but for a
+// named kiosk device: creates a jukebox_devices row and issues a JWT with a
+// deviceId claim and a ~10-year expiry instead of the normal 14 days.
+auth.post('/jukebox-login', async (c) => {
+  try {
+    const body = await c.req.json()
+    const { username, password, deviceName } = body
+
+    if (!username || !password || !deviceName) {
+      return c.json({ error: 'Username, password, and deviceName are required' }, 400)
+    }
+
+    const user = await authService.findUserForLogin(username)
+
+    if (!user || !user.password) {
+      return c.json({ error: 'Invalid username or password' }, 401)
+    }
+
+    const passwordMatch = await bcrypt.compare(password, user.password)
+
+    if (!passwordMatch) {
+      return c.json({ error: 'Invalid username or password' }, 401)
+    }
+
+    const device = await jukeboxDeviceService.create(user.id, deviceName)
+    const token = generateJukeboxToken(user.id, user.username, user.admin, device.id)
+
+    setJukeboxAuthCookie(c, token, JUKEBOX_COOKIE_MAX_AGE)
+
+    return c.json({
+      user: await buildUserPayload(user),
+      device: { id: device.id, name: device.name },
+    })
+  } catch (error) {
+    console.error('Jukebox login error:', error)
+    return c.json({ error: 'Login failed' }, 500)
   }
 })
 
