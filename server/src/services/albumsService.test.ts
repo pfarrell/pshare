@@ -17,15 +17,21 @@ test('recentlyPlayed orders by most recent play and dedups by album', async () =
   const trackA = await createTrack('recent-track-a', albumA.id, artist.id)
   const trackB = await createTrack('recent-track-b', albumB.id, artist.id)
 
-  await createLog(albumA.id, trackA.id, artist.id, new Date('2026-01-01T00:00:00Z'))
-  await createLog(albumB.id, trackB.id, artist.id, new Date('2026-01-03T00:00:00Z'))
-  await createLog(albumA.id, trackA.id, artist.id, new Date('2026-01-02T00:00:00Z'))
+  // Relative to now, not fixed calendar dates: recentlyPlayed(50) reads the
+  // whole (shared) dev database with no fixture isolation, so fixtures pinned
+  // to a past date eventually fall out of the LIMIT 50 window as real plays
+  // accumulate. The relative ordering below is the same one the assertion
+  // depends on.
+  const DAY = 86400000
+  await createLog(albumA.id, trackA.id, artist.id, new Date(Date.now() - 3 * DAY))
+  await createLog(albumB.id, trackB.id, artist.id, new Date(Date.now() - 1 * DAY))
+  await createLog(albumA.id, trackA.id, artist.id, new Date(Date.now() - 2 * DAY))
 
   const rows = (await albumsService.recentlyPlayed(50)).rows as any[]
   const relevantIds = rows.map((r) => r.id).filter((id) => id === albumA.id || id === albumB.id)
 
-  // Album B's only play (Jan 3) is more recent than album A's most recent
-  // play (Jan 2), and A appears exactly once despite two logged plays.
+  // Album B's only play (1 day ago) is more recent than album A's most recent
+  // play (2 days ago), and A appears exactly once despite two logged plays.
   assert.deepEqual(relevantIds, [albumB.id, albumA.id])
 })
 

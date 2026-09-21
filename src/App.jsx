@@ -181,6 +181,33 @@ function App() {
     );
   }
 
+  // Shared by both trees below: Jukebox Mode reuses components (SavePlaylistModal,
+  // AddToContainerModal, the 401 interceptor above, ...) that report success and
+  // failure only through react-hot-toast, so it needs a <Toaster/> mounted too.
+  const toaster = (
+    <Toaster
+      position={window.innerWidth <= 768 ? "bottom-center" : "bottom-right"}
+      containerStyle={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0))' }}
+      toastOptions={{
+        duration: 3000,
+        style: {
+          background: '#363636',
+          color: '#fff',
+        },
+        success: {
+          style: {
+            background: '#10b981',
+          },
+        },
+        error: {
+          style: {
+            background: '#ef4444',
+          },
+        },
+      }}
+    />
+  );
+
   if (jukeboxMode) {
     // No <Routes> here on purpose — Jukebox Mode is a single view, not a
     // route tree (see docs/superpowers/specs/2026-09-20-jukebox-mode-design.md).
@@ -189,6 +216,7 @@ function App() {
     // unconditionally and would throw outside a Router.
     return (
       <Router basename={basename}>
+        {toaster}
         <JukeboxApp />
       </Router>
     );
@@ -197,27 +225,7 @@ function App() {
   return (
     <Router basename={basename}>
       <ScrollToTop /> {/* Add the ScrollToTop component here */}
-      <Toaster
-        position={window.innerWidth <= 768 ? "bottom-center" : "bottom-right"}
-        containerStyle={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0))' }}
-        toastOptions={{
-          duration: 3000,
-          style: {
-            background: '#363636',
-            color: '#fff',
-          },
-          success: {
-            style: {
-              background: '#10b981',
-            },
-          },
-          error: {
-            style: {
-              background: '#ef4444',
-            },
-          },
-        }}
-      />
+      {toaster}
       {/* Player lives outside Routes so it is never unmounted during navigation */}
       <div className="app-footer">
         <NowPlaying />

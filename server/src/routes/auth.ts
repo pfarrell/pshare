@@ -393,7 +393,9 @@ auth.post('/login', async (c) => {
 
 // POST /auth/jukebox-login — same credential check as /auth/login, but for a
 // named kiosk device: creates a jukebox_devices row and issues a JWT with a
-// deviceId claim and a ~10-year expiry instead of the normal 14 days.
+// deviceId claim and a 400-day expiry instead of the normal 14 days — 400 days
+// being RFC 6265bis's hard cap on cookie Max-Age (see JUKEBOX_JWT_EXPIRES_IN
+// above), not an arbitrary choice.
 auth.post('/jukebox-login', async (c) => {
   try {
     const body = await c.req.json()

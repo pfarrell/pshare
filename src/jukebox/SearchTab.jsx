@@ -75,7 +75,13 @@ const SearchTab = () => {
           {trackResults.length > 0 && (
             <div className="jukebox-search-tracks">
               {trackResults.map((track, index) => (
-                <Track key={track.id} track={track} index={index} trackCount={trackResults.length} includeMeta />
+                // No includeMeta: it renders "from <album> by <artist>" links
+                // that navigate() to /album/:id and /artist/:id — dead taps
+                // here (Jukebox Mode has no <Routes>) that just pile up
+                // history entries. Track still appends " - <artist>" to the
+                // title line when the track artist differs from the album
+                // artist, so nothing informative is lost.
+                <Track key={track.id} track={track} index={index} trackCount={trackResults.length} />
               ))}
             </div>
           )}
