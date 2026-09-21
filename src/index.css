@@ -2706,6 +2706,14 @@ body:has(.jukebox-app) {
   bottom: var(--jukebox-footer-height);
   width: min(420px, 90vw);
   background: #2a3540;
+  /* There's no base body/html text-color reset in this file (see the
+     :has(.jukebox-app) note above) — AlbumCard/ArtistCard/Track are fine
+     regardless, since each renders its own white card background under its
+     (dark, light-background-oriented) text, but the panel's own plain
+     messages (.jukebox-panel-loading/-error/-empty, tab buttons) have no
+     card behind them and would otherwise inherit the browser's default
+     black text straight onto this dark background. */
+  color: white;
   z-index: 60;
   overflow-y: auto;
   padding: 1rem;
@@ -2847,4 +2855,43 @@ body:has(.jukebox-app) {
   max-width: none;
   background: rgba(59, 130, 246, 0.8);
   border-color: rgba(59, 130, 246, 1);
+}
+
+/* Compact album/artist tiles inside the browse panel. EntityCard (shared by
+   AlbumCard/ArtistCard) renders its full desktop-sized .artist-card here
+   because useIsMobile() checks window width, and the *screen* this kiosk
+   runs on is wide even though this panel is only ~420px — without this,
+   only ~2 tiles fit per row. */
+.jukebox-app .jukebox-browse-panel .artist-card {
+  flex: 0 0 100px;
+  width: 100px;
+}
+.jukebox-app .jukebox-browse-panel .artist-card-title {
+  padding: 0.4rem;
+}
+.jukebox-app .jukebox-browse-panel .artist-card-title h3 {
+  font-size: 0.75rem;
+}
+
+/* Artist/album drill-down views (JukeboxArtistView.jsx, JukeboxAlbumView.jsx) */
+.jukebox-app .jukebox-drill-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.jukebox-app .jukebox-back-button {
+  align-self: flex-start;
+  min-height: 2.75rem;
+  padding: 0.4rem 1rem;
+  font-size: 1.1rem;
+  border: 1px solid #2c3e50;
+  border-radius: 0.375rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  cursor: pointer;
+}
+.jukebox-app .jukebox-drill-title {
+  margin: 0;
+  font-size: 1.25rem;
+  color: white;
 }
