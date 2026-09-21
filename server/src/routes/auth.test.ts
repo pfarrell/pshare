@@ -43,10 +43,11 @@ test('POST /auth/jukebox-login: correct credentials create a device row and set 
 
   const setCookie = res.headers.get('set-cookie')
   assert.match(setCookie ?? '', /auth=/)
-  // ~10 years in seconds, give or take — just confirm it's nowhere near the
-  // normal 14-day session length.
+  // 400 days is RFC 6265bis's hard cap on Max-Age (and what Hono's
+  // setCookie() enforces) — just confirm it's nowhere near the normal
+  // 14-day session length.
   const maxAgeMatch = setCookie?.match(/Max-Age=(\d+)/)
-  assert.ok(maxAgeMatch && Number(maxAgeMatch[1]) > 86400 * 365 * 5)
+  assert.ok(maxAgeMatch && Number(maxAgeMatch[1]) > 86400 * 300)
 
   const device = await db.selectFrom('jukebox_devices').selectAll().where('user_id', '=', user.id).executeTakeFirstOrThrow()
   assert.equal(device.name, 'Kitchen')

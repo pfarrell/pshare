@@ -40,13 +40,16 @@ function generateToken(userId: number, username: string, admin: boolean): string
   )
 }
 
-// Jukebox kiosks have no keyboard to re-authenticate with, so their session
-// is deliberately long-lived instead of expiring like a normal login — see
-// docs/superpowers/specs/2026-09-20-jukebox-mode-design.md. Revocation is by
-// deleting the device's jukebox_devices row (checked in authMiddleware),
-// not by this token expiring.
-const JUKEBOX_JWT_EXPIRES_IN = '3650d'
-const JUKEBOX_COOKIE_MAX_AGE = 86400 * 3650
+// Jukebox kiosks have no keyboard to re-authenticate with, so this is as
+// long-lived as a cookie can be: 400 days is RFC 6265bis's hard cap on
+// Max-Age (also enforced by real browsers, which silently clamp any longer
+// value — Chrome has done this since 2023, others are converging), and
+// Hono's setCookie() throws above it, which is why we don't just pick a
+// bigger number. Revocation is by deleting the device's jukebox_devices row
+// (checked in authMiddleware), not by this token expiring — see
+// docs/superpowers/specs/2026-09-20-jukebox-mode-design.md.
+const JUKEBOX_JWT_EXPIRES_IN = '400d'
+const JUKEBOX_COOKIE_MAX_AGE = 86400 * 400
 
 function generateJukeboxToken(userId: number, username: string, admin: boolean, deviceId: number): string {
   return jwt.sign(
@@ -70,23 +73,6 @@ function cookieOptionsForRequest(c: Context): { secure: boolean; domain: string 
     secure: !isLan,
     domain: isLan ? undefined : '.patf.com',
   }
-}
-
-// Hono's setCookie() helper hard-throws for any Max-Age over 400 days
-// (node_modules/hono/dist/utils/cookie.js enforces RFC 6265bis's SHOULD-NOT
-// guidance as an unconditional error, with no opt-out). A kiosk's ~10-year
-// session legitimately needs to exceed that, so this cookie is written by
-// hand instead of via setCookie(), mirroring the same attributes setCookie()
-// would otherwise produce for the given cookieOptionsForRequest() result.
-function setJukeboxAuthCookie(c: Context, token: string, maxAge: number) {
-  const { secure, domain } = cookieOptionsForRequest(c)
-  const parts = [`auth=${encodeURIComponent(token)}`, `Max-Age=${Math.floor(maxAge)}`]
-  if (domain) parts.push(`Domain=${domain}`)
-  parts.push('Path=/')
-  parts.push('HttpOnly')
-  if (secure) parts.push('Secure')
-  parts.push('SameSite=Lax')
-  c.header('Set-Cookie', parts.join('; '), { append: true })
 }
 
 // Path must be '/', not a sub-path like '/auth/google': both nginx
@@ -432,7 +418,13 @@ auth.post('/jukebox-login', async (c) => {
     const device = await jukeboxDeviceService.create(user.id, deviceName)
     const token = generateJukeboxToken(user.id, user.username, user.admin, device.id)
 
-    setJukeboxAuthCookie(c, token, JUKEBOX_COOKIE_MAX_AGE)
+    setCookie(c, 'auth', token, {
+      httpOnly: true,
+      sameSite: 'Lax',
+      maxAge: JUKEBOX_COOKIE_MAX_AGE,
+      path: '/',
+      ...cookieOptionsForRequest(c),
+    })
 
     return c.json({
       user: await buildUserPayload(user),
