@@ -18,8 +18,15 @@ const JukeboxApp = () => {
     if (drawerOpen) setActivePanel(null);
   }, [drawerOpen]);
 
+  // Wrapped in .jukebox-app too: the login screen is the first thing a fresh
+  // kiosk shows, and it needs the shell's dark ground and kiosk-scale sizing
+  // just as much as the authenticated view does.
   if (!isAuthenticated) {
-    return <JukeboxLogin />;
+    return (
+      <div className="jukebox-app">
+        <JukeboxLogin />
+      </div>
+    );
   }
 
   const openBrowsePanel = () => {
