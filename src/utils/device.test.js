@@ -1,7 +1,13 @@
+import { vi } from 'vitest';
+
+vi.mock('../jukebox/jukeboxMode', () => ({ isJukeboxMode: vi.fn(() => false) }));
+
 import { isMobileDevice } from './device';
+import { isJukeboxMode } from '../jukebox/jukeboxMode';
 
 afterEach(() => {
   Object.defineProperty(window, 'innerWidth', { value: 1024, configurable: true });
+  isJukeboxMode.mockReturnValue(false);
 });
 
 test('returns true when viewport width is at or below the 768px breakpoint', () => {
@@ -23,4 +29,10 @@ test('returns true on a wide viewport when the user agent is mobile', () => {
   });
   expect(isMobileDevice()).toBe(true);
   Object.defineProperty(navigator, 'userAgent', { value: originalUA, configurable: true });
+});
+
+test('returns true on a wide viewport with a desktop user agent when jukebox mode is active', () => {
+  Object.defineProperty(window, 'innerWidth', { value: 1280, configurable: true });
+  isJukeboxMode.mockReturnValue(true);
+  expect(isMobileDevice()).toBe(true);
 });

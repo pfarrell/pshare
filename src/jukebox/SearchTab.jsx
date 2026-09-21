@@ -3,25 +3,16 @@ import { apiService } from '../services/api';
 import AlbumCard from '../components/AlbumCard';
 import ArtistCard from '../components/ArtistCard';
 import Track from '../components/Track';
-import JukeboxArtistView from './JukeboxArtistView';
-import JukeboxAlbumView from './JukeboxAlbumView';
 
-// Playlist/collection results are still filtered out — they're
-// navigate-to-a-page on the desktop UI, and Jukebox Mode has no pages to
-// navigate to. Artists and albums instead drill into a browse view within
-// this same panel (JukeboxArtistView / JukeboxAlbumView) via a small
-// navigation stack, rather than being dead taps. See
-// docs/superpowers/specs/2026-09-20-jukebox-mode-design.md §4.
-const SearchTab = () => {
+// Playlist/collection results are filtered out — they're navigate-to-a-page
+// on the desktop UI, and Jukebox Mode has no pages to navigate to. Artists
+// and albums instead drill into a browse view (via onSelectArtist/
+// onSelectAlbum, owned by JukeboxBrowsePanel) rather than being dead taps.
+// See docs/superpowers/specs/2026-09-20-jukebox-mode-design.md §4.
+const SearchTab = ({ onSelectArtist, onSelectAlbum }) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState(null);
   const [error, setError] = useState(false);
-  // Drill-down stack: each entry is { type: 'artist' | 'album', data }. The
-  // top of the stack is the current view; an empty stack means "show search
-  // results." A stack (not a single "current view" field) is what lets Back
-  // return to an artist's album list after drilling from there into an
-  // album, rather than always popping straight to search results.
-  const [viewStack, setViewStack] = useState([]);
 
   const runSearch = async (q) => {
     if (!q.trim()) return;
@@ -38,23 +29,6 @@ const SearchTab = () => {
     e.preventDefault();
     runSearch(query);
   };
-
-  const pushView = (view) => setViewStack((stack) => [...stack, view]);
-  const popView = () => setViewStack((stack) => stack.slice(0, -1));
-
-  const currentView = viewStack[viewStack.length - 1];
-  if (currentView?.type === 'artist') {
-    return (
-      <JukeboxArtistView
-        artist={currentView.data}
-        onSelectAlbum={(album) => pushView({ type: 'album', data: album })}
-        onBack={popView}
-      />
-    );
-  }
-  if (currentView?.type === 'album') {
-    return <JukeboxAlbumView album={currentView.data} onBack={popView} />;
-  }
 
   const artistResults = (results?.results || []).filter((r) => r.type === 'artist');
   const albumResults = (results?.results || []).filter((r) => r.type === 'album');
@@ -94,7 +68,7 @@ const SearchTab = () => {
                   key={r.data.id}
                   artist={r.data}
                   imageUrl={apiService.getImageUrl(r.data.image_path, 'artist_search')}
-                  onClick={(artist) => pushView({ type: 'artist', data: artist })}
+                  onClick={(artist) => onSelectArtist(artist)}
                 />
               ))}
             </div>
@@ -107,7 +81,7 @@ const SearchTab = () => {
                   album={r.data}
                   artist={r.data.artist}
                   imageUrl={apiService.getImageUrl(r.data.image_path, 'album_small')}
-                  onClick={(album) => pushView({ type: 'album', data: album })}
+                  onClick={(album) => onSelectAlbum(album)}
                 />
               ))}
             </div>

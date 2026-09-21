@@ -1,16 +1,16 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { apiService } from '../services/api';
 import AlbumCard from '../components/AlbumCard';
 import { useTouchScroll } from './useTouchScroll';
 
 // AlbumCard already has its own tap-to-play PlayButton (see
-// src/components/AlbumCard.jsx) wired through useQueueActions, so this
-// component only needs to fetch and lay the albums out — no new play logic.
-const QuickHitTab = () => {
+// src/components/AlbumCard.jsx) wired through useQueueActions — the card
+// body's onClick instead drills into that album's track list, via
+// onSelectAlbum (owned by JukeboxBrowsePanel), same as Search's album tap.
+const QuickHitTab = ({ onSelectAlbum }) => {
   const [albums, setAlbums] = useState(null);
   const [error, setError] = useState(false);
-  const rowRef = useRef(null);
-  useTouchScroll(rowRef, { axis: 'x' });
+  const rowRef = useTouchScroll({ axis: 'x' });
 
   const load = () => {
     setError(false);
@@ -49,7 +49,7 @@ const QuickHitTab = () => {
           album={album}
           artist={album.artist}
           imageUrl={apiService.getImageUrl(album.image_path, 'album_small')}
-          onClick={() => {}}
+          onClick={() => onSelectAlbum(album)}
         />
       ))}
     </div>

@@ -9,26 +9,11 @@ vi.mock('../services/api', () => ({
     getImageUrl: vi.fn(() => '/img/sm/x.jpg'),
   },
 }));
-vi.mock('./JukeboxArtistView', () => ({
-  default: ({ artist, onBack }) => (
-    <div data-testid="jukebox-artist-view">
-      <span>artist-view: {artist.name}</span>
-      <button onClick={onBack}>back-from-artist</button>
-    </div>
-  ),
-}));
-vi.mock('./JukeboxAlbumView', () => ({
-  default: ({ album, onBack }) => (
-    <div data-testid="jukebox-album-view">
-      <span>album-view: {album.title}</span>
-      <button onClick={onBack}>back-from-album</button>
-    </div>
-  ),
-}));
 
 import { apiService } from '../services/api';
 
-const renderTab = () => render(<MemoryRouter><SearchTab /></MemoryRouter>);
+const renderTab = (props = {}) =>
+  render(<MemoryRouter><SearchTab onSelectArtist={vi.fn()} onSelectAlbum={vi.fn()} {...props} /></MemoryRouter>);
 
 const searchResponse = {
   results: [
@@ -58,46 +43,30 @@ test('searches on submit and renders artist, album, and track results', async ()
   });
 });
 
-test('tapping an artist result drills into JukeboxArtistView', async () => {
+test('tapping an artist result calls onSelectArtist with that artist', async () => {
   apiService.search.mockResolvedValue({ data: searchResponse });
-  renderTab();
+  const onSelectArtist = vi.fn();
+  renderTab({ onSelectArtist });
   fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: 'q' } });
   fireEvent.submit(screen.getByRole('search'));
   await waitFor(() => screen.getByText('Found Solo Artist'));
 
   fireEvent.click(screen.getByText('Found Solo Artist'));
 
-  expect(screen.getByTestId('jukebox-artist-view')).toBeInTheDocument();
-  expect(screen.getByText('artist-view: Found Solo Artist')).toBeInTheDocument();
+  expect(onSelectArtist).toHaveBeenCalledWith(expect.objectContaining({ id: 2, name: 'Found Solo Artist' }));
 });
 
-test('tapping an album result drills into JukeboxAlbumView', async () => {
+test('tapping an album result calls onSelectAlbum with that album', async () => {
   apiService.search.mockResolvedValue({ data: searchResponse });
-  renderTab();
+  const onSelectAlbum = vi.fn();
+  renderTab({ onSelectAlbum });
   fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: 'q' } });
   fireEvent.submit(screen.getByRole('search'));
   await waitFor(() => screen.getByText('Found Album'));
 
   fireEvent.click(screen.getByText('Found Album'));
 
-  expect(screen.getByTestId('jukebox-album-view')).toBeInTheDocument();
-  expect(screen.getByText('album-view: Found Album')).toBeInTheDocument();
-});
-
-test('back from a drill-down view returns to search results', async () => {
-  apiService.search.mockResolvedValue({ data: searchResponse });
-  renderTab();
-  fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: 'q' } });
-  fireEvent.submit(screen.getByRole('search'));
-  await waitFor(() => screen.getByText('Found Album'));
-
-  fireEvent.click(screen.getByText('Found Album'));
-  expect(screen.getByTestId('jukebox-album-view')).toBeInTheDocument();
-
-  fireEvent.click(screen.getByText('back-from-album'));
-
-  expect(screen.queryByTestId('jukebox-album-view')).not.toBeInTheDocument();
-  expect(screen.getByText('Found Album')).toBeInTheDocument();
+  expect(onSelectAlbum).toHaveBeenCalledWith(expect.objectContaining({ id: 1, title: 'Found Album' }));
 });
 
 test('shows a prompt before any search has been run', () => {

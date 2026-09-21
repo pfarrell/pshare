@@ -1,24 +1,31 @@
-import { useEffect } from 'react';
+import { useRef, useCallback } from 'react';
 
 const DRAG_THRESHOLD_PX = 6;
 
 // Chromium's native touch-drag-to-scroll gesture recognition proved
-// unreliable on the actual kiosk hardware (a Wayland/labwc/touch-input
-// combination outside anything fixable in app code — the browser still
-// exposes a mouse-draggable scrollbar thumb, so the element genuinely does
-// scroll, it just never converts a touch drag on the *content* into one).
-// This hook takes that translation over directly: track raw touch movement
-// and set scrollTop/scrollLeft ourselves rather than relying on the browser
-// to recognize the gesture.
+// unreliable on the actual kiosk hardware (confirmed via screenshot: the
+// scrollbar thumb is present and mouse/pointer-draggable, so the element
+// genuinely does scroll, it just never converts a touch drag on the
+// *content* into one). This hook takes that translation over directly,
+// tracking raw touchmove deltas and setting scrollTop/scrollLeft manually.
 //
-// Native listeners (not React's synthetic onTouchMove) so the touchmove
-// listener can be registered non-passive — passive:false is what lets
-// preventDefault() actually suppress whatever the browser would otherwise
-// attempt, once we've decided to own the gesture.
-export const useTouchScroll = (ref, { axis = 'y' } = {}) => {
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return undefined;
+// Returns a callback ref, not a plain useRef object, on purpose: a plain
+// `useRef` + `useEffect([ref])` only attaches listeners once, on whichever
+// render first ran the effect — if the scrollable element doesn't exist yet
+// on that render (e.g. a loading state that resolves later, as in
+// QuickHitTab), `ref.current` stays null forever from the effect's point of
+// view, since mutating `.current` doesn't re-trigger the effect. A callback
+// ref fires exactly when the DOM node is actually attached or detached,
+// regardless of which render that happens on.
+export const useTouchScroll = ({ axis = 'y' } = {}) => {
+  const cleanupRef = useRef(null);
+
+  const attachRef = useCallback((el) => {
+    if (cleanupRef.current) {
+      cleanupRef.current();
+      cleanupRef.current = null;
+    }
+    if (!el) return;
 
     let startX = 0;
     let startY = 0;
@@ -66,11 +73,13 @@ export const useTouchScroll = (ref, { axis = 'y' } = {}) => {
     el.addEventListener('touchend', handleTouchEnd, { passive: true });
     el.addEventListener('touchcancel', handleTouchEnd, { passive: true });
 
-    return () => {
+    cleanupRef.current = () => {
       el.removeEventListener('touchstart', handleTouchStart);
       el.removeEventListener('touchmove', handleTouchMove);
       el.removeEventListener('touchend', handleTouchEnd);
       el.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, [ref, axis]);
+  }, [axis]);
+
+  return attachRef;
 };

@@ -2919,3 +2919,14 @@ body:has(.jukebox-app) {
 .jukebox-app .jukebox-browse-panel .track-item.currently-playing .track-title {
   color: #93c5fd !important;
 }
+
+/* <img> elements are draggable by default in every browser (native "drag
+   this image out" behavior) — on a touchscreen, Chromium was interpreting a
+   touch-drag meant to scroll (or, on a card, meant as a tap) as the start of
+   that native image drag instead, visibly showing a ghost thumbnail
+   following the finger and swallowing the gesture entirely. Nothing in
+   Jukebox Mode should ever be able to start one. */
+.jukebox-app img {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
