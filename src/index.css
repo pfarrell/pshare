@@ -2573,6 +2573,17 @@ body:has(.jukebox-app) {
   display: flex;
   flex-direction: column;
   background-color: #3a4853;
+  /* A kiosk has no use for text selection, and on the touchscreen (delivered to
+     Chromium as a mouse — see useTouchScroll.js) every drag would otherwise
+     highlight whatever text it crossed. Inherited by everything below; text
+     inputs opt back in just after this rule. */
+  -webkit-user-select: none;
+  user-select: none;
+}
+.jukebox-app input,
+.jukebox-app textarea {
+  -webkit-user-select: text;
+  user-select: text;
 }
 /* Mirrors .app-footer's chrome (dark ground + top border) — the normal app's
    fixed footer isn't in the tree here, so .music-player-wrapper's height:100%
