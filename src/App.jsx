@@ -42,6 +42,8 @@ import TagPage from './pages/TagPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import MusicPlayerWrapper from './components/player/MusicPlayerWrapper';
 import NowPlaying from './components/NowPlaying';
+import { applyJukeboxModeFromUrl, isJukeboxMode } from './jukebox/jukeboxMode';
+import JukeboxApp from './jukebox/JukeboxApp';
 
 // Handle scroll to top on route changes
 export function ScrollToTop() {
@@ -69,6 +71,10 @@ export function ScrollToTop() {
 function App() {
   const basename = import.meta.env.DEV ? '/' : '/pshare/app';
   const [authInitialized, setAuthInitialized] = useState(false);
+  const [jukeboxMode] = useState(() => {
+    applyJukeboxModeFromUrl();
+    return isJukeboxMode();
+  });
 
   // Initialize auth on app startup
   useEffect(() => {
@@ -172,6 +178,19 @@ function App() {
           <div style={{ fontSize: '1.5rem' }}>Loading...</div>
         </div>
       </div>
+    );
+  }
+
+  if (jukeboxMode) {
+    // No <Routes> here on purpose — Jukebox Mode is a single view, not a
+    // route tree (see docs/superpowers/specs/2026-09-20-jukebox-mode-design.md).
+    // It's still wrapped in <Router> because reused components
+    // (AlbumCard, Track, PlaylistDrawerRow, ...) call useNavigate()
+    // unconditionally and would throw outside a Router.
+    return (
+      <Router basename={basename}>
+        <JukeboxApp />
+      </Router>
     );
   }
 

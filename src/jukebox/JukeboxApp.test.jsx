@@ -1,0 +1,23 @@
+import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { vi } from 'vitest';
+import JukeboxApp from './JukeboxApp';
+
+vi.mock('../stores/authStore', () => ({ useAuthStore: vi.fn() }));
+vi.mock('./JukeboxLogin', () => ({ default: () => <div data-testid="jukebox-login" /> }));
+
+import { useAuthStore } from '../stores/authStore';
+
+const renderApp = () => render(<MemoryRouter><JukeboxApp /></MemoryRouter>);
+
+test('shows JukeboxLogin when not authenticated', () => {
+  useAuthStore.mockReturnValue(false);
+  renderApp();
+  expect(screen.getByTestId('jukebox-login')).toBeInTheDocument();
+});
+
+test('shows the main jukebox view when authenticated', () => {
+  useAuthStore.mockReturnValue(true);
+  renderApp();
+  expect(screen.getByTestId('jukebox-main')).toBeInTheDocument();
+});
