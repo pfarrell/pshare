@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { apiService } from '../services/api';
 import AlbumCard from '../components/AlbumCard';
+import { useTouchScroll } from './useTouchScroll';
 
 // AlbumCard already has its own tap-to-play PlayButton (see
 // src/components/AlbumCard.jsx) wired through useQueueActions, so this
@@ -8,6 +9,8 @@ import AlbumCard from '../components/AlbumCard';
 const QuickHitTab = () => {
   const [albums, setAlbums] = useState(null);
   const [error, setError] = useState(false);
+  const rowRef = useRef(null);
+  useTouchScroll(rowRef, { axis: 'x' });
 
   const load = () => {
     setError(false);
@@ -39,7 +42,7 @@ const QuickHitTab = () => {
   }
 
   return (
-    <div className="jukebox-quick-hit-row">
+    <div className="jukebox-quick-hit-row" ref={rowRef}>
       {albums.map((album) => (
         <AlbumCard
           key={album.id}

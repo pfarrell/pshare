@@ -2895,3 +2895,27 @@ body:has(.jukebox-app) {
   font-size: 1.25rem;
   color: white;
 }
+
+/* Track's own title/meta text (src/components/Track.jsx) uses
+   var(--color-text-primary)/var(--color-text-faint) — dark colors meant for
+   the light-background contexts Track is normally used in (the desktop
+   Search page, album pages). .jukebox-browse-panel's own `color: white`
+   cascade (above) doesn't reach these since Track sets them explicitly. */
+.jukebox-app .jukebox-browse-panel .track-title {
+  color: white;
+}
+.jukebox-app .jukebox-browse-panel .track-artist-album {
+  color: rgba(255, 255, 255, 0.7);
+}
+.jukebox-app .jukebox-browse-panel .track-duration {
+  color: rgba(255, 255, 255, 0.5);
+}
+.jukebox-app .jukebox-browse-panel .track-item {
+  border-bottom-color: rgba(255, 255, 255, 0.15);
+}
+.jukebox-app .jukebox-browse-panel .track-item.currently-playing {
+  background-color: rgba(59, 130, 246, 0.3) !important;
+}
+.jukebox-app .jukebox-browse-panel .track-item.currently-playing .track-title {
+  color: #93c5fd !important;
+}

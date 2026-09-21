@@ -1,12 +1,15 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import QuickHitTab from './QuickHitTab';
 import SearchTab from './SearchTab';
+import { useTouchScroll } from './useTouchScroll';
 
 const JukeboxBrowsePanel = ({ onClose }) => {
   const [tab, setTab] = useState('quickhit');
+  const panelRef = useRef(null);
+  useTouchScroll(panelRef, { axis: 'y' });
 
   return (
-    <div className="jukebox-browse-panel">
+    <div className="jukebox-browse-panel" ref={panelRef}>
       <div className="jukebox-panel-header">
         <button
           className={tab === 'quickhit' ? 'active' : ''}
