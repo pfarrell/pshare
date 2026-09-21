@@ -2567,3 +2567,36 @@
   min-height: 3.5rem;
   font-size: 1.1rem;
 }
+.jukebox-app .jukebox-browse-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(420px, 90vw);
+  background: #2a3540;
+  z-index: 60;
+  overflow-y: auto;
+  padding: 1rem;
+}
+.jukebox-app .jukebox-panel-header button {
+  min-height: 3rem;
+  min-width: 3rem;
+  font-size: 1.1rem;
+  padding: 0.5rem 1rem;
+}
+.jukebox-app .jukebox-search-tab input {
+  min-height: 3rem;
+  font-size: 1.25rem;
+  width: 100%;
+}
+.jukebox-app .jukebox-browse-button {
+  position: fixed;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 4rem;
+  min-height: 4rem;
+  border-radius: 50%;
+  font-size: 1.1rem;
+  z-index: 50;
+}

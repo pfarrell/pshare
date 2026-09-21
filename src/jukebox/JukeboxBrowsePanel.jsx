@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import QuickHitTab from './QuickHitTab';
+import SearchTab from './SearchTab';
 
-// Search tab is added in a later task — see
-// docs/superpowers/specs/2026-09-20-jukebox-mode-design.md §4.
 const JukeboxBrowsePanel = ({ onClose }) => {
   const [tab, setTab] = useState('quickhit');
 
@@ -15,9 +14,16 @@ const JukeboxBrowsePanel = ({ onClose }) => {
         >
           Quick Hit
         </button>
+        <button
+          className={tab === 'search' ? 'active' : ''}
+          onClick={() => setTab('search')}
+        >
+          Search
+        </button>
         <button onClick={onClose} aria-label="Close">✕</button>
       </div>
       {tab === 'quickhit' && <QuickHitTab />}
+      {tab === 'search' && <SearchTab />}
     </div>
   );
 };
