@@ -38,6 +38,11 @@ export const createUser = (label: string, { password = null, admin = false }: { 
     .returningAll()
     .executeTakeFirstOrThrow()
 
+export const createLog = (albumId: number, trackId: number | null, artistId: number | null, createdAt: Date) =>
+  db.insertInto('logs')
+    .values({ album_id: albumId, track_id: trackId, artist_id: artistId, action: 'stream', created_at: createdAt, ip_address: null })
+    .execute()
+
 export async function cleanupFixtures(): Promise<void> {
   const like = `${PREFIX}%`
   const artistIds = (await db.selectFrom('artists').select('id').where('name', 'like', like).execute()).map((r) => r.id)
@@ -60,6 +65,7 @@ export async function cleanupFixtures(): Promise<void> {
   }
 
   await db.deleteFrom('tracks').where('title', 'like', like).execute()
+  if (albumIds.length > 0) await db.deleteFrom('logs').where('album_id', 'in', albumIds).execute()
   if (albumIds.length > 0) await db.deleteFrom('albums').where('id', 'in', albumIds).execute()
   await db.deleteFrom('media_files').where('name', 'like', like).execute()
   if (artistIds.length > 0) await db.deleteFrom('artists').where('id', 'in', artistIds).execute()

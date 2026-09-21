@@ -52,6 +52,25 @@ export function createAlbumsService(db: Kysely<Database>) {
       `.execute(db)
     },
 
+    async recentlyPlayed(size: number) {
+      return sql<any>`
+        SELECT al.id, al.title, al.image_path,
+               ar.id AS artist_id, ar.name AS artist_name,
+               EXISTS (
+                 SELECT 1 FROM artist_albums caa WHERE caa.album_id = al.id AND caa.role = 'collaborator'
+               ) AS has_collaborators,
+               MAX(lg.created_at) AS last_played
+        FROM logs lg
+        INNER JOIN albums al ON al.id = lg.album_id
+        INNER JOIN artists ar ON ar.id = al.artist_id
+        WHERE al.image_path IS NOT NULL AND al.image_path != ''
+          AND al.title != '_Singles'
+        GROUP BY al.id, al.title, al.image_path, ar.id, ar.name
+        ORDER BY last_played DESC
+        LIMIT ${size}
+      `.execute(db)
+    },
+
     async findAlbumById(id: number) {
       return db
         .selectFrom('albums')

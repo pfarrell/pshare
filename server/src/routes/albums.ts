@@ -34,6 +34,26 @@ albums.get('/random', requireAuth, async (c) => {
   })))
 })
 
+// GET /albums/recent?size=N — gated, powers Jukebox Mode's Quick Hit panel
+// (recently-played albums, most recent first). See
+// docs/superpowers/specs/2026-09-20-jukebox-mode-design.md.
+albums.get('/recent', requireAuth, async (c) => {
+  const size = Math.min(parseInt(c.req.query('size') ?? '10'), 200)
+
+  const rows = await albumsService.recentlyPlayed(size)
+  const albumIds = rows.rows.map((row: any) => row.id)
+  const trackCounts = await countsService.trackCountsByAlbumIds(albumIds)
+
+  return c.json(rows.rows.map((row: any) => ({
+    id: row.id,
+    title: row.title,
+    image_path: row.image_path,
+    artist: { id: row.artist_id, name: row.artist_name },
+    has_collaborators: row.has_collaborators,
+    track_count: trackCounts.get(row.id) ?? 0,
+  })))
+})
+
 // GET /album/:id
 albums.get('/:id', async (c) => {
   const id = parseInt(c.req.param('id'))
