@@ -60,12 +60,16 @@ const JukeboxBrowsePanel = ({ onClose }) => {
           />
         )}
         {!currentView && tab === 'quickhit' && <QuickHitTab onSelectAlbum={setSelectedAlbum} />}
-        {!currentView && tab === 'search' && (
+        {/* Hidden, never unmounted: SearchTab owns the query, results and type
+            filter, and unmounting it whenever an artist view or another tab is
+            showing threw all of that away — so tapping an artist and coming
+            Back meant retyping the search. */}
+        <div hidden={tab !== 'search' || !!currentView}>
           <SearchTab
             onSelectArtist={(artist) => pushView({ type: 'artist', data: artist })}
             onSelectAlbum={setSelectedAlbum}
           />
-        )}
+        </div>
         {!currentView && tab === 'nextup' && <JukeboxNextUpTab />}
       </div>
       {selectedAlbum && (

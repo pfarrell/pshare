@@ -39,7 +39,7 @@ test('renders albums as a vertical grid of plain tiles with no play buttons', as
   const { container } = renderTab();
   await waitFor(() => screen.getByText('Album One'));
 
-  expect(container.querySelector('.jukebox-quick-hit-grid')).not.toBeNull();
+  expect(container.querySelector('.jukebox-album-grid')).not.toBeNull();
   expect(container.querySelector('.jukebox-quick-hit-row')).toBeNull();
   // One button per album, and nothing else interactive (no ▶ / ⋯ menu).
   expect(screen.getAllByRole('button')).toHaveLength(2);

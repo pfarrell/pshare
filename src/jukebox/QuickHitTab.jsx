@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiService } from '../services/api';
-import QuickHitAlbumTile from './QuickHitAlbumTile';
+import JukeboxAlbumTile from './JukeboxAlbumTile';
 
 // A plain vertical grid of tiles: tapping one drills into that album's track
 // list via onSelectAlbum (owned by JukeboxBrowsePanel, same as Search's album
@@ -41,9 +41,9 @@ const QuickHitTab = ({ onSelectAlbum }) => {
   }
 
   return (
-    <div className="jukebox-quick-hit-grid">
+    <div className="jukebox-album-grid">
       {albums.map((album) => (
-        <QuickHitAlbumTile
+        <JukeboxAlbumTile
           key={album.id}
           album={album}
           imageUrl={apiService.getImageUrl(album.image_path, 'album_small')}

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import SearchTab from './SearchTab';
@@ -15,25 +15,48 @@ import { apiService } from '../services/api';
 const renderTab = (props = {}) =>
   render(<MemoryRouter><SearchTab onSelectArtist={vi.fn()} onSelectAlbum={vi.fn()} {...props} /></MemoryRouter>);
 
-const searchResponse = {
-  results: [
-    { type: 'album', data: { id: 1, title: 'Found Album', image_path: 'a.jpg', artist: { id: 1, name: 'Found Artist' }, track_count: 5 } },
-    { type: 'artist', data: { id: 2, name: 'Found Solo Artist', image_path: 'n.jpg' } },
-  ],
-  tracks: [
-    { id: 10, title: 'Found Track', url: '/stream/10' },
-  ],
+const runSearch = async (query = 'q') => {
+  fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: query } });
+  fireEvent.submit(screen.getByRole('search'));
+  await waitFor(() => expect(apiService.search).toHaveBeenCalledWith(query));
 };
 
-test('searches on submit and renders artist, album, and track results', async () => {
-  apiService.search.mockResolvedValue({ data: searchResponse });
-  renderTab();
+// Small result set: one of each.
+const smallResponse = {
+  results: [
+    { type: 'album', data: { id: 1, title: 'Found Album', image_path: 'a.jpg', artist: { id: 1, name: 'Found Artist' }, track_count: 5 } },
+    { type: 'artist', data: { id: 2, name: 'Found Solo Artist', image_path: 'n.jpg', album_count: 3 } },
+  ],
+  tracks: [{ id: 10, title: 'Found Track', url: '/stream/10' }],
+};
 
-  fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: 'test query' } });
-  fireEvent.submit(screen.getByRole('search'));
+// Large result set: more of each than the All view previews (6 / 4 / 5).
+const bigResponse = {
+  results: [
+    ...Array.from({ length: 8 }, (_, i) => ({ type: 'artist', data: { id: 100 + i, name: `Artist ${i + 1}`, image_path: 'n.jpg', album_count: 2 } })),
+    ...Array.from({ length: 6 }, (_, i) => ({ type: 'album', data: { id: 200 + i, title: `Album ${i + 1}`, image_path: 'a.jpg', artist: { id: 1, name: 'Some Artist' } } })),
+  ],
+  tracks: Array.from({ length: 7 }, (_, i) => ({ id: 300 + i, title: `Song ${i + 1}`, url: `/stream/${300 + i}` })),
+};
+
+const section = (name) => screen.getByRole('heading', { name }).closest('section');
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+test('shows a prompt before any search has been run, and no filter chips yet', () => {
+  renderTab();
+  expect(screen.getByText('Search for something to play')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /^Albums/ })).not.toBeInTheDocument();
+});
+
+test('searches on submit and renders artist, album, and track results', async () => {
+  apiService.search.mockResolvedValue({ data: smallResponse });
+  renderTab();
+  await runSearch('test query');
 
   await waitFor(() => {
-    expect(apiService.search).toHaveBeenCalledWith('test query');
     expect(screen.getByText('Found Album')).toBeInTheDocument();
     expect(screen.getByText('Found Solo Artist')).toBeInTheDocument();
     // Track renders the title with a "01. " index prefix inline (see
@@ -43,12 +66,102 @@ test('searches on submit and renders artist, album, and track results', async ()
   });
 });
 
+test('shows filter chips with per-type counts, All selected by default', async () => {
+  apiService.search.mockResolvedValue({ data: bigResponse });
+  renderTab();
+  await runSearch();
+
+  await waitFor(() => screen.getByRole('button', { name: 'Albums (6)' }));
+  expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: 'Artists (8)' })).toHaveAttribute('aria-pressed', 'false');
+  expect(screen.getByRole('button', { name: 'Tracks (7)' })).toBeInTheDocument();
+});
+
+test('the All view previews a few of each type under headings, with See all for the overflow', async () => {
+  apiService.search.mockResolvedValue({ data: bigResponse });
+  renderTab();
+  await runSearch();
+  await waitFor(() => screen.getByRole('heading', { name: 'Artists' }));
+
+  expect(within(section('Artists')).getAllByRole('button', { name: /Artist \d/ })).toHaveLength(6);
+  expect(within(section('Albums')).getAllByRole('button', { name: /Album \d/ })).toHaveLength(4);
+  expect(within(section('Tracks')).getAllByText(/Song \d/)).toHaveLength(5);
+
+  expect(within(section('Artists')).getByRole('button', { name: 'See all (8)' })).toBeInTheDocument();
+  expect(within(section('Albums')).getByRole('button', { name: 'See all (6)' })).toBeInTheDocument();
+  expect(within(section('Tracks')).getByRole('button', { name: 'See all (7)' })).toBeInTheDocument();
+});
+
+test('sections with no results are omitted, and See all is hidden when nothing overflows', async () => {
+  apiService.search.mockResolvedValue({ data: { results: [smallResponse.results[0]], tracks: [] } });
+  renderTab();
+  await runSearch();
+  await waitFor(() => screen.getByRole('heading', { name: 'Albums' }));
+
+  expect(screen.queryByRole('heading', { name: 'Artists' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Tracks' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /See all/ })).not.toBeInTheDocument();
+});
+
+test('See all switches to that type, showing every result and only that type', async () => {
+  apiService.search.mockResolvedValue({ data: bigResponse });
+  renderTab();
+  await runSearch();
+  await waitFor(() => screen.getByRole('heading', { name: 'Albums' }));
+
+  fireEvent.click(within(section('Albums')).getByRole('button', { name: 'See all (6)' }));
+
+  expect(screen.getAllByRole('button', { name: /Album \d/ })).toHaveLength(6);
+  expect(screen.queryByRole('button', { name: /Artist \d/ })).not.toBeInTheDocument();
+  expect(screen.queryByText(/Song \d/)).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Albums (6)' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('the type chips filter the results and All returns to the overview', async () => {
+  apiService.search.mockResolvedValue({ data: bigResponse });
+  renderTab();
+  await runSearch();
+  await waitFor(() => screen.getByRole('button', { name: 'Tracks (7)' }));
+
+  fireEvent.click(screen.getByRole('button', { name: 'Tracks (7)' }));
+  expect(screen.getAllByText(/Song \d/)).toHaveLength(7);
+  expect(screen.queryByRole('button', { name: /Album \d/ })).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Artists (8)' }));
+  expect(screen.getAllByRole('button', { name: /Artist \d/ })).toHaveLength(8);
+
+  fireEvent.click(screen.getByRole('button', { name: 'All' }));
+  expect(screen.getByRole('heading', { name: 'Albums' })).toBeInTheDocument();
+});
+
+test('a chip for a type with no results is disabled', async () => {
+  apiService.search.mockResolvedValue({ data: { results: [smallResponse.results[0]], tracks: [] } });
+  renderTab();
+  await runSearch();
+
+  await waitFor(() => screen.getByRole('button', { name: 'Albums (1)' }));
+  expect(screen.getByRole('button', { name: 'Artists (0)' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Tracks (0)' })).toBeDisabled();
+});
+
+test('a new search resets the filter back to All', async () => {
+  apiService.search.mockResolvedValue({ data: bigResponse });
+  renderTab();
+  await runSearch('first');
+  await waitFor(() => screen.getByRole('button', { name: 'Tracks (7)' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Tracks (7)' }));
+
+  await runSearch('second');
+
+  await waitFor(() => expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true'));
+  expect(screen.getByRole('heading', { name: 'Artists' })).toBeInTheDocument();
+});
+
 test('tapping an artist result calls onSelectArtist with that artist', async () => {
-  apiService.search.mockResolvedValue({ data: searchResponse });
+  apiService.search.mockResolvedValue({ data: smallResponse });
   const onSelectArtist = vi.fn();
   renderTab({ onSelectArtist });
-  fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: 'q' } });
-  fireEvent.submit(screen.getByRole('search'));
+  await runSearch();
   await waitFor(() => screen.getByText('Found Solo Artist'));
 
   fireEvent.click(screen.getByText('Found Solo Artist'));
@@ -57,11 +170,10 @@ test('tapping an artist result calls onSelectArtist with that artist', async () 
 });
 
 test('tapping an album result calls onSelectAlbum with that album', async () => {
-  apiService.search.mockResolvedValue({ data: searchResponse });
+  apiService.search.mockResolvedValue({ data: smallResponse });
   const onSelectAlbum = vi.fn();
   renderTab({ onSelectAlbum });
-  fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: 'q' } });
-  fireEvent.submit(screen.getByRole('search'));
+  await runSearch();
   await waitFor(() => screen.getByText('Found Album'));
 
   fireEvent.click(screen.getByText('Found Album'));
@@ -69,9 +181,24 @@ test('tapping an album result calls onSelectAlbum with that album', async () => 
   expect(onSelectAlbum).toHaveBeenCalledWith(expect.objectContaining({ id: 1, title: 'Found Album' }));
 });
 
-test('shows a prompt before any search has been run', () => {
+test('artist and album results are plain tiles — each section holds only its tiles, no play buttons or menus', async () => {
+  apiService.search.mockResolvedValue({ data: smallResponse });
   renderTab();
-  expect(screen.getByText('Search for something to play')).toBeInTheDocument();
+  await runSearch();
+  await waitFor(() => screen.getByText('Found Album'));
+
+  // (Track rows below keep their own per-track play buttons; that's intended.)
+  expect(within(section('Artists')).getAllByRole('button')).toHaveLength(1);
+  expect(within(section('Albums')).getAllByRole('button')).toHaveLength(1);
+});
+
+test('shows "No results" and no chips when nothing matches', async () => {
+  apiService.search.mockResolvedValue({ data: { results: [], tracks: [] } });
+  renderTab();
+  await runSearch();
+
+  await waitFor(() => expect(screen.getByText('No results')).toBeInTheDocument());
+  expect(screen.queryByRole('button', { name: 'All' })).not.toBeInTheDocument();
 });
 
 test('shows a retry option when search fails, and retry re-runs the same query', async () => {

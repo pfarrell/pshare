@@ -2767,10 +2767,167 @@ body:has(.jukebox-app) {
   font-size: 1.1rem;
   padding: 0.5rem 1rem;
 }
-.jukebox-app .jukebox-search-tab input {
-  min-height: 3rem;
+/* Search tab. The search bar (field + type chips) is pinned just under the tab
+   header while results scroll. The header is 4.5rem tall and the panel has 1rem
+   of padding that sticky offsets are measured inside of, so the bar's `top`
+   is 4.5rem - 1rem; the header itself uses top:-1rem for the same reason. */
+.jukebox-app .jukebox-search-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.jukebox-app .jukebox-search-bar {
+  position: sticky;
+  top: 3.5rem;
+  z-index: 1;
+  margin: 0 -1rem;
+  padding: 0 1rem 0.5rem;
+  background: #2a3540;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.jukebox-app .jukebox-search-bar form {
+  display: flex;
+  gap: 0.5rem;
+}
+.jukebox-app .jukebox-search-bar input {
+  flex: 1;
+  min-width: 0;
+  min-height: 3.25rem;
+  box-sizing: border-box;
+  padding: 0 1rem;
   font-size: 1.25rem;
+  color: white;
+  background: #1c2630;
+  border: 1px solid #4a5a68;
+  border-radius: 0.5rem;
+}
+.jukebox-app .jukebox-search-bar input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+.jukebox-app .jukebox-search-bar input:focus {
+  outline: none;
+  border-color: #2f6fd6;
+}
+.jukebox-app .jukebox-search-bar form button {
+  flex: none;
+  min-height: 3.25rem;
+  padding: 0 1.25rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: white;
+  background: #2f6fd6;
+  border: 0;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+.jukebox-app .jukebox-search-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+/* Sized so All / Artists (11) / Albums (13) / Tracks (155) fit on one row of
+   the ~388px content width — a second row makes the pinned bar needlessly tall. */
+.jukebox-app .jukebox-search-chips button {
+  min-height: 2.75rem;
+  padding: 0 0.7rem;
+  font-size: 0.95rem;
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.jukebox-app .jukebox-search-chips button[aria-pressed="true"] {
+  background: #2f6fd6;
+  border-color: #2f6fd6;
+  font-weight: 600;
+}
+.jukebox-app .jukebox-search-chips button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.jukebox-app .jukebox-search-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.jukebox-app .jukebox-search-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 2.5rem;
+}
+.jukebox-app .jukebox-search-section-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.65);
+}
+.jukebox-app .jukebox-search-section-header button {
+  min-height: 2.5rem;
+  padding: 0 0.75rem;
+  font-size: 1rem;
+  color: #93c5fd;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+/* Artist tiles (Search results): 3-up grid of circular photos. */
+.jukebox-app .jukebox-artist-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem 0.75rem;
+}
+.jukebox-app .jukebox-artist-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: white;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+.jukebox-app .jukebox-artist-tile-art,
+.jukebox-app .jukebox-artist-tile-art-placeholder {
   width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  background: #3c4a57;
+}
+.jukebox-app .jukebox-artist-tile-art {
+  display: block;
+  object-fit: cover;
+}
+.jukebox-app .jukebox-artist-tile-art-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.5rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+}
+.jukebox-app .jukebox-artist-tile-name {
+  width: 100%;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.jukebox-app .jukebox-artist-tile-meta {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
 }
 .jukebox-app .jukebox-browse-button {
   position: fixed;
@@ -2815,12 +2972,12 @@ body:has(.jukebox-app) {
 
 /* Quick Hit: a plain 2-column grid of cover tiles. No scroller of its own —
    .jukebox-browse-panel scrolls vertically (see QuickHitTab.jsx). */
-.jukebox-app .jukebox-quick-hit-grid {
+.jukebox-app .jukebox-album-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1.25rem 1rem;
 }
-.jukebox-app .jukebox-quick-hit-tile {
+.jukebox-app .jukebox-album-tile {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -2833,25 +2990,25 @@ body:has(.jukebox-app) {
   text-align: left;
   cursor: pointer;
 }
-.jukebox-app .jukebox-quick-hit-art,
-.jukebox-app .jukebox-quick-hit-art-placeholder {
+.jukebox-app .jukebox-album-tile-art,
+.jukebox-app .jukebox-album-tile-art-placeholder {
   width: 100%;
   aspect-ratio: 1 / 1;
   border-radius: 6px;
   background: #3c4a57;
 }
-.jukebox-app .jukebox-quick-hit-art {
+.jukebox-app .jukebox-album-tile-art {
   display: block;
   object-fit: cover;
 }
-.jukebox-app .jukebox-quick-hit-art-placeholder {
+.jukebox-app .jukebox-album-tile-art-placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 3rem;
   color: rgba(255, 255, 255, 0.4);
 }
-.jukebox-app .jukebox-quick-hit-title {
+.jukebox-app .jukebox-album-tile-title {
   font-size: 1.1rem;
   font-weight: 600;
   line-height: 1.25;
@@ -2860,7 +3017,7 @@ body:has(.jukebox-app) {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.jukebox-app .jukebox-quick-hit-artist {
+.jukebox-app .jukebox-album-tile-artist {
   font-size: 0.95rem;
   color: rgba(255, 255, 255, 0.65);
   white-space: nowrap;
@@ -2872,11 +3029,6 @@ body:has(.jukebox-app) {
    already provides the scrolling container (overflow-y: auto) — these rules
    are layout only, giving AlbumCard/Track a defined flow instead of bare
    unstyled divs. */
-.jukebox-app .jukebox-search-albums {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
 .jukebox-app .jukebox-search-tracks {
   display: flex;
   flex-direction: column;
@@ -2937,23 +3089,7 @@ body:has(.jukebox-app) {
   border-color: rgba(59, 130, 246, 1);
 }
 
-/* Compact album/artist tiles inside the browse panel. EntityCard (shared by
-   AlbumCard/ArtistCard) renders its full desktop-sized .artist-card here
-   because useIsMobile() checks window width, and the *screen* this kiosk
-   runs on is wide even though this panel is only ~420px — without this,
-   only ~2 tiles fit per row. */
-.jukebox-app .jukebox-browse-panel .artist-card {
-  flex: 0 0 100px;
-  width: 100px;
-}
-.jukebox-app .jukebox-browse-panel .artist-card-title {
-  padding: 0.4rem;
-}
-.jukebox-app .jukebox-browse-panel .artist-card-title h3 {
-  font-size: 0.75rem;
-}
-
-/* Artist/album drill-down views (JukeboxArtistView.jsx, JukeboxAlbumView.jsx) */
+/* Artist drill-down view (JukeboxArtistView.jsx) */
 .jukebox-app .jukebox-drill-view {
   display: flex;
   flex-direction: column;
@@ -2974,6 +3110,33 @@ body:has(.jukebox-app) {
   margin: 0;
   font-size: 1.25rem;
   color: white;
+}
+.jukebox-app .jukebox-artist-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.jukebox-app .jukebox-artist-header .jukebox-drill-title {
+  min-width: 0;
+  font-size: 1.5rem;
+  line-height: 1.2;
+}
+.jukebox-app .jukebox-shuffle-button {
+  flex: none;
+  min-height: 3rem;
+  padding: 0 1.1rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: white;
+  background: #2f6fd6;
+  border: 0;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+.jukebox-app .jukebox-shuffle-button:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 /* Track's own title/meta text (src/components/Track.jsx) uses
