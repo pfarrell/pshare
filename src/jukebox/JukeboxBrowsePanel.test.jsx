@@ -43,11 +43,12 @@ vi.mock('./JukeboxCollectionView', () => ({
   ),
 }));
 vi.mock('./JukeboxTracksPanel', () => ({
-  default: ({ album, onClose, onEnqueue }) => (
+  default: ({ album, onClose, onEnqueue, onSelectArtist }) => (
     <div data-testid="jukebox-tracks-panel">
       <span>tracks-panel: {album.title}</span>
       <button onClick={onClose}>close-tracks-panel</button>
       <button onClick={onEnqueue}>tracks-panel-enqueue</button>
+      <button onClick={() => onSelectArtist({ id: 8, name: 'Album Artist' })}>select-artist-from-tracks-panel</button>
     </div>
   ),
 }));
@@ -341,6 +342,51 @@ test('onEnqueue reaches the collection view\'s Shuffle All', () => {
   fireEvent.click(screen.getByText('collection-view-enqueue'));
 
   expect(onEnqueue).toHaveBeenCalledTimes(1);
+});
+
+test('the artist link in the tracks panel closes it and hands the artist up via onJumpToArtist', () => {
+  const onJumpToArtist = vi.fn();
+  renderPanel('quickhit', { onJumpToArtist });
+  fireEvent.click(screen.getByText('select-quickhit-album'));
+  expect(screen.getByTestId('jukebox-tracks-panel')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByText('select-artist-from-tracks-panel'));
+
+  expect(screen.queryByTestId('jukebox-tracks-panel')).not.toBeInTheDocument();
+  expect(onJumpToArtist).toHaveBeenCalledWith(expect.objectContaining({ id: 8, name: 'Album Artist' }));
+});
+
+test('a pending artist is pushed as the drill-down view once the parent has switched to Search, and reported consumed', () => {
+  const onPendingArtistConsumed = vi.fn();
+  const { rerender } = renderPanel('quickhit');
+
+  rerender(
+    <JukeboxBrowsePanel
+      activeTab="search"
+      pendingArtist={{ id: 8, name: 'Album Artist' }}
+      onPendingArtistConsumed={onPendingArtistConsumed}
+    />
+  );
+
+  expect(screen.getByText('artist-view: Album Artist')).toBeInTheDocument();
+  expect(onPendingArtistConsumed).toHaveBeenCalledTimes(1);
+});
+
+test('a pending artist replaces whatever was on the drill-down stack, not stacked on top of it', () => {
+  const { rerender } = renderPanel('search');
+  fireEvent.click(screen.getByText('select-search-artist'));
+  expect(screen.getByText('artist-view: Search Artist')).toBeInTheDocument();
+
+  rerender(
+    <JukeboxBrowsePanel
+      activeTab="search"
+      pendingArtist={{ id: 8, name: 'Album Artist' }}
+      onPendingArtistConsumed={vi.fn()}
+    />
+  );
+
+  expect(screen.getByText('artist-view: Album Artist')).toBeInTheDocument();
+  expect(screen.queryByText('artist-view: Search Artist')).not.toBeInTheDocument();
 });
 
 test('switching to a different tab dismisses an open collection view, same as an artist view', () => {

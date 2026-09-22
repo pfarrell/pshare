@@ -46,7 +46,7 @@ test('fetches the album and renders its title, artist and tracks', async () => {
   await waitFor(() => {
     expect(apiService.getAlbum).toHaveBeenCalledWith(7);
     expect(screen.getByRole('heading', { name: 'Test Album' })).toBeInTheDocument();
-    expect(screen.getByText('Test Artist', { selector: '.jukebox-tracks-panel-artist' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Test Artist' })).toBeInTheDocument();
     expect(screen.getByText(/Track One/)).toBeInTheDocument();
     expect(screen.getByText(/Track Two/)).toBeInTheDocument();
   });
@@ -149,6 +149,41 @@ test('refetches and swaps content when a different album is selected', async () 
     expect(screen.getByText(/Other Track/)).toBeInTheDocument();
     expect(screen.queryByText(/Track One/)).not.toBeInTheDocument();
   });
+});
+
+test('the artist name is a tappable link when the artist has an id, and calls onSelectArtist with it', async () => {
+  const onSelectArtist = vi.fn();
+  renderPanel({ onSelectArtist });
+  await waitFor(() => screen.getByText(/Track One/));
+
+  const link = screen.getByRole('button', { name: 'Test Artist' });
+  fireEvent.click(link);
+
+  expect(onSelectArtist).toHaveBeenCalledWith(expect.objectContaining({ id: 3, name: 'Test Artist' }));
+});
+
+test('falls back to the album prop\'s artist if the album has not finished loading yet', () => {
+  apiService.getAlbum.mockReturnValue(new Promise(() => {}));
+  const onSelectArtist = vi.fn();
+  renderPanel({ album: { id: 7, title: 'Test Album', artist: { id: 9, name: 'Prop Artist' } }, onSelectArtist });
+
+  fireEvent.click(screen.getByRole('button', { name: 'Prop Artist' }));
+
+  expect(onSelectArtist).toHaveBeenCalledWith(expect.objectContaining({ id: 9, name: 'Prop Artist' }));
+});
+
+test('renders the artist as plain text, not a link, when there is no artist id', async () => {
+  apiService.getAlbum.mockResolvedValue({
+    data: {
+      artist: { name: 'No Id Artist' },
+      album: { id: 7, title: 'Test Album', image_path: 'a.jpg' },
+      tracks: [{ id: 1, title: 'Track One', url: '/stream/1', artist: { id: 3, name: 'Test Artist' } }],
+    },
+  });
+  renderPanel();
+  await waitFor(() => screen.getByText('No Id Artist'));
+
+  expect(screen.queryByRole('button', { name: 'No Id Artist' })).not.toBeInTheDocument();
 });
 
 test('shows an error with a working retry when the album fails to load', async () => {

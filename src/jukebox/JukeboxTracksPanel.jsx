@@ -11,7 +11,7 @@ import { useTouchScroll } from './useTouchScroll';
 //
 // The title/cover render from the `album` prop straight away, so the panel
 // doesn't flash empty while getAlbum() is in flight (or if it fails).
-const JukeboxTracksPanel = ({ album, onClose, onEnqueue }) => {
+const JukeboxTracksPanel = ({ album, onClose, onEnqueue, onSelectArtist }) => {
   const [data, setData] = useState(null);
   const [error, setError] = useState(false);
   const bodyRef = useTouchScroll({ axis: 'y' });
@@ -38,7 +38,7 @@ const JukeboxTracksPanel = ({ album, onClose, onEnqueue }) => {
   });
 
   const imagePath = data?.album?.image_path ?? album.image_path;
-  const artistName = data?.artist?.name ?? album.artist?.name ?? '';
+  const artist = data?.artist ?? album.artist;
   const ready = data !== null && data.tracks.length > 0;
 
   return (
@@ -57,7 +57,17 @@ const JukeboxTracksPanel = ({ album, onClose, onEnqueue }) => {
           )}
           <div className="jukebox-tracks-panel-titles">
             <h2 className="jukebox-tracks-panel-title">{album.title}</h2>
-            <span className="jukebox-tracks-panel-artist">{artistName}</span>
+            {/* Only a tappable link when the artist has an id to jump to —
+                same defensive check AlbumCard uses elsewhere for its "Go to
+                Artist" action. Search results and getAlbum() both normally
+                supply one; a stub/orphaned album may not. */}
+            {artist?.id ? (
+              <button type="button" className="jukebox-tracks-panel-artist-link" onClick={() => onSelectArtist?.(artist)}>
+                {artist.name}
+              </button>
+            ) : (
+              <span className="jukebox-tracks-panel-artist">{artist?.name ?? ''}</span>
+            )}
           </div>
           <button type="button" className="jukebox-tracks-panel-close" onClick={onClose} aria-label="Close">✕</button>
         </div>

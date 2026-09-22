@@ -3211,6 +3211,26 @@ body:has(.jukebox-app) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Tappable variant of the line above — shown instead of it when the artist
+   has an id to jump to (see JukeboxTracksPanel.jsx). Reset to a plain
+   left-aligned button so it matches the span's look, with an underline as
+   the only added affordance. */
+.jukebox-app .jukebox-tracks-panel-artist-link {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.65);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
 .jukebox-app .jukebox-tracks-panel-close {
   flex: none;
   align-self: flex-start;

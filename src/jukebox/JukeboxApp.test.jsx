@@ -9,9 +9,11 @@ vi.mock('./JukeboxNowPlaying', () => ({ default: () => <div data-testid="jukebox
 vi.mock('../components/player/MusicPlayerWrapper', () => ({ default: () => <div data-testid="player-engine" /> }));
 vi.mock('./JukeboxProgressLine', () => ({ default: () => <div data-testid="progress-line" /> }));
 vi.mock('./JukeboxBrowsePanel', () => ({
-  default: ({ activeTab, onEnqueue }) => (
-    <div data-testid="jukebox-browse-panel" data-active-tab={activeTab ?? 'none'}>
+  default: ({ activeTab, onEnqueue, pendingArtist, onJumpToArtist, onPendingArtistConsumed }) => (
+    <div data-testid="jukebox-browse-panel" data-active-tab={activeTab ?? 'none'} data-pending-artist={pendingArtist?.name ?? 'none'}>
       <button onClick={onEnqueue}>trigger-enqueue</button>
+      <button onClick={() => onJumpToArtist({ id: 42, name: 'Jumped Artist' })}>trigger-jump-to-artist</button>
+      <button onClick={onPendingArtistConsumed}>trigger-pending-artist-consumed</button>
     </div>
   ),
 }));
@@ -23,6 +25,7 @@ import { useJukeboxKeyboardFocus } from './useJukeboxKeyboardFocus';
 
 const renderApp = () => render(<MemoryRouter><JukeboxApp /></MemoryRouter>);
 const activeTab = () => screen.getByTestId('jukebox-browse-panel').getAttribute('data-active-tab');
+const pendingArtistName = () => screen.getByTestId('jukebox-browse-panel').getAttribute('data-pending-artist');
 const tab = (name) => screen.getByRole('button', { name });
 
 beforeEach(() => {
@@ -114,4 +117,35 @@ test('passes the drawer an onEnqueue callback that closes the drawer when called
 
   expect(activeTab()).toBe('none');
   expect(tab('Quick Hit')).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('jumping to an artist from a different tab switches to Search and carries the artist along', () => {
+  renderApp();
+  fireEvent.click(tab('Quick Hit'));
+
+  fireEvent.click(screen.getByText('trigger-jump-to-artist'));
+
+  expect(activeTab()).toBe('search');
+  expect(tab('Search')).toHaveAttribute('aria-pressed', 'true');
+  expect(pendingArtistName()).toBe('Jumped Artist');
+});
+
+test('jumping to an artist while already on Search still carries the artist along', () => {
+  renderApp();
+  fireEvent.click(tab('Search'));
+
+  fireEvent.click(screen.getByText('trigger-jump-to-artist'));
+
+  expect(activeTab()).toBe('search');
+  expect(pendingArtistName()).toBe('Jumped Artist');
+});
+
+test('clears the pending artist once the drawer reports it consumed', () => {
+  renderApp();
+  fireEvent.click(screen.getByText('trigger-jump-to-artist'));
+  expect(pendingArtistName()).toBe('Jumped Artist');
+
+  fireEvent.click(screen.getByText('trigger-pending-artist-consumed'));
+
+  expect(pendingArtistName()).toBe('none');
 });
