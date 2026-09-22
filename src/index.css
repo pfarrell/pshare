@@ -3356,3 +3356,73 @@ body:has(.jukebox-app) {
   -webkit-user-drag: none;
   user-drag: none;
 }
+
+/* Transport (JukeboxTransport.jsx), pinned at the top of the Next Up tab. The
+   drawer has 1rem of padding and sticky offsets are measured inside it, so
+   top:-1rem plus the -1rem margins pin it flush to the drawer's top and side
+   edges (the same trick the old tab header used). Opaque background so the
+   queue rows slide under it. */
+.jukebox-app .jukebox-transport {
+  position: sticky;
+  top: -1rem;
+  z-index: 1;
+  margin: -1rem -1rem 1rem;
+  padding: 1rem;
+  background: #2a3540;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.jukebox-app .jukebox-transport-seek {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.jukebox-app .jukebox-transport-seek input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  height: 2.5rem;
+}
+.jukebox-app .jukebox-transport-time {
+  min-width: 2.75rem;
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+}
+.jukebox-app .jukebox-transport-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+.jukebox-app .jukebox-transport-buttons button {
+  flex: 1;
+  min-width: 3.5rem;
+  min-height: 3.5rem;
+  font-size: 1.6rem;
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+.jukebox-app .jukebox-transport-buttons button.jukebox-transport-play {
+  background: #2f6fd6;
+  border-color: #2f6fd6;
+}
+.jukebox-app .jukebox-transport-buttons button.active {
+  background: rgba(96, 165, 250, 0.35);
+  border-color: #60a5fa;
+}
+.jukebox-app .jukebox-transport-buttons button.jukebox-transport-clear {
+  flex: 2;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.jukebox-app .jukebox-transport-buttons button.jukebox-transport-clear.armed {
+  background: #b42318;
+  border-color: #b42318;
+}
+.jukebox-app .jukebox-transport-buttons button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
