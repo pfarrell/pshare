@@ -11,7 +11,7 @@ import { useTouchScroll } from './useTouchScroll';
 //
 // The title/cover render from the `album` prop straight away, so the panel
 // doesn't flash empty while getAlbum() is in flight (or if it fails).
-const JukeboxTracksPanel = ({ album, onClose }) => {
+const JukeboxTracksPanel = ({ album, onClose, onEnqueue }) => {
   const [data, setData] = useState(null);
   const [error, setError] = useState(false);
   const bodyRef = useTouchScroll({ axis: 'y' });
@@ -62,8 +62,8 @@ const JukeboxTracksPanel = ({ album, onClose }) => {
           <button type="button" className="jukebox-tracks-panel-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
         <div className="jukebox-tracks-panel-actions">
-          <button type="button" disabled={!ready} onClick={queue.play}>Play album</button>
-          <button type="button" disabled={!ready} onClick={queue.addToQueue}>Add to queue</button>
+          <button type="button" disabled={!ready} onClick={() => { queue.play(); onEnqueue?.(); }}>Play album</button>
+          <button type="button" disabled={!ready} onClick={() => { queue.addToQueue(); onEnqueue?.(); }}>Add to queue</button>
         </div>
       </div>
 
@@ -76,7 +76,11 @@ const JukeboxTracksPanel = ({ album, onClose }) => {
         )}
         {!error && data === null && <div className="jukebox-panel-loading">Loading…</div>}
         {!error && data !== null && (
-          <div className="jukebox-search-tracks">
+          // Track (src/components/Track.jsx) has no onClick prop of its own — a
+          // capture-phase listener here fires before Track's internal tap-to-
+          // enqueue handlers, so it catches every track tap regardless of which
+          // element inside the row was actually tapped.
+          <div className="jukebox-search-tracks" onClickCapture={() => onEnqueue?.()}>
             {data.tracks.map((track, index) => (
               <Track key={track.id} track={track} index={index} trackCount={data.tracks.length} />
             ))}

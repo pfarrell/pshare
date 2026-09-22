@@ -20,7 +20,7 @@ import { useTouchScroll } from './useTouchScroll';
 // here: it opens JukeboxTracksPanel, a separate panel to this one's left, so
 // the list you tapped from stays put. Any tab can select an album. The tracks
 // panel closes with the drawer.
-const JukeboxBrowsePanel = ({ activeTab }) => {
+const JukeboxBrowsePanel = ({ activeTab, onEnqueue }) => {
   const [viewStack, setViewStack] = useState([]);
   const [selectedAlbum, setSelectedAlbum] = useState(null);
   const lastShownTabRef = useRef(activeTab);
@@ -57,6 +57,7 @@ const JukeboxBrowsePanel = ({ activeTab }) => {
             artist={currentView.data}
             onSelectAlbum={setSelectedAlbum}
             onBack={popView}
+            onEnqueue={onEnqueue}
           />
         )}
         {!currentView && activeTab === 'quickhit' && <QuickHitTab onSelectAlbum={setSelectedAlbum} />}
@@ -67,12 +68,13 @@ const JukeboxBrowsePanel = ({ activeTab }) => {
           <SearchTab
             onSelectArtist={(artist) => pushView({ type: 'artist', data: artist })}
             onSelectAlbum={setSelectedAlbum}
+            onEnqueue={onEnqueue}
           />
         </div>
         {!currentView && activeTab === 'nextup' && <JukeboxNextUpTab />}
       </div>
       {open && selectedAlbum && (
-        <JukeboxTracksPanel album={selectedAlbum} onClose={() => setSelectedAlbum(null)} />
+        <JukeboxTracksPanel album={selectedAlbum} onClose={() => setSelectedAlbum(null)} onEnqueue={onEnqueue} />
       )}
     </>
   );

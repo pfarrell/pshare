@@ -28,7 +28,7 @@ const Section = ({ title, count, previewCount, onSeeAll, children }) => (
   </section>
 );
 
-const SearchTab = ({ onSelectArtist, onSelectAlbum }) => {
+const SearchTab = ({ onSelectArtist, onSelectAlbum, onEnqueue }) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState(null);
   const [error, setError] = useState(false);
@@ -94,8 +94,11 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum }) => {
   // has no <Routes>) that just pile up history entries. Track still appends
   // " - <artist>" to the title line when the track artist differs from the
   // album artist, so nothing informative is lost.
+  // Track has no onClick prop of its own — a capture-phase listener here
+  // fires before Track's internal tap-to-enqueue handlers, so it catches
+  // every track tap regardless of which element inside the row was tapped.
   const renderTracks = (list) => (
-    <div className="jukebox-search-tracks">
+    <div className="jukebox-search-tracks" onClickCapture={() => onEnqueue?.()}>
       {list.map((track, index) => (
         <Track key={track.id} track={track} index={index} trackCount={list.length} />
       ))}

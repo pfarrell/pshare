@@ -8,7 +8,7 @@ import { useQueueActions } from '../hooks/useQueueActions';
 // owned by JukeboxBrowsePanel). "Shuffle artist" plays a random selection of
 // the artist's tracks — the same call the shared ArtistCard's play button
 // makes — and is available immediately, since it doesn't need the albums.
-const JukeboxArtistView = ({ artist, onSelectAlbum, onBack }) => {
+const JukeboxArtistView = ({ artist, onSelectAlbum, onBack, onEnqueue }) => {
   const [data, setData] = useState(null);
   const [error, setError] = useState(false);
 
@@ -39,7 +39,7 @@ const JukeboxArtistView = ({ artist, onSelectAlbum, onBack }) => {
           type="button"
           className="jukebox-shuffle-button"
           disabled={shuffle.loading}
-          onClick={shuffle.play}
+          onClick={() => { shuffle.play(); onEnqueue?.(); }}
         >
           Shuffle artist
         </button>

@@ -9,7 +9,11 @@ vi.mock('./JukeboxNowPlaying', () => ({ default: () => <div data-testid="jukebox
 vi.mock('../components/player/MusicPlayerWrapper', () => ({ default: () => <div data-testid="player-engine" /> }));
 vi.mock('./JukeboxProgressLine', () => ({ default: () => <div data-testid="progress-line" /> }));
 vi.mock('./JukeboxBrowsePanel', () => ({
-  default: ({ activeTab }) => <div data-testid="jukebox-browse-panel" data-active-tab={activeTab ?? 'none'} />,
+  default: ({ activeTab, onEnqueue }) => (
+    <div data-testid="jukebox-browse-panel" data-active-tab={activeTab ?? 'none'}>
+      <button onClick={onEnqueue}>trigger-enqueue</button>
+    </div>
+  ),
 }));
 vi.mock('./JukeboxKeyboard', () => ({ default: ({ targetElement }) => (targetElement ? <div data-testid="jukebox-keyboard" /> : null) }));
 vi.mock('./useJukeboxKeyboardFocus', () => ({ useJukeboxKeyboardFocus: vi.fn() }));
@@ -99,4 +103,15 @@ test('reopening after a close starts on whichever tab was tapped', () => {
   fireEvent.click(tab('Search'));
   fireEvent.click(tab('Next Up'));
   expect(activeTab()).toBe('nextup');
+});
+
+test('passes the drawer an onEnqueue callback that closes the drawer when called', () => {
+  renderApp();
+  fireEvent.click(tab('Quick Hit'));
+  expect(activeTab()).toBe('quickhit');
+
+  fireEvent.click(screen.getByText('trigger-enqueue'));
+
+  expect(activeTab()).toBe('none');
+  expect(tab('Quick Hit')).toHaveAttribute('aria-pressed', 'false');
 });

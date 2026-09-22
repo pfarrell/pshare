@@ -192,6 +192,44 @@ test('artist and album results are plain tiles — each section holds only its t
   expect(within(section('Albums')).getAllByRole('button')).toHaveLength(1);
 });
 
+test('tapping a track in the All view calls onEnqueue', async () => {
+  apiService.search.mockResolvedValue({ data: smallResponse });
+  const onEnqueue = vi.fn();
+  renderTab({ onEnqueue });
+  await runSearch();
+  await waitFor(() => screen.getByText(/Found Track/));
+
+  fireEvent.click(screen.getByText(/Found Track/));
+
+  expect(onEnqueue).toHaveBeenCalledTimes(1);
+});
+
+test('tapping a track in the Tracks-filtered view calls onEnqueue', async () => {
+  apiService.search.mockResolvedValue({ data: bigResponse });
+  const onEnqueue = vi.fn();
+  renderTab({ onEnqueue });
+  await runSearch();
+  await waitFor(() => screen.getByRole('button', { name: 'Tracks (7)' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Tracks (7)' }));
+
+  fireEvent.click(screen.getAllByText(/Song \d/)[0]);
+
+  expect(onEnqueue).toHaveBeenCalledTimes(1);
+});
+
+test('tapping an artist or album tile does NOT call onEnqueue — that is navigation, not enqueueing', async () => {
+  apiService.search.mockResolvedValue({ data: smallResponse });
+  const onEnqueue = vi.fn();
+  renderTab({ onEnqueue });
+  await runSearch();
+  await waitFor(() => screen.getByText('Found Album'));
+
+  fireEvent.click(screen.getByText('Found Solo Artist'));
+  fireEvent.click(screen.getByText('Found Album'));
+
+  expect(onEnqueue).not.toHaveBeenCalled();
+});
+
 test('shows "No results" and no chips when nothing matches', async () => {
   apiService.search.mockResolvedValue({ data: { results: [], tracks: [] } });
   renderTab();

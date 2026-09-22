@@ -85,6 +85,36 @@ test('Play album and Add to queue drive the whole loaded album through the share
   expect(queue.addToQueue).toHaveBeenCalledTimes(1);
 });
 
+test('Play album and Add to queue both also call onEnqueue', async () => {
+  const onEnqueue = vi.fn();
+  renderPanel({ onEnqueue });
+  await waitFor(() => screen.getByText(/Track One/));
+
+  fireEvent.click(screen.getByRole('button', { name: 'Play album' }));
+  expect(onEnqueue).toHaveBeenCalledTimes(1);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Add to queue' }));
+  expect(onEnqueue).toHaveBeenCalledTimes(2);
+});
+
+test('tapping a track calls onEnqueue too', async () => {
+  const onEnqueue = vi.fn();
+  renderPanel({ onEnqueue });
+  await waitFor(() => screen.getByText(/Track One/));
+
+  fireEvent.click(screen.getByText(/Track One/));
+
+  expect(onEnqueue).toHaveBeenCalledTimes(1);
+});
+
+test('does not blow up when onEnqueue is not provided', async () => {
+  renderPanel();
+  await waitFor(() => screen.getByText(/Track One/));
+
+  expect(() => fireEvent.click(screen.getByRole('button', { name: 'Play album' }))).not.toThrow();
+  expect(() => fireEvent.click(screen.getByText(/Track One/))).not.toThrow();
+});
+
 test('the album buttons are disabled until the tracks have loaded', async () => {
   let resolve;
   apiService.getAlbum.mockReturnValue(new Promise((r) => { resolve = r; }));

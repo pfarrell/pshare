@@ -10,35 +10,39 @@ vi.mock('./QuickHitTab', () => ({
   ),
 }));
 vi.mock('./SearchTab', () => ({
-  default: ({ onSelectArtist, onSelectAlbum }) => (
+  default: ({ onSelectArtist, onSelectAlbum, onEnqueue }) => (
     <div data-testid="search-tab">
       {/* Uncontrolled on purpose: its value lives in the DOM node, so it's lost if the tab remounts. */}
       <input data-testid="search-input" placeholder="mock search" />
       <button onClick={() => onSelectArtist({ id: 2, name: 'Search Artist' })}>select-search-artist</button>
       <button onClick={() => onSelectAlbum({ id: 3, title: 'Search Album' })}>select-search-album</button>
+      <button onClick={onEnqueue}>search-enqueue</button>
     </div>
   ),
 }));
 vi.mock('./JukeboxArtistView', () => ({
-  default: ({ artist, onSelectAlbum, onBack }) => (
+  default: ({ artist, onSelectAlbum, onBack, onEnqueue }) => (
     <div data-testid="jukebox-artist-view">
       <span>artist-view: {artist.name}</span>
       <button onClick={() => onSelectAlbum({ id: 4, title: 'Album From Artist' })}>select-album-from-artist</button>
       <button onClick={onBack}>back-from-artist</button>
+      <button onClick={onEnqueue}>artist-view-enqueue</button>
     </div>
   ),
 }));
 vi.mock('./JukeboxTracksPanel', () => ({
-  default: ({ album, onClose }) => (
+  default: ({ album, onClose, onEnqueue }) => (
     <div data-testid="jukebox-tracks-panel">
       <span>tracks-panel: {album.title}</span>
       <button onClick={onClose}>close-tracks-panel</button>
+      <button onClick={onEnqueue}>tracks-panel-enqueue</button>
     </div>
   ),
 }));
 vi.mock('./JukeboxNextUpTab', () => ({ default: () => <div data-testid="jukebox-next-up-tab" /> }));
 
-const renderPanel = (activeTab = 'quickhit') => render(<JukeboxBrowsePanel activeTab={activeTab} />);
+const renderPanel = (activeTab = 'quickhit', extraProps = {}) =>
+  render(<JukeboxBrowsePanel activeTab={activeTab} {...extraProps} />);
 const drawer = (container) => container.querySelector('.jukebox-browse-panel');
 
 test('shows Quick Hit when that tab is active', () => {
@@ -212,4 +216,21 @@ test('closing and reopening the SAME tab keeps an open artist view', () => {
   rerender(<JukeboxBrowsePanel activeTab="search" />);
 
   expect(screen.getByTestId('jukebox-artist-view')).toBeInTheDocument();
+});
+
+test('onEnqueue is passed through to the tracks panel, the artist view, and Search', () => {
+  const onEnqueue = vi.fn();
+  renderPanel('search', { onEnqueue });
+  fireEvent.click(screen.getByText('select-search-artist'));
+
+  fireEvent.click(screen.getByText('artist-view-enqueue'));
+  expect(onEnqueue).toHaveBeenCalledTimes(1);
+
+  fireEvent.click(screen.getByText('back-from-artist'));
+  fireEvent.click(screen.getByText('search-enqueue'));
+  expect(onEnqueue).toHaveBeenCalledTimes(2);
+
+  fireEvent.click(screen.getByText('select-search-album'));
+  fireEvent.click(screen.getByText('tracks-panel-enqueue'));
+  expect(onEnqueue).toHaveBeenCalledTimes(3);
 });

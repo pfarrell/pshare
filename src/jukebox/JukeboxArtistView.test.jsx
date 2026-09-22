@@ -128,6 +128,16 @@ test('Shuffle artist is disabled while its tracks are loading', () => {
   expect(screen.getByRole('button', { name: /Shuffl/ })).toBeDisabled();
 });
 
+test('Shuffle artist also calls onEnqueue', async () => {
+  apiService.getArtist.mockResolvedValue({ data: { artist, albums: [] } });
+  const onEnqueue = vi.fn();
+  renderView({ onEnqueue });
+
+  fireEvent.click(screen.getByRole('button', { name: 'Shuffle artist' }));
+
+  expect(onEnqueue).toHaveBeenCalledTimes(1);
+});
+
 test('album tiles are plain buttons — no play buttons or menus', async () => {
   apiService.getArtist.mockResolvedValue({
     data: { artist, albums: [{ id: 1, title: 'Album One', image_path: 'a.jpg', track_count: 8 }] },

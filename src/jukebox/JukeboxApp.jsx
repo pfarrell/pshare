@@ -20,6 +20,10 @@ const JukeboxApp = () => {
   const focusedInput = useJukeboxKeyboardFocus();
 
   const handleTabPress = (tab) => setActiveTab((current) => (current === tab ? null : tab));
+  // Enqueueing something (a track, an album, an artist/collection shuffle)
+  // from Quick Hit or Search closes everything, so the kiosk lands back on
+  // Now Playing instead of leaving the drawer open over it.
+  const closeAll = () => setActiveTab(null);
 
   // Wrapped in .jukebox-app too: the login screen is the first thing a fresh
   // kiosk shows, and it needs the shell's dark ground and kiosk-scale sizing
@@ -36,7 +40,7 @@ const JukeboxApp = () => {
   return (
     <div className="jukebox-app">
       <JukeboxNowPlaying />
-      <JukeboxBrowsePanel activeTab={activeTab} />
+      <JukeboxBrowsePanel activeTab={activeTab} onEnqueue={closeAll} />
       <JukeboxTabBar activeTab={activeTab} onTabPress={handleTabPress} />
       {/* MusicPlayerWrapper owns both <audio> elements and usePlayerEngine
           (gapless prefetch, Media Session, play logging), so it must stay
