@@ -2597,6 +2597,49 @@ body:has(.jukebox-app) {
   background-color: #1a252f;
   border-top: 1px solid #2c3e50;
 }
+/* Bottom tab bar (JukeboxTabBar.jsx): replaces the old footer transport. Same
+   height variable as the footer it replaces, so the drawer, tracks panel and
+   keyboard — all anchored to --jukebox-footer-height — don't move. */
+.jukebox-app .jukebox-tab-bar {
+  position: relative;
+  flex-shrink: 0;
+  height: var(--jukebox-footer-height);
+  box-sizing: border-box;
+  display: flex;
+  background-color: #1a252f;
+  border-top: 1px solid #2c3e50;
+}
+.jukebox-app .jukebox-tab-bar button {
+  flex: 1;
+  border: 0;
+  border-right: 1px solid #2c3e50;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 1.35rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.jukebox-app .jukebox-tab-bar button:last-of-type {
+  border-right: 0;
+}
+.jukebox-app .jukebox-tab-bar button[aria-pressed="true"] {
+  background: #2f6fd6;
+  color: white;
+}
+/* Display-only progress along the bar's top edge — see JukeboxProgressLine.jsx. */
+.jukebox-app .jukebox-progress-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  pointer-events: none;
+}
+.jukebox-app .jukebox-progress-line-fill {
+  height: 100%;
+  background: #60a5fa;
+}
 
 /* Now playing: the permanent full-screen view behind the panels. */
 .jukebox-app .jukebox-now-playing {
