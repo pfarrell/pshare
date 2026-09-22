@@ -2561,10 +2561,10 @@ body:has(.jukebox-app) {
   margin: 0;
 }
 .jukebox-app {
-  /* Single source of truth for the footer's height: the footer sets it as its
-     own height, and both slide-out right-edge panels (.jukebox-browse-panel
-     and the reused .music-player-playlist-container) stop exactly at its top
-     edge, so the transport controls are never covered. Change it here only. */
+  /* Single source of truth for the footer's height: the footer/tab-bar sets
+     it as its own height, and both slide-out right-edge panels
+     (.jukebox-browse-panel and .jukebox-tracks-panel) stop exactly at its
+     top edge, so the bar is never covered. Change it here only. */
   --jukebox-footer-height: 5.5rem;
   height: 100vh;
   /* The now-playing view is the only scroll-free, fill-the-screen region in
@@ -2746,9 +2746,9 @@ body:has(.jukebox-app) {
      :has(.jukebox-app) note above) — AlbumCard/ArtistCard/Track are fine
      regardless, since each renders its own white card background under its
      (dark, light-background-oriented) text, but the panel's own plain
-     messages (.jukebox-panel-loading/-error/-empty, tab buttons) have no
-     card behind them and would otherwise inherit the browser's default
-     black text straight onto this dark background. */
+     messages (.jukebox-panel-loading/-error/-empty) have no card behind
+     them and would otherwise inherit the browser's default black text
+     straight onto this dark background. */
   color: white;
   z-index: 60;
   overflow-y: auto;
@@ -2997,7 +2997,7 @@ body:has(.jukebox-app) {
 /* In-app on-screen keyboard (JukeboxKeyboard.jsx) — the platform's own
    (squeekboard + labwc) proved unreliable on the actual kiosk hardware.
    Fixed to the bottom of the viewport, above everything else (browse panel,
-   Next Up, the floating Browse button), the same way a real OS keyboard
+   tracks panel, the bottom tab bar), the same way a real OS keyboard
    overlays whatever's on screen rather than making room for itself. */
 .jukebox-app .jukebox-keyboard {
   position: fixed;
