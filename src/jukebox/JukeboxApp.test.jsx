@@ -6,8 +6,11 @@ import JukeboxApp from './JukeboxApp';
 vi.mock('../stores/authStore', () => ({ useAuthStore: vi.fn() }));
 vi.mock('./JukeboxLogin', () => ({ default: () => <div data-testid="jukebox-login" /> }));
 vi.mock('./JukeboxNowPlaying', () => ({ default: () => <div data-testid="jukebox-now-playing" /> }));
-vi.mock('../components/player/MusicPlayerWrapper', () => ({ default: () => <div data-testid="jukebox-footer" /> }));
-vi.mock('./JukeboxBrowsePanel', () => ({ default: ({ onClose }) => <div data-testid="jukebox-browse-panel"><button onClick={onClose}>close-panel</button></div> }));
+vi.mock('../components/player/MusicPlayerWrapper', () => ({ default: () => <div data-testid="player-engine" /> }));
+vi.mock('./JukeboxProgressLine', () => ({ default: () => <div data-testid="progress-line" /> }));
+vi.mock('./JukeboxBrowsePanel', () => ({
+  default: ({ activeTab }) => <div data-testid="jukebox-browse-panel" data-active-tab={activeTab ?? 'none'} />,
+}));
 vi.mock('./JukeboxKeyboard', () => ({ default: ({ targetElement }) => (targetElement ? <div data-testid="jukebox-keyboard" /> : null) }));
 vi.mock('./useJukeboxKeyboardFocus', () => ({ useJukeboxKeyboardFocus: vi.fn() }));
 
@@ -15,9 +18,12 @@ import { useAuthStore } from '../stores/authStore';
 import { useJukeboxKeyboardFocus } from './useJukeboxKeyboardFocus';
 
 const renderApp = () => render(<MemoryRouter><JukeboxApp /></MemoryRouter>);
+const activeTab = () => screen.getByTestId('jukebox-browse-panel').getAttribute('data-active-tab');
+const tab = (name) => screen.getByRole('button', { name });
 
 beforeEach(() => {
   useJukeboxKeyboardFocus.mockReturnValue(null);
+  useAuthStore.mockReturnValue(true);
 });
 
 test('shows JukeboxLogin when not authenticated', () => {
@@ -34,30 +40,63 @@ test('renders the on-screen keyboard, unauthenticated, when an input is focused'
 });
 
 test('renders the on-screen keyboard, authenticated, when an input is focused', () => {
-  useAuthStore.mockReturnValue(true);
   useJukeboxKeyboardFocus.mockReturnValue(document.createElement('input'));
   renderApp();
   expect(screen.getByTestId('jukebox-keyboard')).toBeInTheDocument();
 });
 
-test('shows the now-playing view and footer player when authenticated', () => {
-  useAuthStore.mockReturnValue(true);
+test('shows the now-playing view, the tab bar and the drawer when authenticated', () => {
   renderApp();
   expect(screen.getByTestId('jukebox-now-playing')).toBeInTheDocument();
-  expect(screen.getByTestId('jukebox-footer')).toBeInTheDocument();
-});
-
-test('tapping the browse button opens the browse panel', () => {
-  useAuthStore.mockReturnValue(true);
-  renderApp();
-  fireEvent.click(screen.getByRole('button', { name: 'Browse' }));
+  expect(screen.getByRole('navigation', { name: 'Browse' })).toBeInTheDocument();
   expect(screen.getByTestId('jukebox-browse-panel')).toBeInTheDocument();
 });
 
-test('tapping the browse panel\'s close button closes it', () => {
-  useAuthStore.mockReturnValue(true);
+test('has no Browse button any more', () => {
   renderApp();
-  fireEvent.click(screen.getByRole('button', { name: 'Browse' }));
-  fireEvent.click(screen.getByText('close-panel'));
-  expect(screen.queryByTestId('jukebox-browse-panel')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Browse' })).not.toBeInTheDocument();
+});
+
+test('keeps the audio engine mounted but hidden', () => {
+  renderApp();
+  const engine = screen.getByTestId('player-engine');
+  expect(engine).toBeInTheDocument();
+  expect(engine.closest('.jukebox-engine')).toHaveAttribute('hidden');
+});
+
+test('the drawer starts closed', () => {
+  renderApp();
+  expect(activeTab()).toBe('none');
+});
+
+test('tapping a tab while the drawer is closed opens it on that tab', () => {
+  renderApp();
+  fireEvent.click(tab('Search'));
+  expect(activeTab()).toBe('search');
+  expect(tab('Search')).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('tapping the active tab closes the drawer', () => {
+  renderApp();
+  fireEvent.click(tab('Quick Hit'));
+  fireEvent.click(tab('Quick Hit'));
+  expect(activeTab()).toBe('none');
+  expect(tab('Quick Hit')).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('tapping a different tab switches to it', () => {
+  renderApp();
+  fireEvent.click(tab('Quick Hit'));
+  fireEvent.click(tab('Next Up'));
+  expect(activeTab()).toBe('nextup');
+  expect(tab('Quick Hit')).toHaveAttribute('aria-pressed', 'false');
+  expect(tab('Next Up')).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('reopening after a close starts on whichever tab was tapped', () => {
+  renderApp();
+  fireEvent.click(tab('Search'));
+  fireEvent.click(tab('Search'));
+  fireEvent.click(tab('Next Up'));
+  expect(activeTab()).toBe('nextup');
 });

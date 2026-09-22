@@ -2585,18 +2585,6 @@ body:has(.jukebox-app) {
   -webkit-user-select: text;
   user-select: text;
 }
-/* Mirrors .app-footer's chrome (dark ground + top border) — the normal app's
-   fixed footer isn't in the tree here, so .music-player-wrapper's height:100%
-   has nothing to resolve against unless this parent has a definite height. */
-.jukebox-app .jukebox-footer {
-  flex-shrink: 0;
-  height: var(--jukebox-footer-height);
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  background-color: #1a252f;
-  border-top: 1px solid #2c3e50;
-}
 /* Bottom tab bar (JukeboxTabBar.jsx): replaces the old footer transport. Same
    height variable as the footer it replaces, so the drawer, tracks panel and
    keyboard — all anchored to --jukebox-footer-height — don't move. */
@@ -2639,6 +2627,9 @@ body:has(.jukebox-app) {
 .jukebox-app .jukebox-progress-line-fill {
   height: 100%;
   background: #60a5fa;
+}
+.jukebox-app .jukebox-engine[hidden] {
+  display: none;
 }
 
 /* Now playing: the permanent full-screen view behind the panels. */
@@ -2744,15 +2735,6 @@ body:has(.jukebox-app) {
   font-size: 1.1rem;
   color: #ef4444;
 }
-.jukebox-app .player-btn {
-  min-width: 3.5rem;
-  min-height: 3.5rem;
-  font-size: 1.75rem;
-}
-.jukebox-app .music-player-playlist-container .track-item {
-  min-height: 3.5rem;
-  font-size: 1.1rem;
-}
 .jukebox-app .jukebox-browse-panel {
   position: fixed;
   top: 0;
@@ -2773,58 +2755,21 @@ body:has(.jukebox-app) {
   padding: 1rem;
   box-sizing: border-box;
 }
-/* Next Up reuses the normal app's queue drawer, whose base rule is positioned
-   against that app's fixed 4.5em header/footer (top: 4.5em; left: 0;
-   width: 400px; height: calc(100vh - 11em)) — neither of which exists here.
-   Re-anchor it to the same right-edge slot as .jukebox-browse-panel above, per
-   the spec's §4 "same right-edge panel slot" requirement. The two panels are
-   mutually exclusive in JS, so their differing z-indexes never matter.
-   !important is required (not just the higher specificity of this selector):
-   the <=768px breakpoint's copy of this rule sets the same box properties
-   with !important against the mobile app's --mb chrome, and a kiosk panel can
-   easily be narrower than 768 CSS px. */
-.jukebox-app .music-player-playlist-container {
-  top: 0 !important;
-  left: auto !important;
-  right: 0 !important;
-  bottom: var(--jukebox-footer-height) !important;
-  width: min(420px, 90vw) !important;
-  height: auto !important;
-  max-height: none !important;
-  box-sizing: border-box;
-}
-/* The tabs live inside the scrolling panel, so pin them: without this a long
-   Quick Hit grid scrolls the tabs (and the ✕ close button) out of view. The
-   opaque background matches .jukebox-browse-panel so content slides under it. */
-.jukebox-app .jukebox-panel-header {
-  position: sticky;
-  top: -1rem; /* cancels the panel's 1rem padding so it pins flush to the top edge */
-  z-index: 1;
-  margin: -1rem -1rem 1rem;
-  padding: 1rem 1rem 0.5rem;
-  background: #2a3540;
-}
-.jukebox-app .jukebox-panel-header button {
-  min-height: 3rem;
-  min-width: 3rem;
-  font-size: 1.1rem;
-  padding: 0.5rem 1rem;
-}
-/* Search tab. The search bar (field + type chips) is pinned just under the tab
-   header while results scroll. The header is 4.5rem tall and the panel has 1rem
-   of padding that sticky offsets are measured inside of, so the bar's `top`
-   is 4.5rem - 1rem; the header itself uses top:-1rem for the same reason. */
 .jukebox-app .jukebox-search-tab {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
 }
+/* Search tab. The search bar (field + type chips) is pinned to the top of the
+   drawer while results scroll. The drawer has 1rem of padding and sticky
+   offsets are measured inside it, so top:-1rem plus the -1rem margins pin it
+   flush to the drawer's top and side edges. */
 .jukebox-app .jukebox-search-bar {
   position: sticky;
-  top: 3.5rem;
+  top: -1rem;
   z-index: 1;
-  margin: 0 -1rem;
-  padding: 0 1rem 0.5rem;
+  margin: -1rem -1rem 0;
+  padding: 1rem 1rem 0.5rem;
   background: #2a3540;
   display: flex;
   flex-direction: column;
@@ -2972,35 +2917,6 @@ body:has(.jukebox-app) {
   font-size: 0.85rem;
   color: rgba(255, 255, 255, 0.6);
 }
-.jukebox-app .jukebox-browse-button {
-  position: fixed;
-  right: 1rem;
-  top: 50%;
-  transform: translateY(-50%);
-  min-width: 4rem;
-  min-height: 4rem;
-  border-radius: 50%;
-  font-size: 1.1rem;
-  z-index: 50;
-}
-
-/* The queue/hamburger toggle is hidden here — Next Up is a tab in the
-   browse panel now (JukeboxNextUpTab.jsx) instead of its own floating
-   drawer triggered from the footer. Hide rather than remove: no component
-   change (MusicPlayerWrapper is untouched, same as everywhere else in this
-   section), and its underlying drawerOpen/PlaylistDrawer machinery is
-   simply unused in Jukebox Mode now, not broken. */
-.jukebox-app .hamburger-btn {
-  display: none;
-}
-/* Shuffle renders as an empty box on this hardware (🔀 needs a color-emoji
-   font that isn't installed; the other transport glyphs are plain Unicode
-   symbols that don't need one) — hidden rather than chasing a font fix,
-   since it's not an essential control for this kiosk. */
-.jukebox-app .shuffle-btn {
-  display: none;
-}
-
 /* Quick Hit: a touch-draggable horizontal row of recently-played albums.
    Previously had no rules at all, so there was no scroll container to drag —
    AlbumCard's children just stacked in normal block flow. */

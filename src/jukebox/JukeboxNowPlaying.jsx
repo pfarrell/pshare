@@ -7,7 +7,7 @@ const JukeboxNowPlaying = () => {
   if (!currentTrack) {
     return (
       <div className="jukebox-now-playing jukebox-now-playing-empty">
-        <p>Nothing playing — tap browse to pick something</p>
+        <p>Nothing playing — tap Quick Hit or Search to pick something</p>
       </div>
     );
   }
