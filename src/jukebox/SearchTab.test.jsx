@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import SearchTab from './SearchTab';
@@ -47,6 +47,10 @@ const section = (name) => screen.getByRole('heading', { name }).closest('section
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 test('shows a prompt before any search has been run, and no filter chips yet', () => {
@@ -138,14 +142,14 @@ test('the type chips filter the results and All returns to the overview', async 
   expect(screen.getByRole('heading', { name: 'Albums' })).toBeInTheDocument();
 });
 
-test('a chip for a type with no results is disabled', async () => {
+test('a chip for a type with no results is not rendered at all', async () => {
   apiService.search.mockResolvedValue({ data: { results: [smallResponse.results[0]], tracks: [] } });
   renderTab();
   await runSearch();
 
   await waitFor(() => screen.getByRole('button', { name: 'Albums (1)' }));
-  expect(screen.getByRole('button', { name: 'Artists (0)' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Tracks (0)' })).toBeDisabled();
+  expect(screen.queryByRole('button', { name: /^Artists/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /^Tracks/ })).not.toBeInTheDocument();
 });
 
 test('a new search resets the filter back to All', async () => {
@@ -280,14 +284,14 @@ test('tapping a collection result calls onSelectCollection with that collection'
   expect(onSelectCollection).toHaveBeenCalledWith(expect.objectContaining({ id: 21, name: 'Found Collection' }));
 });
 
-test('playlist and collection chips are disabled when there are none', async () => {
+test('playlist and collection chips are not rendered when there are none', async () => {
   apiService.search.mockResolvedValue({ data: { results: [smallResponse.results[0]], tracks: [] } });
   renderTab();
   await runSearch();
 
   await waitFor(() => screen.getByRole('button', { name: 'Albums (1)' }));
-  expect(screen.getByRole('button', { name: 'Playlists (0)' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Collections (0)' })).toBeDisabled();
+  expect(screen.queryByRole('button', { name: /^Playlists/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /^Collections/ })).not.toBeInTheDocument();
 });
 
 test('playlist and collection tiles are plain buttons — no play buttons or menus', async () => {
@@ -340,4 +344,161 @@ test('shows a retry option when search fails, and retry re-runs the same query',
     expect(apiService.search).toHaveBeenCalledWith('test query');
     expect(screen.getByText('No results')).toBeInTheDocument();
   });
+});
+
+// --- Incremental search ---------------------------------------------------
+
+test('incremental search fires automatically after a short pause, without an explicit submit', async () => {
+  apiService.search.mockResolvedValue({ data: smallResponse });
+  vi.useFakeTimers();
+  renderTab();
+
+  fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: 'monk' } });
+  expect(apiService.search).not.toHaveBeenCalled();
+
+  await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+
+  expect(apiService.search).toHaveBeenCalledWith('monk');
+  expect(screen.getByText('Found Album')).toBeInTheDocument();
+});
+
+test('does not auto-search until at least 2 characters are typed', async () => {
+  apiService.search.mockResolvedValue({ data: smallResponse });
+  vi.useFakeTimers();
+  renderTab();
+
+  fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: 'm' } });
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+
+  expect(apiService.search).not.toHaveBeenCalled();
+});
+
+test('debounces — only the settled query is searched, not every keystroke', async () => {
+  apiService.search.mockResolvedValue({ data: smallResponse });
+  vi.useFakeTimers();
+  renderTab();
+
+  fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: 'mo' } });
+  await act(async () => { await vi.advanceTimersByTimeAsync(200); }); // less than the debounce delay
+  fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: 'monk' } });
+  await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+
+  expect(apiService.search).toHaveBeenCalledTimes(1);
+  expect(apiService.search).toHaveBeenCalledWith('monk');
+});
+
+test('only the latest search response is applied, even if an earlier request resolves later', async () => {
+  let resolveFirst, resolveSecond;
+  apiService.search.mockImplementationOnce(() => new Promise((r) => { resolveFirst = r; }));
+  renderTab();
+
+  fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: 'first query' } });
+  fireEvent.submit(screen.getByRole('search'));
+
+  apiService.search.mockImplementationOnce(() => new Promise((r) => { resolveSecond = r; }));
+  fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: 'second query' } });
+  fireEvent.submit(screen.getByRole('search'));
+
+  // Resolve out of order: the later request finishes first...
+  await act(async () => {
+    resolveSecond({ data: { results: [{ type: 'album', data: { id: 2, title: 'Second Album', image_path: 'b.jpg', artist: { id: 2, name: 'B' } } }], tracks: [] } });
+    await Promise.resolve();
+  });
+  expect(screen.getByText('Second Album')).toBeInTheDocument();
+
+  // ...then the earlier, now-stale request finishes after it.
+  await act(async () => {
+    resolveFirst({ data: { results: [{ type: 'album', data: { id: 1, title: 'First Album', image_path: 'a.jpg', artist: { id: 1, name: 'A' } } }], tracks: [] } });
+    await Promise.resolve();
+  });
+
+  expect(screen.getByText('Second Album')).toBeInTheDocument();
+  expect(screen.queryByText('First Album')).not.toBeInTheDocument();
+});
+
+test('keeps the current filter across an incremental refinement, only resetting for a new query that starts from empty', async () => {
+  apiService.search.mockResolvedValue({ data: bigResponse });
+  renderTab();
+  await runSearch('monk');
+  await waitFor(() => screen.getByRole('button', { name: 'Tracks (7)' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Tracks (7)' }));
+  expect(screen.getByRole('button', { name: 'Tracks (7)' })).toHaveAttribute('aria-pressed', 'true');
+
+  vi.useFakeTimers();
+  fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: 'monk refined' } });
+  await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+
+  expect(screen.getByRole('button', { name: 'Tracks (7)' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('resets the filter to All for an incremental search that starts from an empty box', async () => {
+  apiService.search.mockResolvedValue({ data: bigResponse });
+  renderTab();
+  await runSearch('monk');
+  await waitFor(() => screen.getByRole('button', { name: 'Tracks (7)' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Tracks (7)' }));
+
+  fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: '' } });
+  vi.useFakeTimers();
+  fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: 'zz' } });
+  await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+
+  expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('falls back to All if the currently selected filter has zero results after a refinement', async () => {
+  apiService.search.mockResolvedValue({ data: bigResponse });
+  renderTab();
+  await runSearch('monk');
+  await waitFor(() => screen.getByRole('button', { name: 'Tracks (7)' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Tracks (7)' }));
+  expect(screen.getAllByText(/Song \d/)).toHaveLength(7);
+
+  apiService.search.mockResolvedValue({ data: { results: [smallResponse.results[0]], tracks: [] } });
+  vi.useFakeTimers();
+  fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: 'monk refined' } });
+  await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+
+  expect(screen.queryByRole('button', { name: /^Tracks/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Albums' })).toBeInTheDocument();
+  expect(screen.queryByText(/Song \d/)).not.toBeInTheDocument();
+});
+
+// --- 100+ count cap ---------------------------------------------------
+
+const makeAlbumResults = (n) =>
+  Array.from({ length: n }, (_, i) => ({ type: 'album', data: { id: 900 + i, title: `Huge ${i + 1}`, image_path: 'a.jpg', artist: { id: 1, name: 'X' } } }));
+
+test('caps a displayed chip count at "100+" once it exceeds 100', async () => {
+  apiService.search.mockResolvedValue({ data: { results: makeAlbumResults(130), tracks: [] } });
+  renderTab();
+  await runSearch();
+
+  await waitFor(() => screen.getByRole('button', { name: 'Albums (100+)' }));
+});
+
+test('shows the exact count at exactly 100 — the cap only kicks in above it', async () => {
+  apiService.search.mockResolvedValue({ data: { results: makeAlbumResults(100), tracks: [] } });
+  renderTab();
+  await runSearch();
+
+  await waitFor(() => screen.getByRole('button', { name: 'Albums (100)' }));
+});
+
+test('"See all" also shows the capped count', async () => {
+  apiService.search.mockResolvedValue({ data: { results: makeAlbumResults(130), tracks: [] } });
+  renderTab();
+  await runSearch();
+  await waitFor(() => screen.getByRole('heading', { name: 'Albums' }));
+
+  expect(within(section('Albums')).getByRole('button', { name: 'See all (100+)' })).toBeInTheDocument();
+});
+
+test('"See all" for a type still under 100 shows its exact count', async () => {
+  apiService.search.mockResolvedValue({ data: bigResponse });
+  renderTab();
+  await runSearch();
+  await waitFor(() => screen.getByRole('heading', { name: 'Albums' }));
+
+  expect(within(section('Albums')).getByRole('button', { name: 'See all (6)' })).toBeInTheDocument();
 });
