@@ -10,12 +10,14 @@ vi.mock('./QuickHitTab', () => ({
   ),
 }));
 vi.mock('./SearchTab', () => ({
-  default: ({ onSelectArtist, onSelectAlbum, onEnqueue }) => (
+  default: ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCollection, onEnqueue }) => (
     <div data-testid="search-tab">
       {/* Uncontrolled on purpose: its value lives in the DOM node, so it's lost if the tab remounts. */}
       <input data-testid="search-input" placeholder="mock search" />
       <button onClick={() => onSelectArtist({ id: 2, name: 'Search Artist' })}>select-search-artist</button>
       <button onClick={() => onSelectAlbum({ id: 3, title: 'Search Album' })}>select-search-album</button>
+      <button onClick={() => onSelectPlaylist({ id: 5, name: 'Search Playlist' })}>select-search-playlist</button>
+      <button onClick={() => onSelectCollection({ id: 6, name: 'Search Collection' })}>select-search-collection</button>
       <button onClick={onEnqueue}>search-enqueue</button>
     </div>
   ),
@@ -30,12 +32,31 @@ vi.mock('./JukeboxArtistView', () => ({
     </div>
   ),
 }));
+vi.mock('./JukeboxCollectionView', () => ({
+  default: ({ collection, onSelectAlbum, onBack, onEnqueue }) => (
+    <div data-testid="jukebox-collection-view">
+      <span>collection-view: {collection.name}</span>
+      <button onClick={() => onSelectAlbum({ id: 7, title: 'Album From Collection' })}>select-album-from-collection</button>
+      <button onClick={onBack}>back-from-collection</button>
+      <button onClick={onEnqueue}>collection-view-enqueue</button>
+    </div>
+  ),
+}));
 vi.mock('./JukeboxTracksPanel', () => ({
   default: ({ album, onClose, onEnqueue }) => (
     <div data-testid="jukebox-tracks-panel">
       <span>tracks-panel: {album.title}</span>
       <button onClick={onClose}>close-tracks-panel</button>
       <button onClick={onEnqueue}>tracks-panel-enqueue</button>
+    </div>
+  ),
+}));
+vi.mock('./JukeboxPlaylistPanel', () => ({
+  default: ({ playlist, onClose, onEnqueue }) => (
+    <div data-testid="jukebox-playlist-panel">
+      <span>playlist-panel: {playlist.name}</span>
+      <button onClick={onClose}>close-playlist-panel</button>
+      <button onClick={onEnqueue}>playlist-panel-enqueue</button>
     </div>
   ),
 }));
@@ -233,4 +254,102 @@ test('onEnqueue is passed through to the tracks panel, the artist view, and Sear
   fireEvent.click(screen.getByText('select-search-album'));
   fireEvent.click(screen.getByText('tracks-panel-enqueue'));
   expect(onEnqueue).toHaveBeenCalledTimes(3);
+});
+
+test('selecting a playlist from Search opens the playlist panel, and onEnqueue reaches it', () => {
+  const onEnqueue = vi.fn();
+  renderPanel('search', { onEnqueue });
+
+  fireEvent.click(screen.getByText('select-search-playlist'));
+
+  expect(screen.getByText('playlist-panel: Search Playlist')).toBeInTheDocument();
+  fireEvent.click(screen.getByText('playlist-panel-enqueue'));
+  expect(onEnqueue).toHaveBeenCalledTimes(1);
+});
+
+test('the playlist panel is a sibling of the drawer, not inside it', () => {
+  const { container } = renderPanel('search');
+  fireEvent.click(screen.getByText('select-search-playlist'));
+
+  expect(screen.getByTestId('jukebox-playlist-panel').closest('.jukebox-browse-panel')).toBeNull();
+  expect(drawer(container)).not.toBeNull();
+});
+
+test('closing the playlist panel removes it without closing the drawer', () => {
+  const { container } = renderPanel('search');
+  fireEvent.click(screen.getByText('select-search-playlist'));
+
+  fireEvent.click(screen.getByText('close-playlist-panel'));
+
+  expect(screen.queryByTestId('jukebox-playlist-panel')).not.toBeInTheDocument();
+  expect(drawer(container)).toBeVisible();
+});
+
+test('selecting a playlist closes an open album tracks panel, and vice versa — only one at a time', () => {
+  renderPanel('search');
+  fireEvent.click(screen.getByText('select-search-album'));
+  expect(screen.getByTestId('jukebox-tracks-panel')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByText('select-search-playlist'));
+  expect(screen.queryByTestId('jukebox-tracks-panel')).not.toBeInTheDocument();
+  expect(screen.getByTestId('jukebox-playlist-panel')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByText('select-search-album'));
+  expect(screen.queryByTestId('jukebox-playlist-panel')).not.toBeInTheDocument();
+  expect(screen.getByTestId('jukebox-tracks-panel')).toBeInTheDocument();
+});
+
+test('closing the drawer closes the playlist panel too, and it does not reappear on reopen', () => {
+  const { rerender } = renderPanel('search');
+  fireEvent.click(screen.getByText('select-search-playlist'));
+  expect(screen.getByTestId('jukebox-playlist-panel')).toBeInTheDocument();
+
+  rerender(<JukeboxBrowsePanel activeTab={null} />);
+  expect(screen.queryByTestId('jukebox-playlist-panel')).not.toBeInTheDocument();
+
+  rerender(<JukeboxBrowsePanel activeTab="search" />);
+  expect(screen.queryByTestId('jukebox-playlist-panel')).not.toBeInTheDocument();
+});
+
+test('selecting a collection drills into the collection view; an album from there opens the tracks panel', () => {
+  renderPanel('search');
+  fireEvent.click(screen.getByText('select-search-collection'));
+  expect(screen.getByText('collection-view: Search Collection')).toBeInTheDocument();
+  expect(screen.queryByTestId('jukebox-tracks-panel')).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByText('select-album-from-collection'));
+
+  expect(screen.getByText('tracks-panel: Album From Collection')).toBeInTheDocument();
+  expect(screen.getByTestId('jukebox-collection-view')).toBeInTheDocument();
+});
+
+test('Back from the collection view returns to search results', () => {
+  renderPanel('search');
+  fireEvent.click(screen.getByText('select-search-collection'));
+
+  fireEvent.click(screen.getByText('back-from-collection'));
+
+  expect(screen.queryByTestId('jukebox-collection-view')).not.toBeInTheDocument();
+  expect(screen.getByTestId('search-tab')).toBeVisible();
+});
+
+test('onEnqueue reaches the collection view\'s Shuffle All', () => {
+  const onEnqueue = vi.fn();
+  renderPanel('search', { onEnqueue });
+  fireEvent.click(screen.getByText('select-search-collection'));
+
+  fireEvent.click(screen.getByText('collection-view-enqueue'));
+
+  expect(onEnqueue).toHaveBeenCalledTimes(1);
+});
+
+test('switching to a different tab dismisses an open collection view, same as an artist view', () => {
+  const { rerender } = renderPanel('search');
+  fireEvent.click(screen.getByText('select-search-collection'));
+  expect(screen.getByTestId('jukebox-collection-view')).toBeInTheDocument();
+
+  rerender(<JukeboxBrowsePanel activeTab="nextup" />);
+  rerender(<JukeboxBrowsePanel activeTab="search" />);
+
+  expect(screen.queryByTestId('jukebox-collection-view')).not.toBeInTheDocument();
 });
