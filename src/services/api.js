@@ -131,6 +131,7 @@ export const apiService = {
   deleteArtist: (id) => api.delete(`/admin/artist/${id}`),
   updateAlbum: (id, data) => api.put(`/admin/album/${id}`, data),
   deleteAlbum: (id) => api.delete(`/admin/album/${id}`),
+  compareAlbums: (idA, idB) => api.get(`/admin/album/${idA}/compare/${idB}`),
   updateTrack: (id, data) => api.put(`/admin/track/${id}`, data),
   deleteTrack: (id) => api.delete(`/admin/track/${id}`),
   makeTrackSingle: (id) => api.post(`/admin/track/${id}/make-single`),

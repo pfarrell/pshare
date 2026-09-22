@@ -1223,6 +1223,13 @@
   flex-direction: column;
 }
 
+.modal-panel--lg {
+  max-width: 900px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
 /* =================================
    IFRAME MODAL (Overtone, Wikipedia)
    ================================= */

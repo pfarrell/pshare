@@ -149,6 +149,62 @@ router.delete('/album/:id', async (c) => {
   }
 })
 
+// GET /admin/album/:idA/compare/:idB — metadata + track lists for two albums,
+// side by side. Built for the duplicate-review flow but not tied to it — any
+// two album ids work.
+router.get('/album/:idA/compare/:idB', async (c) => {
+  const idA = parseInt(c.req.param('idA'))
+  const idB = parseInt(c.req.param('idB'))
+  if (!Number.isInteger(idA) || !Number.isInteger(idB)) {
+    return c.json({ error: 'idA and idB must be integers' }, 400)
+  }
+
+  const albums = await db
+    .selectFrom('albums')
+    .leftJoin('artists', 'artists.id', 'albums.artist_id')
+    .select([
+      'albums.id', 'albums.title', 'albums.artist_id', 'artists.name as artist_name',
+      'albums.release_year', 'albums.disc_number', 'albums.is_compilation',
+      'albums.musicbrainz_id', 'albums.mbid_confidence', 'albums.mbid_status',
+      'albums.created_at', 'albums.updated_at',
+    ])
+    .where('albums.id', 'in', [idA, idB])
+    .execute()
+
+  const albumA = albums.find((a) => a.id === idA)
+  const albumB = albums.find((a) => a.id === idB)
+  if (!albumA || !albumB) return c.json({ error: 'One or both albums not found' }, 404)
+
+  const tracks = await db
+    .selectFrom('tracks')
+    .select(['id', 'album_id', 'track_number', 'title', 'duration_sec', 'media_file_id'])
+    .where('album_id', 'in', [idA, idB])
+    .execute()
+
+  // track_number is stored as text — sort numerically where possible, falling
+  // back to string order for anything non-numeric (e.g. "3.5", blank/null).
+  const byTrackOrder = (t: typeof tracks[number]) => {
+    const n = parseInt(t.track_number ?? '', 10)
+    return Number.isNaN(n) ? Infinity : n
+  }
+  const tracksFor = (albumId: number) =>
+    tracks.filter((t) => t.album_id === albumId).sort((x, y) => byTrackOrder(x) - byTrackOrder(y) || (x.track_number ?? '').localeCompare(y.track_number ?? ''))
+
+  const shape = (album: typeof albumA) => ({
+    id: album.id, title: album.title, artist_id: album.artist_id, artist_name: album.artist_name,
+    release_year: album.release_year, disc_number: album.disc_number, is_compilation: album.is_compilation,
+    musicbrainz_id: album.musicbrainz_id, mbid_confidence: album.mbid_confidence, mbid_status: album.mbid_status,
+    created_at: album.created_at, updated_at: album.updated_at,
+    track_count: tracksFor(album.id).length,
+    tracks: tracksFor(album.id).map((t) => ({
+      id: t.id, track_number: t.track_number, title: t.title,
+      duration_sec: t.duration_sec, media_file_id: t.media_file_id,
+    })),
+  })
+
+  return c.json({ a: shape(albumA), b: shape(albumB) })
+})
+
 // POST /admin/album — create a new album stub
 router.post('/album', async (c) => {
   const body = await c.req.json()

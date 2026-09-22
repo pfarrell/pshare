@@ -4,6 +4,7 @@ import { db } from '../../db/database.js'
 import { titlesRoughlyMatch } from '../../utils/titleMatch.js'
 import { mergeAlbumInto } from '../../services/albumMergeService.js'
 import { mergeTrackInto } from '../../services/trackMergeService.js'
+import { countsService } from '../../services/countsService.js'
 
 const pairKey = (a: number, b: number): string => (a < b ? `${a}-${b}` : `${b}-${a}`)
 
@@ -124,11 +125,19 @@ router.get('/duplicates/albums', async (c) => {
 
   const total = pairs.length
   const totalPages = Math.max(1, Math.ceil(total / limit))
+  const pagePairs = pairs.slice((page - 1) * limit, page * limit)
+
+  // Only fetch counts for the albums actually shown on this page, not every
+  // album in every pair — the delete confirm dialog needs a live count.
+  const pageAlbumIds = Array.from(new Set(pagePairs.flatMap((p) => [p.a.id, p.b.id])))
+  const trackCounts = await countsService.trackCountsByAlbumIds(pageAlbumIds)
+
   const shape = (row: AlbumRow) => ({
     id: row.id, title: row.title, release_year: row.release_year,
     image_path: row.image_path, artist_name: row.artist_name,
+    track_count: trackCounts.get(row.id) ?? 0,
   })
-  const pageItems = pairs.slice((page - 1) * limit, page * limit).map((p) => ({
+  const pageItems = pagePairs.map((p) => ({
     tier: p.tier, a: shape(p.a), b: shape(p.b),
   }))
 
