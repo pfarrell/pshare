@@ -75,7 +75,7 @@ export default function AdminDuplicateTracks() {
                 ].map(({ track, keepId, loseId, loseTitle }) => (
                   <div key={track.id} style={{ flex: '1 1 200px' }}>
                     <Link to={`/album/${track.album_id}`} target="_blank" rel="noreferrer" style={{ fontWeight: 'bold', color: '#3b82f6', textDecoration: 'none' }}>
-                      {track.title} ↗
+                      {track.title}
                     </Link>
                     <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>{formatDuration(track.duration_sec)}</p>
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
