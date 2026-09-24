@@ -94,4 +94,30 @@ describe('AlbumCompareModal', () => {
 
     await screen.findByText('Failed to load comparison');
   });
+
+  test('shows every track even when two tracks on the same side share a track_number', async () => {
+    apiService.compareAlbums.mockResolvedValue({
+      data: {
+        a: {
+          id: 10, title: 'Greatest Hits', artist_name: 'Test Artist', track_count: 2,
+          tracks: [
+            { id: 1, track_number: '1', title: 'Bonus Intro', duration_sec: 30, media_file_id: 1 },
+            { id: 2, track_number: '1', title: 'Real Track One', duration_sec: 200, media_file_id: 2 },
+          ],
+        },
+        b: {
+          id: 20, title: 'Greatest Hits (Remaster)', artist_name: 'Test Artist', track_count: 1,
+          tracks: [
+            { id: 3, track_number: '1', title: 'Real Track One', duration_sec: 200, media_file_id: 3 },
+          ],
+        },
+      },
+    });
+    renderModal();
+
+    // Previously the second same-side "1" silently overwrote the first in a
+    // Map keyed by track_number, so "Bonus Intro" never rendered at all.
+    await screen.findByText('Bonus Intro (0:30)');
+    expect(screen.getAllByText('Real Track One (3:20)')).toHaveLength(2);
+  });
 });

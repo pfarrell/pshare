@@ -34,17 +34,43 @@ const META_FIELDS = [
 // Pairs up two albums' tracks by track_number (already sorted numerically by
 // the backend) — union of both track_numbers, in order, blanks where one
 // side has nothing at that slot.
+//
+// track_number isn't unique within an album (bonus/hidden tracks, disc
+// mislabeling, bad tags can all produce two tracks sharing a number) — group
+// into arrays per key rather than collapsing to one track per key, or a
+// same-side duplicate silently overwrites and disappears instead of showing.
+// When one side has more tracks under a number than the other, the extras
+// get their own row with a blank opposite them.
 function pairTracks(tracksA, tracksB) {
+  const groupByKey = (tracks) => {
+    const groups = new Map();
+    for (const t of tracks) {
+      const key = t.track_number ?? `__notrack_${t.id}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(t);
+    }
+    return groups;
+  };
+  const groupsA = groupByKey(tracksA);
+  const groupsB = groupByKey(tracksB);
+
   const seen = new Set();
   const order = [];
   for (const t of [...tracksA, ...tracksB]) {
     const key = t.track_number ?? `__notrack_${t.id}`;
     if (!seen.has(key)) { seen.add(key); order.push(key); }
   }
-  const byKey = (tracks) => new Map(tracks.map((t) => [t.track_number ?? `__notrack_${t.id}`, t]));
-  const mapA = byKey(tracksA);
-  const mapB = byKey(tracksB);
-  return order.map((key) => ({ key, trackA: mapA.get(key), trackB: mapB.get(key) }));
+
+  const rows = [];
+  for (const key of order) {
+    const groupA = groupsA.get(key) ?? [];
+    const groupB = groupsB.get(key) ?? [];
+    const rowCount = Math.max(groupA.length, groupB.length, 1);
+    for (let i = 0; i < rowCount; i++) {
+      rows.push({ key: `${key}__${i}`, trackA: groupA[i], trackB: groupB[i] });
+    }
+  }
+  return rows;
 }
 
 const trackLabel = (track) => {
