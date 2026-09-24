@@ -13,6 +13,7 @@ vi.mock('../services/api', () => ({
     addTrackCollaborator: vi.fn(),
     removeTrackCollaborator: vi.fn(),
     searchAdminArtists: vi.fn(),
+    getTrackMusicbrainzPreview: vi.fn(),
   },
 }));
 
@@ -167,6 +168,59 @@ describe('AdminTrack', () => {
     fireEvent.click(link, { ctrlKey: true });
 
     expect(screen.queryByTitle('MusicBrainz')).not.toBeInTheDocument();
+  });
+
+  it('disables "Fill from MusicBrainz" when no recording MBID is set', async () => {
+    renderPage();
+    await screen.findByDisplayValue('Test Track');
+    expect(screen.getByRole('button', { name: /Fill title\/track # from MusicBrainz/ })).toBeDisabled();
+  });
+
+  it('fills title and track number from the preview endpoint and leaves saving to the user', async () => {
+    apiService.getTrackAdminDetail.mockResolvedValue({
+      data: { ...mockDetail, mediaFile: { ...mockDetail.mediaFile, musicbrainz_recording_id: 'recording-uuid-1' } },
+    });
+    apiService.getTrackMusicbrainzPreview.mockResolvedValue({ data: { title: 'Lush Life', trackNumber: 5 } });
+    renderPage();
+    await screen.findByDisplayValue('Test Track');
+
+    const fillButton = screen.getByRole('button', { name: /Fill title\/track # from MusicBrainz/ });
+    expect(fillButton).not.toBeDisabled();
+    fireEvent.click(fillButton);
+
+    await waitFor(() => expect(apiService.getTrackMusicbrainzPreview).toHaveBeenCalledWith('1'));
+    expect(await screen.findByDisplayValue('Lush Life')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('5')).toBeInTheDocument();
+    // Nothing persisted yet — the existing Save flow does that.
+    expect(apiService.updateTrack).not.toHaveBeenCalled();
+  });
+
+  it('fills only the title when the match had no trustworthy track number, leaving the existing one alone', async () => {
+    apiService.getTrackAdminDetail.mockResolvedValue({
+      data: { ...mockDetail, mediaFile: { ...mockDetail.mediaFile, musicbrainz_recording_id: 'recording-uuid-1' } },
+    });
+    apiService.getTrackMusicbrainzPreview.mockResolvedValue({ data: { title: 'Lush Life', trackNumber: null } });
+    renderPage();
+    await screen.findByDisplayValue('Test Track');
+
+    fireEvent.click(screen.getByRole('button', { name: /Fill title\/track # from MusicBrainz/ }));
+
+    expect(await screen.findByDisplayValue('Lush Life')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('3')).toBeInTheDocument(); // mockDetail's original track_number, unchanged
+  });
+
+  it('leaves the fields alone when the preview lookup fails', async () => {
+    apiService.getTrackAdminDetail.mockResolvedValue({
+      data: { ...mockDetail, mediaFile: { ...mockDetail.mediaFile, musicbrainz_recording_id: 'recording-uuid-1' } },
+    });
+    apiService.getTrackMusicbrainzPreview.mockRejectedValue({ response: { data: { error: 'Not found in the local MusicBrainz mirror' } } });
+    renderPage();
+    await screen.findByDisplayValue('Test Track');
+
+    fireEvent.click(screen.getByRole('button', { name: /Fill title\/track # from MusicBrainz/ }));
+
+    await waitFor(() => expect(apiService.getTrackMusicbrainzPreview).toHaveBeenCalled());
+    expect(screen.getByDisplayValue('Test Track')).toBeInTheDocument();
   });
 });
 

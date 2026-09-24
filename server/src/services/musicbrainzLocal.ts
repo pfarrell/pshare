@@ -145,6 +145,56 @@ export async function getReleaseByMbid(
   }
 }
 
+interface TrackForRecordingRow {
+  name: string
+  position: number
+  medium_position: number
+  length: number | null
+}
+
+// Bemused's track-edit "Fill from MusicBrainz" action: given a recording and
+// (usually) the release its local album is already matched to, returns that
+// track's title/position within that specific release. Track position (and
+// sometimes title) varies release-to-release — reissues, compilations, and
+// deluxe editions renumber and sometimes retitle a recording — so an exact
+// release match is preferred. When releaseMbid is omitted, or doesn't
+// actually contain this recording, this falls back to any release
+// containing it (lowest internal release id, same deterministic pick
+// getReleaseByMbid-adjacent lookups use elsewhere) and flags the result as
+// inexact via exactRelease — callers should not trust trackNumber then.
+export async function getTrackForRecording(
+  recordingMbid: string,
+  releaseMbid?: string
+): Promise<{ title: string; trackNumber: number | null } | null> {
+  if (releaseMbid) {
+    const exact = await sql<TrackForRecordingRow>`
+      SELECT t.name, t.position, m.position AS medium_position, t.length
+      FROM recording rec
+      JOIN track t ON t.recording = rec.id
+      JOIN medium m ON m.id = t.medium
+      JOIN release rel ON rel.id = m.release
+      WHERE rec.gid = ${recordingMbid} AND rel.gid = ${releaseMbid}
+      LIMIT 1
+    `.execute(mbDb)
+    const row = exact.rows[0]
+    if (row) return { title: row.name, trackNumber: row.position }
+  }
+
+  const fallback = await sql<TrackForRecordingRow>`
+    SELECT t.name, t.position, m.position AS medium_position, t.length
+    FROM recording rec
+    JOIN track t ON t.recording = rec.id
+    JOIN medium m ON m.id = t.medium
+    JOIN release rel ON rel.id = m.release
+    WHERE rec.gid = ${recordingMbid}
+    ORDER BY rel.id
+    LIMIT 1
+  `.execute(mbDb)
+  const row = fallback.rows[0]
+  if (!row) return null
+  return { title: row.name, trackNumber: null }
+}
+
 interface ArtistSearchRow {
   gid: string
   name: string

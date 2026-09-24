@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { db } from '../../db/database.js'
 import { sql } from 'kysely'
 import { SINGLES_ALBUM_TITLE } from '../../constants/singles.js'
+import { getTrackForRecording } from '../../services/musicbrainzLocal.js'
 
 const router = new Hono()
 
@@ -179,6 +180,38 @@ router.put('/track/:id/recording-mbid', async (c) => {
   } catch (error) {
     console.error('Error updating recording MBID:', error)
     return c.json({ error: 'Failed to update recording MBID' }, 500)
+  }
+})
+
+// GET /admin/track/:id/musicbrainz-preview — the "Fill from MusicBrainz"
+// button's data source. Looks up this track's already-set recording MBID
+// (media_files.musicbrainz_recording_id) against the local MusicBrainz
+// mirror, preferring a match against the specific release this track's
+// album is already matched to (albums.musicbrainz_id) when there is one, so
+// the returned track number reflects bemused's actual copy of the release —
+// see getTrackForRecording. Never writes anything; the admin UI fills the
+// form and the existing Save flow persists it.
+router.get('/track/:id/musicbrainz-preview', async (c) => {
+  const id = parseInt(c.req.param('id'))
+
+  const track = await db.selectFrom('tracks').select(['id', 'media_file_id', 'album_id']).where('id', '=', id).executeTakeFirst()
+  if (!track) return c.json({ error: 'Track not found' }, 404)
+
+  const mediaFile = track.media_file_id
+    ? await db.selectFrom('media_files').select(['musicbrainz_recording_id']).where('id', '=', track.media_file_id).executeTakeFirst()
+    : null
+  const recordingMbid = mediaFile?.musicbrainz_recording_id
+  if (!recordingMbid) return c.json({ error: 'No MusicBrainz recording ID set for this track' }, 400)
+
+  const album = await db.selectFrom('albums').select(['musicbrainz_id']).where('id', '=', track.album_id).executeTakeFirst()
+
+  try {
+    const result = await getTrackForRecording(recordingMbid, album?.musicbrainz_id ?? undefined)
+    if (!result) return c.json({ error: 'Not found in the local MusicBrainz mirror' }, 404)
+    return c.json(result)
+  } catch (error) {
+    console.error('Error fetching MusicBrainz preview for track:', error)
+    return c.json({ error: 'Failed to look up MusicBrainz data' }, 500)
   }
 })
 

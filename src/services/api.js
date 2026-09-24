@@ -140,6 +140,7 @@ export const apiService = {
   addTrackCollaborator: (trackId, artistId, role) => api.post(`/admin/track/${trackId}/collaborators`, { artist_id: artistId, role }),
   removeTrackCollaborator: (trackId, collaboratorId) => api.delete(`/admin/track/${trackId}/collaborators/${collaboratorId}`),
   updateTrackRecordingMbid: (trackId, musicbrainzRecordingId) => api.put(`/admin/track/${trackId}/recording-mbid`, { musicbrainz_recording_id: musicbrainzRecordingId }),
+  getTrackMusicbrainzPreview: (trackId) => api.get(`/admin/track/${trackId}/musicbrainz-preview`),
   moveAlbumToArtist: (id, target_artist_id) => api.post(`/admin/album/${id}/move-to-artist`, { target_artist_id }),
   mergeAlbum: (id, destination_album_id, track_offset) => api.post(`/admin/album/${id}/merge`, { destination_album_id, track_offset }),
   getReprocessPreview: (albumId) => api.get(`/admin/album/${albumId}/reprocess-preview`),

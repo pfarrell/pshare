@@ -9,10 +9,11 @@ import pg from 'pg'
 // modeled here; the mirror has ~375 tables total, most unused by bemused.
 //
 // `recording`/`track` are modeled for admin recording search
-// (`searchRecordingsMB`) only. `getReleaseRecordings` (full ordered
-// tracklist for a release, used at upload time) still uses the
-// MusicBrainz web API in ./musicbrainz.ts — it's a different query shape
-// and out of scope for this migration.
+// (`searchRecordingsMB`) and the track-edit "Fill from MusicBrainz" lookup
+// (`getTrackForRecording`). `getReleaseRecordings` (full ordered tracklist
+// for a release, used at upload time) still uses the MusicBrainz web API in
+// ./musicbrainz.ts — it's a different query shape and out of scope for this
+// migration.
 
 interface MBArtistTable {
   id: number
@@ -78,6 +79,9 @@ interface MBTrackTable {
   id: number
   recording: number
   medium: number
+  position: number
+  name: string
+  length: number | null
 }
 
 interface MusicbrainzMirrorDatabase {

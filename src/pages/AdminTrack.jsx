@@ -33,6 +33,7 @@ const AdminTrack = () => {
 
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showMusicBrainz, setShowMusicBrainz] = useState(false);
+  const [fillingFromMusicBrainz, setFillingFromMusicBrainz] = useState(false);
 
   const [collaborators, setCollaborators] = useState([]);
   const [addingCollaborator, setAddingCollaborator] = useState(false);
@@ -124,6 +125,28 @@ const AdminTrack = () => {
       setCollaborators((prev) => prev.filter((c) => c.id !== collaboratorId));
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to remove collaborator');
+    }
+  };
+
+  const handleFillFromMusicBrainz = async () => {
+    setFillingFromMusicBrainz(true);
+    try {
+      const response = await apiService.getTrackMusicbrainzPreview(id);
+      const { title: mbTitle, trackNumber } = response.data;
+      setTitle(mbTitle);
+      if (trackNumber != null) {
+        setTrackNumber(String(trackNumber));
+        toast.success('Filled title and track number from MusicBrainz — review and Save');
+      } else {
+        // The recording matched a different release than this track's album
+        // (or the album has no MusicBrainz release matched yet) — trust the
+        // title, but not a track number that wouldn't correspond to this copy.
+        toast.success("Filled title from MusicBrainz (track number wasn't available for this release) — review and Save");
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to fetch MusicBrainz data');
+    } finally {
+      setFillingFromMusicBrainz(false);
     }
   };
 
@@ -253,6 +276,15 @@ const AdminTrack = () => {
             pending={recordingMbid !== (detail.mediaFile?.musicbrainz_recording_id || '')}
             onChange={setRecordingMbid}
           />
+          <button
+            type="button"
+            onClick={handleFillFromMusicBrainz}
+            disabled={!recordingMbid || fillingFromMusicBrainz}
+            title={!recordingMbid ? 'Set a Recording MusicBrainz ID first' : undefined}
+            style={{ marginTop: '0.5rem', fontSize: '0.8rem', padding: '0.3rem 0.6rem', cursor: !recordingMbid || fillingFromMusicBrainz ? 'default' : 'pointer' }}
+          >
+            {fillingFromMusicBrainz ? 'Filling…' : 'Fill title/track # from MusicBrainz'}
+          </button>
         </div>
 
         <AdminFormActions saving={saving} />
