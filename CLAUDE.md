@@ -36,7 +36,7 @@ npm run db:reset     # Reset database
 
 Design specs live in `docs/superpowers/specs/` and implementation plans in `docs/superpowers/plans/`. Never commit these files to git.
 
-Frontend tests use Vitest + React Testing Library. Run with `npm test` (root). Test files live alongside source as `*.test.js` / `*.test.jsx`. Backend has no tests yet — tracked in [#31](https://github.com/pfarrell/bemused/issues/31).
+Frontend tests use Vitest + React Testing Library. Run with `npm test` (root). Test files live alongside source as `*.test.js` / `*.test.jsx`. Backend has a growing test suite using Node's built-in test runner (`cd server && npm test`, i.e. `tsx --test 'src/**/*.test.ts'`); files live alongside source as `*.test.ts` (e.g. `services/artistMergeService.test.ts`, `utils/http.test.ts`). Coverage is partial, not comprehensive — most admin routes still have no tests, verified only by the manual dev-DB testing pattern used throughout `docs/superpowers/plans/`. Check for an existing `*.test.ts` file next to whatever you're touching before assuming there's nothing to run or extend.
 
 ## Architecture
 
