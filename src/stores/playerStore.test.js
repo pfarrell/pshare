@@ -70,6 +70,45 @@ describe('playTrackAtIndex', () => {
     expect(usePlayerStore.getState().currentTrackIndex).toBe(-1);
     expect(audioElement.load).not.toHaveBeenCalled();
   });
+
+  test('sets isPlaying optimistically, without waiting for the audio element\'s async "play" event', () => {
+    // usePlayerEngine only flips isPlaying via the <audio> element's native
+    // 'play' event, which fires asynchronously (after network buffering) — not
+    // simulated by this mock. addTrack/addTracks read isPlaying synchronously
+    // right after this call to decide whether to auto-start a newly queued
+    // track, so it must already be true here, not just once the real event
+    // eventually fires.
+    const audioElement = mockAudioElement();
+    setActiveAudio(audioElement, { playlist: [track(1)], isPlaying: false });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    expect(usePlayerStore.getState().isPlaying).toBe(true);
+  });
+
+  test('reverts isPlaying if play() actually fails', async () => {
+    const audioElement = mockAudioElement();
+    audioElement.play = vi.fn().mockRejectedValue(new Error('boom'));
+    setActiveAudio(audioElement, { playlist: [track(1)], isPlaying: false });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    expect(usePlayerStore.getState().isPlaying).toBe(true); // optimistic, before the rejection resolves
+    await Promise.resolve().then().catch(() => {}); // let the play() rejection's .catch() run
+    await new Promise((r) => setTimeout(r, 0));
+    expect(usePlayerStore.getState().isPlaying).toBe(false);
+  });
+
+  test('a failed play() does not clobber isPlaying if a newer playTrackAtIndex call already superseded it', async () => {
+    const audioElement = mockAudioElement();
+    let rejectFirst;
+    audioElement.play = vi.fn()
+      .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectFirst = reject; }))
+      .mockResolvedValueOnce(undefined);
+    setActiveAudio(audioElement, { playlist: [track(1), track(2)], isPlaying: false });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    usePlayerStore.getState().playTrackAtIndex(1); // supersedes the first attempt before it rejects
+    rejectFirst(new Error('boom'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(usePlayerStore.getState().currentTrackIndex).toBe(1);
+    expect(usePlayerStore.getState().isPlaying).toBe(true); // not stomped by the first attempt's failure
+  });
 });
 
 describe('addTrack', () => {
@@ -101,6 +140,23 @@ describe('addTrack', () => {
     setActiveAudio(mockAudioElement());
     usePlayerStore.getState().addTrack(track(1), { flashActivity: true });
     expect(usePlayerStore.getState().activityPulseToken).toBe(1);
+  });
+
+  test('regression: enqueuing a second track right after a first was started (before its real "play" event fires) queues behind it instead of interrupting it', () => {
+    // Reproduces the jukebox-mode demo bug: playTrackAtIndex(0) already ran
+    // (isPlaying is true optimistically per the fix above) but the mock never
+    // fires a native 'play' event, matching the real async gap where a track
+    // is genuinely playing before usePlayerEngine's handler would confirm it.
+    const audioElement = mockAudioElement();
+    setActiveAudio(audioElement, { playlist: [track(1)], isPlaying: false });
+    usePlayerStore.getState().playTrackAtIndex(0); // "Play album" style start
+    audioElement.play.mockClear();
+
+    usePlayerStore.getState().addTrack(track(2)); // tap a second, different track
+    const state = usePlayerStore.getState();
+    expect(state.playlist.map((t) => t.id)).toEqual([1, 2]);
+    expect(state.currentTrackIndex).toBe(0); // still on track 1 — not jumped to track 2
+    expect(audioElement.play).not.toHaveBeenCalled(); // track 1 was not interrupted
   });
 
   test('playImmediately appends and jumps to the new track even while something else is playing', () => {
