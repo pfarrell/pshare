@@ -43,7 +43,7 @@ describe('AdminDuplicateAlbums', () => {
     expect(screen.getByText('Same release (MusicBrainz)')).toBeInTheDocument();
   });
 
-  test('merging keeps the chosen album and removes the pair from the list', async () => {
+  test('merging keeps the chosen album and removes the pair from the list, defaulting the offset to the kept album\'s track count', async () => {
     const user = userEvent.setup();
     apiService.getDuplicateAlbums.mockResolvedValue({ data: { pairs: [pair], pagination: { page: 1, limit: 25, total: 1, totalPages: 1 } } });
     apiService.resolveDuplicateAlbum.mockResolvedValue({ data: { success: true, tracks_moved: 3 } });
@@ -53,8 +53,26 @@ describe('AdminDuplicateAlbums', () => {
     const leftCard = screen.getByText('Greatest Hits').closest('div');
     await user.click(within(leftCard).getByText('Keep this, merge the other in'));
 
-    expect(apiService.resolveDuplicateAlbum).toHaveBeenCalledWith(10, 20);
+    // pair.a.track_count is 12 — that's the default offset for keeping A.
+    expect(apiService.resolveDuplicateAlbum).toHaveBeenCalledWith(10, 20, 12);
     expect(screen.queryByText('Greatest Hits (Remaster)')).not.toBeInTheDocument();
+  });
+
+  test('the track offset can be edited before merging', async () => {
+    const user = userEvent.setup();
+    apiService.getDuplicateAlbums.mockResolvedValue({ data: { pairs: [pair], pagination: { page: 1, limit: 25, total: 1, totalPages: 1 } } });
+    apiService.resolveDuplicateAlbum.mockResolvedValue({ data: { success: true, tracks_moved: 3 } });
+    renderPage();
+
+    await screen.findByText('Greatest Hits');
+    const leftCard = screen.getByText('Greatest Hits').closest('div');
+    const offsetInput = within(leftCard).getByRole('spinbutton');
+    await user.clear(offsetInput);
+    await user.type(offsetInput, '0');
+    await user.click(within(leftCard).getByText('Keep this, merge the other in'));
+
+    expect(apiService.resolveDuplicateAlbum).toHaveBeenCalledWith(10, 20, 0);
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('Track numbers will not be changed.'));
   });
 
   test('dismissing a pair calls dismissDuplicate and removes it from the list', async () => {

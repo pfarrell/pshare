@@ -147,7 +147,7 @@ export const apiService = {
   dismissDuplicate: (kind, entity_a_id, entity_b_id) => api.post('/admin/duplicates/dismiss', { kind, entity_a_id, entity_b_id }),
   getDuplicateAlbums: (page = 1, limit = 25) => api.get(`/admin/duplicates/albums${qs({ page, limit })}`),
   getDuplicateTracks: (page = 1, limit = 25) => api.get(`/admin/duplicates/tracks${qs({ page, limit })}`),
-  resolveDuplicateAlbum: (targetId, loserId) => api.post(`/admin/duplicates/albums/${targetId}/resolve`, { loser_id: loserId }),
+  resolveDuplicateAlbum: (targetId, loserId, trackOffset = 0) => api.post(`/admin/duplicates/albums/${targetId}/resolve`, { loser_id: loserId, track_offset: trackOffset }),
   resolveDuplicateTrack: (targetId, loserId) => api.post(`/admin/duplicates/tracks/${targetId}/resolve`, { loser_id: loserId }),
   getAlbumSecondaryArtists: (id) => api.get(`/admin/album/${id}/artists`),
   addArtistToAlbum: (albumId, artistId, role) => api.post(`/admin/album/${albumId}/artists`, { artist_id: artistId, role }),

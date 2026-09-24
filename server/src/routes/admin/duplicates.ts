@@ -5,6 +5,7 @@ import { titlesRoughlyMatch } from '../../utils/titleMatch.js'
 import { mergeAlbumInto } from '../../services/albumMergeService.js'
 import { mergeTrackInto } from '../../services/trackMergeService.js'
 import { countsService } from '../../services/countsService.js'
+import { streamBase } from '../../db/streamUrl.js'
 
 const pairKey = (a: number, b: number): string => (a < b ? `${a}-${b}` : `${b}-${a}`)
 
@@ -214,6 +215,7 @@ router.get('/duplicates/tracks', async (c) => {
   const shape = (row: TrackRow) => ({
     id: row.id, title: row.title, duration_sec: row.duration_sec,
     album_id: row.album_id, album_title: row.album_title,
+    url: `${streamBase(c)}/stream/${row.id}`,
   })
   const pageItems = pairs.slice((page - 1) * limit, page * limit).map((p) => ({
     tier: p.tier, a: shape(p.a), b: shape(p.b),
@@ -226,6 +228,7 @@ router.post('/duplicates/albums/:targetId/resolve', async (c) => {
   const targetId = parseInt(c.req.param('targetId'))
   const body = await c.req.json()
   const loserId = parseInt(body.loser_id)
+  const trackOffset = parseInt(body.track_offset) || 0
   if (!Number.isInteger(targetId) || !Number.isInteger(loserId) || targetId === loserId) {
     return c.json({ error: 'targetId and loser_id must be distinct integers' }, 400)
   }
@@ -243,7 +246,7 @@ router.post('/duplicates/albums/:targetId/resolve', async (c) => {
     return c.json({ error: 'Album not found (it may have already been merged)' }, 404)
   }
   try {
-    const result = await db.transaction().execute((trx) => mergeAlbumInto(targetId, loserId, trx))
+    const result = await db.transaction().execute((trx) => mergeAlbumInto(targetId, loserId, trx, trackOffset))
     return c.json({ success: true, tracks_moved: result.tracksMoved })
   } catch (error) {
     console.error('Error resolving duplicate album:', error)

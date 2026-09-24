@@ -16,8 +16,8 @@ const renderPage = () => render(<MemoryRouter><AdminDuplicateTracks /></MemoryRo
 
 const pair = {
   tier: 1,
-  a: { id: 100, title: 'I Touch Myself', duration_sec: 226, album_id: 5, album_title: 'Greatest Hits of the 90s' },
-  b: { id: 200, title: 'I touch Myself', duration_sec: 227, album_id: 5, album_title: 'Greatest Hits of the 90s' },
+  a: { id: 100, title: 'I Touch Myself', duration_sec: 226, album_id: 5, album_title: 'Greatest Hits of the 90s', url: 'http://localhost:3000/stream/100' },
+  b: { id: 200, title: 'I touch Myself', duration_sec: 227, album_id: 5, album_title: 'Greatest Hits of the 90s', url: 'http://localhost:3000/stream/200' },
 };
 
 beforeEach(() => {
@@ -32,14 +32,29 @@ describe('AdminDuplicateTracks', () => {
     await screen.findByText('No possible duplicate tracks found.');
   });
 
-  test('renders both tracks in a pair with the tier label and album context', async () => {
+  test('renders both tracks in a pair with the tier label, album context, and a link to the source album', async () => {
     apiService.getDuplicateTracks.mockResolvedValue({ data: { pairs: [pair], pagination: { page: 1, limit: 25, total: 1, totalPages: 1 } } });
     renderPage();
 
-    await screen.findByText('I Touch Myself');
-    expect(screen.getByText('I touch Myself')).toBeInTheDocument();
+    const linkA = await screen.findByRole('link', { name: /I Touch Myself/ });
+    expect(linkA).toHaveAttribute('href', '/album/5');
+    expect(linkA).toHaveAttribute('target', '_blank');
+    expect(screen.getByRole('link', { name: /I touch Myself/ })).toHaveAttribute('href', '/album/5');
     expect(screen.getByText(/Same audio file/)).toBeInTheDocument();
     expect(screen.getByText(/Greatest Hits of the 90s/)).toBeInTheDocument();
+  });
+
+  test('preview reveals an audio player pointed at the track stream url', async () => {
+    const user = userEvent.setup();
+    apiService.getDuplicateTracks.mockResolvedValue({ data: { pairs: [pair], pagination: { page: 1, limit: 25, total: 1, totalPages: 1 } } });
+    renderPage();
+
+    await screen.findByRole('link', { name: /I Touch Myself/ });
+    const leftCard = screen.getByRole('link', { name: /I Touch Myself/ }).closest('div');
+    await user.click(within(leftCard).getByText('Preview'));
+
+    const audio = leftCard.querySelector('audio');
+    expect(audio).toHaveAttribute('src', 'http://localhost:3000/stream/100');
   });
 
   test('merging keeps the chosen track and removes the pair from the list', async () => {
@@ -48,12 +63,13 @@ describe('AdminDuplicateTracks', () => {
     apiService.resolveDuplicateTrack.mockResolvedValue({ data: { success: true } });
     renderPage();
 
-    await screen.findByText('I Touch Myself');
-    const leftCard = screen.getByText('I Touch Myself').closest('div');
-    await user.click(within(leftCard).getByText('Keep this, merge the other in'));
+    await screen.findByRole('link', { name: /I Touch Myself/ });
+    const leftCard = screen.getByRole('link', { name: /I Touch Myself/ }).closest('div');
+    await user.click(within(leftCard).getByText('Keep this, delete the other'));
 
     expect(apiService.resolveDuplicateTrack).toHaveBeenCalledWith(100, 200);
-    expect(screen.queryByText('I touch Myself')).not.toBeInTheDocument();
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('Delete "I touch Myself" and keep "I Touch Myself"'));
+    expect(screen.queryByRole('link', { name: /I touch Myself/ })).not.toBeInTheDocument();
   });
 
   test('dismissing a pair calls dismissDuplicate and removes it from the list', async () => {
@@ -62,10 +78,10 @@ describe('AdminDuplicateTracks', () => {
     apiService.dismissDuplicate.mockResolvedValue({ data: { success: true } });
     renderPage();
 
-    await screen.findByText('I Touch Myself');
+    await screen.findByRole('link', { name: /I Touch Myself/ });
     await user.click(screen.getByText('Not a duplicate'));
 
     expect(apiService.dismissDuplicate).toHaveBeenCalledWith('track', 100, 200);
-    expect(screen.queryByText('I Touch Myself')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /I Touch Myself/ })).not.toBeInTheDocument();
   });
 });
