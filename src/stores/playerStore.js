@@ -149,10 +149,25 @@ export const usePlayerStore = create((set, get) => ({
     if (index < 0 || index >= playlist.length || !audioElement) return;
     const track = playlist[index];
     const nextShuffleHistory = playbackMode === 'shuffle' && !shuffleHistory.includes(index) ? [...shuffleHistory, index] : shuffleHistory;
-    set({ currentTrackIndex: index, currentTrack: track, playlistFinished: false, shuffleHistory: nextShuffleHistory });
+    // isPlaying is set optimistically here rather than left for the <audio>
+    // element's async 'play' event (usePlayerEngine's handlePlay) to set it.
+    // addTrack/addTracks read isPlaying to decide whether a newly queued track
+    // should auto-start — leaving it false for the real gap between "we called
+    // .play()" and "the browser fired 'play'" (which can be hundreds of ms on
+    // a cold network fetch) let any enqueue action that landed in that window
+    // force-interrupt what was just started instead of queuing behind it. The
+    // real 'play' event still fires and just re-confirms this, a no-op; if
+    // playback actually fails, the .catch() below reverts it.
+    set({ currentTrackIndex: index, currentTrack: track, playlistFinished: false, shuffleHistory: nextShuffleHistory, isPlaying: true });
     audioElement.src = track.url;
     audioElement.load();
-    audioElement.play().catch((error) => console.error('Playback failed:', error));
+    audioElement.play().catch((error) => {
+      console.error('Playback failed:', error);
+      // Only revert if this attempt is still the current one — a later
+      // playTrackAtIndex call may have already superseded it, and we must not
+      // stomp on that newer attempt's optimistic isPlaying:true.
+      if (get().currentTrackIndex === index) set({ isPlaying: false });
+    });
     if (!standbyUnlocked) {
       const standby = get().getStandbyAudio();
       if (standby) {

@@ -1121,6 +1121,17 @@
   cursor: pointer;
 }
 
+/* Desktop already shows the artist on its own line (.track-artist below) —
+   this inline suffix is mobile-only, switched on in the breakpoint below
+   where .track-artist itself is hidden. Living inside .track-title means it
+   shares that div's nowrap/ellipsis, so "Title — Artist" truncates as one
+   line instead of the artist bleeding past the bar's width. */
+.now-playing-title-artist {
+  display: none;
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
 .now-playing .track-artist {
   font-size: 0.75rem;
   color: var(--color-text-muted);
@@ -1861,13 +1872,14 @@
     padding: 0 1rem;
   }
   
-  /* now-playing on mobile: a standalone thin bar (art + title only, no artist)
-     fixed directly above the transport controls, rather than squeezed into
-     the same narrow row as before. Taken out of flow entirely (position:
-     fixed), so it no longer needs a flex `order` relative to
-     .music-player-wrapper. Only exists in the DOM at all when a track is
-     loaded (NowPlaying.jsx returns null otherwise) — see --footer-clearance
-     above for how everything above it accounts for the extra height. */
+  /* now-playing on mobile: a standalone thin bar (art + a single title line,
+     "Title — Artist") fixed directly above the transport controls, rather
+     than squeezed into the same narrow row as before. Taken out of flow
+     entirely (position: fixed), so it no longer needs a flex `order`
+     relative to .music-player-wrapper. Only exists in the DOM at all when a
+     track is loaded (NowPlaying.jsx returns null otherwise) — see
+     --footer-clearance above for how everything above it accounts for the
+     extra height. */
   .now-playing {
     position: fixed;
     left: 0;
@@ -1889,8 +1901,14 @@
     height: 28px;
   }
 
+  /* Full-height two-line layout has no room on mobile — fold the artist
+     into the title line instead (see .now-playing-title-artist above). */
   .now-playing .track-artist {
     display: none;
+  }
+
+  .now-playing-title-artist {
+    display: inline;
   }
 
   .playlist-button {

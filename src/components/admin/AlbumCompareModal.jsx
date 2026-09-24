@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import Modal from '../Modal';
 import { apiService } from '../../services/api';
 import { formatDuration } from '../../utils/formatters';
+import { normalizeTitle, titlesRoughlyMatch } from '../../utils/titleMatch';
 
 const formatDate = (dateString) => {
   if (!dateString) return 'N/A';
@@ -31,26 +32,44 @@ const META_FIELDS = [
   { label: 'Updated', get: (a) => formatDate(a.updated_at) },
 ];
 
-// Pairs up two albums' tracks by track_number (already sorted numerically by
-// the backend) — union of both track_numbers, in order, blanks where one
-// side has nothing at that slot.
+// Pairs up two albums' tracks by title, not track_number — duplicate-album
+// candidates routinely disagree on numbering (zero-padding: "1" vs "01";
+// bonus tracks shifting everything after them; disc splits; remasters), but
+// that's exactly what this view exists to surface, not something to sort by.
+// Title identity ("is this the same song") is the meaningful join key here;
+// track_number is still shown per row but never used to align rows.
+//
+// Greedy match: walk album A's tracks in the backend's sorted order, and for
+// each one claim the first not-yet-claimed B track whose title roughly
+// matches (exact normalized match preferred over substring, so "Song" binds
+// to an exact "Song" before an unrelated "Song (Reprise)" does). Claiming
+// marks the B track used so it can't also pair with a later A track. Any B
+// tracks left unclaimed get trailing rows of their own — like the
+// same-track-number fix this replaces, a track must never just disappear.
 function pairTracks(tracksA, tracksB) {
-  const seen = new Set();
-  const order = [];
-  for (const t of [...tracksA, ...tracksB]) {
-    const key = t.track_number ?? `__notrack_${t.id}`;
-    if (!seen.has(key)) { seen.add(key); order.push(key); }
+  const pool = tracksB.map((t) => ({ t, used: false }));
+
+  const claim = (title) => {
+    const nt = normalizeTitle(title);
+    if (!nt) return null;
+    let candidate = pool.find((b) => !b.used && normalizeTitle(b.t.title) === nt);
+    if (!candidate) candidate = pool.find((b) => !b.used && titlesRoughlyMatch(b.t.title, title));
+    if (candidate) candidate.used = true;
+    return candidate?.t ?? null;
+  };
+
+  const rows = tracksA.map((t) => ({ key: `a-${t.id}`, trackA: t, trackB: claim(t.title) }));
+  for (const b of pool) {
+    if (!b.used) rows.push({ key: `b-${b.t.id}`, trackA: undefined, trackB: b.t });
   }
-  const byKey = (tracks) => new Map(tracks.map((t) => [t.track_number ?? `__notrack_${t.id}`, t]));
-  const mapA = byKey(tracksA);
-  const mapB = byKey(tracksB);
-  return order.map((key) => ({ key, trackA: mapA.get(key), trackB: mapB.get(key) }));
+  return rows;
 }
 
 const trackLabel = (track) => {
   if (!track) return null;
+  const number = track.track_number ? `${track.track_number}. ` : '';
   const duration = formatDuration(track.duration_sec);
-  return `${track.title ?? '(untitled)'}${duration ? ` (${duration})` : ''}`;
+  return `${number}${track.title ?? '(untitled)'}${duration ? ` (${duration})` : ''}`;
 };
 
 export default function AlbumCompareModal({ idA, idB, onClose }) {
@@ -94,16 +113,22 @@ export default function AlbumCompareModal({ idA, idB, onClose }) {
 
       {data && (
         <div style={{ overflowY: 'auto', overflowX: 'auto' }}>
+          {/* Deliberately no target="_blank": on mobile, following this link
+              in a real new tab/window either hard-navigates the same
+              standalone window in place (installed PWA — destroys the
+              playing track/queue) or opens a visually-empty second tab that
+              looks identical to data loss even though the original tab's
+              playback survives in the background. Plain in-SPA navigation
+              keeps MusicPlayerWrapper mounted (it lives outside <Routes> in
+              App.jsx) so playback is genuinely untouched everywhere. */}
           <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.75rem' }}>
             {[data.a, data.b].map((album) => (
               <Link
                 key={album.id}
                 to={`/album/${album.id}`}
-                target="_blank"
-                rel="noreferrer"
                 style={{ flex: '1 1 0', minWidth: 0, fontWeight: 'bold', color: '#3b82f6', textDecoration: 'none' }}
               >
-                {album.title} ↗
+                {album.title}
               </Link>
             ))}
           </div>
@@ -128,7 +153,6 @@ export default function AlbumCompareModal({ idA, idB, onClose }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '400px' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--color-border)' }}>
-                <th style={{ ...labelCellStyle, textAlign: 'left' }}>#</th>
                 <th style={{ ...cellStyle, textAlign: 'left' }}>{data.a.title}</th>
                 <th style={{ ...cellStyle, textAlign: 'left' }}>{data.b.title}</th>
               </tr>
@@ -140,7 +164,6 @@ export default function AlbumCompareModal({ idA, idB, onClose }) {
                 const differs = labelA !== labelB;
                 return (
                   <tr key={key} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                    <td style={labelCellStyle}>{trackA?.track_number ?? trackB?.track_number ?? '—'}</td>
                     <td style={differs ? diffCellStyle : cellStyle}>{labelA ?? '—'}</td>
                     <td style={differs ? diffCellStyle : cellStyle}>{labelB ?? '—'}</td>
                   </tr>

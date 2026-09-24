@@ -1,5 +1,5 @@
 // src/components/Track.jsx
-import { useState } from 'react';
+import { useState, forwardRef } from 'react';
 import { usePlayerStore } from '../stores/playerStore';
 import { useAuthStore } from '../stores/authStore';
 import { apiService } from '../services/api';
@@ -15,7 +15,9 @@ import TrackNotesModal from './TrackNotesModal';
 import PlayButton from './PlayButton';
 import { shareLink } from '../utils/shareLink';
 
-const Track = ({ track, index, trackCount, includeMeta = false, isPlaying = false, showMakeSingle = false, showEdit = false, onMadeSingle }) => {
+// forwardRef lets Album.jsx grab the DOM node of the track that arrived
+// playing (via the mobile now-playing tap) and scroll it into view.
+const Track = forwardRef(({ track, index, trackCount, includeMeta = false, isPlaying = false, showMakeSingle = false, showEdit = false, onMadeSingle, scrollAnchor = false }, ref) => {
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [pressedButton, setPressedButton] = useState(null);
@@ -208,7 +210,8 @@ const Track = ({ track, index, trackCount, includeMeta = false, isPlaying = fals
 
   return (
     <div
-      className={`track-item ${isPlaying ? 'currently-playing' : ''}`}
+      ref={ref}
+      className={`track-item ${isPlaying ? 'currently-playing' : ''} ${scrollAnchor ? 'scroll-below-fixed-header' : ''}`}
       style={{
         padding: '1rem',
         borderBottom: index < trackCount - 1 ? '1px solid var(--color-border)' : 'none',
@@ -333,6 +336,8 @@ const Track = ({ track, index, trackCount, includeMeta = false, isPlaying = fals
       )}
     </div>
   );
-};
+});
+
+Track.displayName = 'Track';
 
 export default Track;
