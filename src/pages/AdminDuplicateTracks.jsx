@@ -74,7 +74,13 @@ export default function AdminDuplicateTracks() {
                   { track: pair.b, keepId: pair.b.id, loseId: pair.a.id, loseTitle: pair.a.title },
                 ].map(({ track, keepId, loseId, loseTitle }) => (
                   <div key={track.id} style={{ flex: '1 1 200px' }}>
-                    <Link to={`/album/${track.album_id}`} target="_blank" rel="noreferrer" style={{ fontWeight: 'bold', color: '#3b82f6', textDecoration: 'none' }}>
+                    {/* Deliberately no target="_blank" — see the matching
+                        comment in AlbumCompareModal.jsx: a real new tab/
+                        window on mobile either hard-navigates in place
+                        (installed PWA, destroying the playing queue) or
+                        opens a visually-empty second tab that looks like
+                        data loss. Plain in-SPA nav leaves playback alone. */}
+                    <Link to={`/album/${track.album_id}`} style={{ fontWeight: 'bold', color: '#3b82f6', textDecoration: 'none' }}>
                       {track.title}
                     </Link>
                     <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>{formatDuration(track.duration_sec)}</p>

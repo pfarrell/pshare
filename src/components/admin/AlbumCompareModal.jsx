@@ -113,16 +113,22 @@ export default function AlbumCompareModal({ idA, idB, onClose }) {
 
       {data && (
         <div style={{ overflowY: 'auto', overflowX: 'auto' }}>
+          {/* Deliberately no target="_blank": on mobile, following this link
+              in a real new tab/window either hard-navigates the same
+              standalone window in place (installed PWA — destroys the
+              playing track/queue) or opens a visually-empty second tab that
+              looks identical to data loss even though the original tab's
+              playback survives in the background. Plain in-SPA navigation
+              keeps MusicPlayerWrapper mounted (it lives outside <Routes> in
+              App.jsx) so playback is genuinely untouched everywhere. */}
           <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.75rem' }}>
             {[data.a, data.b].map((album) => (
               <Link
                 key={album.id}
                 to={`/album/${album.id}`}
-                target="_blank"
-                rel="noreferrer"
                 style={{ flex: '1 1 0', minWidth: 0, fontWeight: 'bold', color: '#3b82f6', textDecoration: 'none' }}
               >
-                {album.title} ↗
+                {album.title}
               </Link>
             ))}
           </div>

@@ -38,7 +38,11 @@ describe('AdminDuplicateTracks', () => {
 
     const linkA = await screen.findByRole('link', { name: /I Touch Myself/ });
     expect(linkA).toHaveAttribute('href', '/album/5');
-    expect(linkA).toHaveAttribute('target', '_blank');
+    // Deliberately no target="_blank" — see comment on the Link: a real new
+    // tab/window on mobile either hard-navigates in place (standalone PWA,
+    // destroying playback) or just looks like it did (fresh backgrounded tab
+    // starts with an empty player). Plain in-SPA nav keeps playback intact.
+    expect(linkA).not.toHaveAttribute('target');
     expect(screen.getByRole('link', { name: /I touch Myself/ })).toHaveAttribute('href', '/album/5');
     expect(screen.getByText(/Same audio file/)).toBeInTheDocument();
     expect(screen.getByText(/Greatest Hits of the 90s/)).toBeInTheDocument();

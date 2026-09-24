@@ -76,15 +76,20 @@ describe('AlbumCompareModal', () => {
     expect(screen.getByText('2. Song B (3:20)')).toBeInTheDocument();
   });
 
-  test('links each album title to its public page, opening in a new tab', async () => {
+  test('links each album title to its public page, navigating in the same tab', async () => {
+    // No target="_blank" here (deliberately — see comment on the Link): on
+    // mobile, a real new tab/window either loses playback continuity
+    // (standalone PWA hard-navigates in place) or just looks like it did
+    // (a fresh backgrounded tab starts with an empty player). Plain in-SPA
+    // navigation keeps MusicPlayerWrapper mounted and playback untouched.
     apiService.compareAlbums.mockResolvedValue({ data: comparePayload });
     renderModal();
 
-    const linkA = await screen.findByRole('link', { name: /Greatest Hits ↗/ });
+    const linkA = await screen.findByRole('link', { name: 'Greatest Hits' });
     expect(linkA).toHaveAttribute('href', '/album/10');
-    expect(linkA).toHaveAttribute('target', '_blank');
+    expect(linkA).not.toHaveAttribute('target');
 
-    const linkB = screen.getByRole('link', { name: /Greatest Hits \(Remaster\) ↗/ });
+    const linkB = screen.getByRole('link', { name: 'Greatest Hits (Remaster)' });
     expect(linkB).toHaveAttribute('href', '/album/20');
   });
 
