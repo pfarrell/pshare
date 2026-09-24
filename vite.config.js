@@ -34,6 +34,18 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        // public/images is gitignored local-dev-only content (real album art
+        // cached during local testing, never meant to ship) — Vite copies all
+        // of public/ into dist/ verbatim, so without this it leaks into the
+        // precache manifest as thousands of image URLs. deploy.sh already
+        // excludes images/ from what actually gets rsynced to the server, so
+        // those precached URLs 404 there — and Workbox's SW install fails
+        // outright if any single precached URL fails to fetch, so the new
+        // service worker version never activates. Whatever version WAS last
+        // successfully installed stays in control indefinitely, serving an
+        // increasingly stale app shell/JS as later deploys rsync --delete the
+        // old asset files that stale shell still references.
+        globIgnores: ['images/**'],
         navigateFallback: '/pshare/app/index.html',
         runtimeCaching: [
           {
