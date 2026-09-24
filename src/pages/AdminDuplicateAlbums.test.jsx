@@ -119,7 +119,7 @@ describe('AdminDuplicateAlbums', () => {
     await user.click(screen.getAllByText('Compare')[0]);
 
     expect(apiService.compareAlbums).toHaveBeenCalledWith(10, 20);
-    await screen.findByText('Song A (3:00)');
-    expect(screen.getByText('Song A (Remaster) (3:02)')).toBeInTheDocument();
+    await screen.findByText('1. Song A (3:00)');
+    expect(screen.getByText('1. Song A (Remaster) (3:02)')).toBeInTheDocument();
   });
 });
