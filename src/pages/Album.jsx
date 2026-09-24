@@ -1,5 +1,5 @@
 // src/pages/Album.jsx
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import ImageLightbox from '../components/ImageLightbox';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { apiService } from '../services/api';
@@ -26,6 +26,11 @@ const Album = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const collectionId = location.state?.collectionId ?? null;
+  // Captured once at mount, not read fresh on every render: the mobile
+  // now-playing bar's "go to album" tap sets this so the page can land on
+  // the track that's actually playing instead of the top of the album.
+  const scrollToTrackIdRef = useRef(location.state?.scrollToTrackId ?? null);
+  const activeTrackRef = useRef(null);
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const setPageTracks = usePlayerStore((s) => s.setPageTracks);
   const { isAdmin, isAuthenticated } = useAuthStore();
@@ -72,6 +77,12 @@ const Album = () => {
     setPageTracks(albumData?.tracks || []);
     return () => setPageTracks([]);
   }, [albumData, setPageTracks]);
+
+  useEffect(() => {
+    if (!scrollToTrackIdRef.current || !activeTrackRef.current) return;
+    activeTrackRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    scrollToTrackIdRef.current = null; // one-shot: only on the arrival that requested it
+  }, [albumData]);
 
   const queue = useQueueActions(albumData?.tracks, { queueSource: albumData?.album ? { type: 'album', id: albumData.album.id } : undefined });
 
@@ -252,6 +263,8 @@ const Album = () => {
         {tracks.map((track, index) => (
           <Track
             key={track.id || index}
+            ref={track.id === scrollToTrackIdRef.current ? activeTrackRef : undefined}
+            scrollAnchor={track.id === scrollToTrackIdRef.current}
             track={track}
             index={index}
             trackCount={tracks.length}

@@ -30,7 +30,10 @@ const NowPlaying = () => {
     if (track.source_playlist?.id) {
       navigate(`/playlist/${track.source_playlist.id}`);
     } else {
-      navigate(`/album/${track.album.id}`);
+      // scrollToTrackId lets Album.jsx land the page on this exact track
+      // instead of the top of the album — the whole point of tapping the
+      // mobile now-playing bar is to see the track that's actually playing.
+      navigate(`/album/${track.album.id}`, { state: { scrollToTrackId: track.id } });
     }
     closeDrawer();
   };
@@ -45,6 +48,7 @@ const NowPlaying = () => {
   const albumArtUrl = currentTrack.image_path
     ? apiService.getImageUrl(currentTrack.image_path, 'album_small')
     : null;
+  const artistName = currentTrack.artist?.name || 'Unknown Artist';
 
   return (
     <div className="now-playing">
@@ -67,7 +71,7 @@ const NowPlaying = () => {
       )}
       <div className="track-info show">
         <div className="track-artist" onClick={() => handleArtistClick(currentTrack)} title="go to artist">
-          {currentTrack.artist?.name || 'Unknown Artist'}
+          {artistName}
         </div>
         <div
           className="track-title"
@@ -75,6 +79,10 @@ const NowPlaying = () => {
           title={currentTrack.source_playlist?.id ? 'go to playlist' : 'go to album'}
         >
           {currentTrack.title}
+          {/* Desktop already shows the artist on its own line above (.track-artist);
+              this inline suffix is mobile-only (see .now-playing-title-artist in
+              index.css) since the mobile bar hides that separate line entirely. */}
+          <span className="now-playing-title-artist"> — {artistName}</span>
         </div>
       </div>
       {showArtModal && (

@@ -1,4 +1,4 @@
-import { Profiler } from 'react';
+import { Profiler, createRef } from 'react';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import Track from './Track';
@@ -368,6 +368,28 @@ describe('Track component — per-track artist display', () => {
       },
     });
     expect(screen.getByText(/- Orphan Artist/)).toBeInTheDocument();
+  });
+});
+
+describe('Track component — scroll anchor (Album page scrolling to the playing track)', () => {
+  test('forwards a ref to the track-item root element', () => {
+    const ref = createRef();
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Track ref={ref} track={mockTrack} index={0} trackCount={1} />
+      </MemoryRouter>
+    );
+    expect(ref.current).toBe(screen.getByText(/Test Track/).closest('.track-item'));
+  });
+
+  test('adds the scroll-below-fixed-header class when scrollAnchor is true', () => {
+    renderTrack({ scrollAnchor: true });
+    expect(screen.getByText(/Test Track/).closest('.track-item')).toHaveClass('scroll-below-fixed-header');
+  });
+
+  test('omits the scroll-below-fixed-header class by default', () => {
+    renderTrack();
+    expect(screen.getByText(/Test Track/).closest('.track-item')).not.toHaveClass('scroll-below-fixed-header');
   });
 });
 

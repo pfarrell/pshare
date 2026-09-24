@@ -6,6 +6,9 @@ import { useAuthStore } from '../stores/authStore';
 import { useFavoritesStore } from '../stores/favoritesStore';
 import { apiService } from '../services/api';
 
+// jsdom doesn't implement scrollIntoView at all.
+Element.prototype.scrollIntoView = vi.fn();
+
 vi.mock('../components/TagsSection', () => ({ default: () => null }));
 vi.mock('../components/NotesSection', () => ({ default: () => null }));
 vi.mock('../components/AddToCollectionModal', () => ({ default: () => null }));
@@ -43,6 +46,34 @@ beforeEach(() => {
   apiService.getAdjacentAlbums.mockResolvedValue({ data: { prev: null, next: null } });
   useAuthStore.setState({ isAdmin: false, isAuthenticated: true });
   useFavoritesStore.setState({ isFavorite: () => false, toggleFavorite: vi.fn() });
+  Element.prototype.scrollIntoView.mockClear();
+});
+
+describe('Album page — scrolling to the track that arrived playing (from the mobile now-playing tap)', () => {
+  test('scrolls the matching track into view when navigated here with scrollToTrackId state', async () => {
+    renderAlbum([{ pathname: '/album/10', state: { scrollToTrackId: 2 } }]);
+    await screen.findByText('Test Album');
+
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith(
+      // 'start' so the row lands below the fixed header, matching the
+      // .scroll-below-fixed-header convention used elsewhere (AdminCollection).
+      expect.objectContaining({ block: 'start' })
+    );
+  });
+
+  test('does not scroll when there is no scrollToTrackId in location state', async () => {
+    renderAlbum();
+    await screen.findByText('Test Album');
+
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  test('does not scroll when scrollToTrackId does not match any track on this album', async () => {
+    renderAlbum([{ pathname: '/album/10', state: { scrollToTrackId: 999 } }]);
+    await screen.findByText('Test Album');
+
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+  });
 });
 
 describe('Album page — Overtone menu item', () => {
