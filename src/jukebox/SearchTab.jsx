@@ -4,6 +4,7 @@ import JukeboxAlbumTile from './JukeboxAlbumTile';
 import JukeboxArtistTile from './JukeboxArtistTile';
 import JukeboxPlaylistTile from './JukeboxPlaylistTile';
 import JukeboxCollectionTile from './JukeboxCollectionTile';
+import QuickHitTab from './QuickHitTab';
 import Track from '../components/Track';
 
 // Artists, albums, playlists and collections all drill into a browse view
@@ -210,6 +211,11 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
   // an empty, unreachable-by-chip view.
   const effectiveFilter = filter === 'all' || counts[filter] > 0 ? filter : 'all';
 
+  // An empty box always shows Quick Hit, regardless of whatever `results`
+  // still holds from a previous search — clearing the box is how you get
+  // back to browsing, not just the state before your first-ever search.
+  const isEmpty = query.trim() === '';
+
   return (
     <div className="jukebox-search-tab">
       <div className="jukebox-search-bar">
@@ -222,7 +228,7 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
           <button type="submit">Search</button>
         </form>
 
-        {results !== null && !noResults && !error && (
+        {!isEmpty && results !== null && !noResults && !error && (
           <div className="jukebox-search-chips" role="group" aria-label="Filter results">
             {chips.map((chip) => (
               <button
@@ -238,17 +244,22 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
         )}
       </div>
 
-      {error && (
+      {/* An empty box is always Quick Hit — even after a previous search,
+          clearing the box gets you back to browsing, not a frozen view of
+          stale results. See SearchTab.test.jsx. */}
+      {isEmpty && <QuickHitTab onSelectAlbum={onSelectAlbum} />}
+
+      {!isEmpty && error && (
         <div className="jukebox-panel-error">
           <p>Search failed.</p>
           <button type="button" onClick={() => runSearch(query)}>Retry</button>
         </div>
       )}
 
-      {!error && results === null && <p className="jukebox-panel-empty">Search for something to play</p>}
-      {!error && noResults && <p className="jukebox-panel-empty">No results</p>}
+      {!isEmpty && !error && results === null && <p className="jukebox-panel-empty">Search for something to play</p>}
+      {!isEmpty && !error && noResults && <p className="jukebox-panel-empty">No results</p>}
 
-      {!error && results !== null && !noResults && effectiveFilter === 'all' && (
+      {!isEmpty && !error && results !== null && !noResults && effectiveFilter === 'all' && (
         <>
           {counts.artists > 0 && (
             <Section title="Artists" count={counts.artists} previewCount={PREVIEW_COUNTS.artists} onSeeAll={() => setFilter('artists')}>
@@ -277,11 +288,11 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
           )}
         </>
       )}
-      {!error && results !== null && !noResults && effectiveFilter === 'artists' && renderArtists(artistResults)}
-      {!error && results !== null && !noResults && effectiveFilter === 'albums' && renderAlbums(albumResults)}
-      {!error && results !== null && !noResults && effectiveFilter === 'playlists' && renderPlaylists(playlistResults)}
-      {!error && results !== null && !noResults && effectiveFilter === 'collections' && renderCollections(collectionResults)}
-      {!error && results !== null && !noResults && effectiveFilter === 'tracks' && renderTracks(trackResults)}
+      {!isEmpty && !error && results !== null && !noResults && effectiveFilter === 'artists' && renderArtists(artistResults)}
+      {!isEmpty && !error && results !== null && !noResults && effectiveFilter === 'albums' && renderAlbums(albumResults)}
+      {!isEmpty && !error && results !== null && !noResults && effectiveFilter === 'playlists' && renderPlaylists(playlistResults)}
+      {!isEmpty && !error && results !== null && !noResults && effectiveFilter === 'collections' && renderCollections(collectionResults)}
+      {!isEmpty && !error && results !== null && !noResults && effectiveFilter === 'tracks' && renderTracks(trackResults)}
     </div>
   );
 };

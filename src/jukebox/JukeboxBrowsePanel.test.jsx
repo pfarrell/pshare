@@ -2,13 +2,9 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { vi } from 'vitest';
 import JukeboxBrowsePanel from './JukeboxBrowsePanel';
 
-vi.mock('./QuickHitTab', () => ({
-  default: ({ onSelectAlbum }) => (
-    <div data-testid="quick-hit-tab">
-      <button onClick={() => onSelectAlbum({ id: 1, title: 'Quick Hit Album' })}>select-quickhit-album</button>
-    </div>
-  ),
-}));
+// QuickHitTab is no longer rendered by JukeboxBrowsePanel directly — it's
+// SearchTab's own empty-box state now (see SearchTab.jsx / SearchTab.test.jsx)
+// — so JukeboxBrowsePanel only needs to know about SearchTab.
 vi.mock('./SearchTab', () => ({
   default: ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCollection, onEnqueue }) => (
     <div data-testid="search-tab">
@@ -63,30 +59,23 @@ vi.mock('./JukeboxPlaylistPanel', () => ({
 }));
 vi.mock('./JukeboxNextUpTab', () => ({ default: () => <div data-testid="jukebox-next-up-tab" /> }));
 
-const renderPanel = (activeTab = 'quickhit', extraProps = {}) =>
+const renderPanel = (activeTab = 'browse', extraProps = {}) =>
   render(<JukeboxBrowsePanel activeTab={activeTab} {...extraProps} />);
 const drawer = (container) => container.querySelector('.jukebox-browse-panel');
 
-test('shows Quick Hit when that tab is active', () => {
-  renderPanel('quickhit');
-  expect(screen.getByTestId('quick-hit-tab')).toBeInTheDocument();
-});
-
-test('shows Search when that tab is active, and only that tab\'s content', () => {
-  renderPanel('search');
+test('shows Browse (Search) when that tab is active', () => {
+  renderPanel('browse');
   expect(screen.getByTestId('search-tab')).toBeVisible();
-  expect(screen.queryByTestId('quick-hit-tab')).not.toBeInTheDocument();
 });
 
 test('shows Next Up when that tab is active', () => {
   renderPanel('nextup');
   expect(screen.getByTestId('jukebox-next-up-tab')).toBeInTheDocument();
-  expect(screen.queryByTestId('quick-hit-tab')).not.toBeInTheDocument();
   expect(screen.getByTestId('search-tab')).not.toBeVisible();
 });
 
 test('the drawer is visible when a tab is active', () => {
-  const { container } = renderPanel('quickhit');
+  const { container } = renderPanel('browse');
   expect(drawer(container)).toBeVisible();
 });
 
@@ -97,30 +86,22 @@ test('the drawer is hidden — but still mounted — when closed (activeTab null
 });
 
 test('has no tab row or close button of its own any more (the bottom bar owns that)', () => {
-  renderPanel('quickhit');
+  renderPanel('browse');
   expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Quick Hit' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Browse' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Next Up' })).not.toBeInTheDocument();
 });
 
-test('selecting an album from Quick Hit opens the tracks panel and leaves the grid in place', () => {
-  renderPanel('quickhit');
-  fireEvent.click(screen.getByText('select-quickhit-album'));
-
-  expect(screen.getByText('tracks-panel: Quick Hit Album')).toBeInTheDocument();
-  expect(screen.getByTestId('quick-hit-tab')).toBeInTheDocument();
-});
-
 test('the tracks panel is a sibling of the drawer, not inside it (so drags in one never scroll the other)', () => {
-  const { container } = renderPanel('quickhit');
-  fireEvent.click(screen.getByText('select-quickhit-album'));
+  const { container } = renderPanel('browse');
+  fireEvent.click(screen.getByText('select-search-album'));
 
   expect(screen.getByTestId('jukebox-tracks-panel').closest('.jukebox-browse-panel')).toBeNull();
   expect(drawer(container)).not.toBeNull();
 });
 
 test('selecting an album from Search opens the tracks panel and keeps the search results', () => {
-  renderPanel('search');
+  renderPanel('browse');
   fireEvent.click(screen.getByText('select-search-album'));
 
   expect(screen.getByText('tracks-panel: Search Album')).toBeInTheDocument();
@@ -128,7 +109,7 @@ test('selecting an album from Search opens the tracks panel and keeps the search
 });
 
 test('selecting an artist drills into the artist view; an album from there opens the tracks panel', () => {
-  renderPanel('search');
+  renderPanel('browse');
   fireEvent.click(screen.getByText('select-search-artist'));
   expect(screen.getByText('artist-view: Search Artist')).toBeInTheDocument();
   expect(screen.queryByTestId('jukebox-tracks-panel')).not.toBeInTheDocument();
@@ -140,7 +121,7 @@ test('selecting an artist drills into the artist view; an album from there opens
 });
 
 test('Back from the artist view returns to search results', () => {
-  renderPanel('search');
+  renderPanel('browse');
   fireEvent.click(screen.getByText('select-search-artist'));
 
   fireEvent.click(screen.getByText('back-from-artist'));
@@ -150,8 +131,8 @@ test('Back from the artist view returns to search results', () => {
 });
 
 test('closing the tracks panel removes it without closing the drawer', () => {
-  const { container } = renderPanel('quickhit');
-  fireEvent.click(screen.getByText('select-quickhit-album'));
+  const { container } = renderPanel('browse');
+  fireEvent.click(screen.getByText('select-search-album'));
 
   fireEvent.click(screen.getByText('close-tracks-panel'));
 
@@ -160,9 +141,10 @@ test('closing the tracks panel removes it without closing the drawer', () => {
 });
 
 test('selecting a different album swaps the tracks panel contents', () => {
-  const { rerender } = renderPanel('quickhit');
-  fireEvent.click(screen.getByText('select-quickhit-album'));
-  rerender(<JukeboxBrowsePanel activeTab="search" />);
+  const { rerender } = renderPanel('browse');
+  fireEvent.click(screen.getByText('select-search-album'));
+  rerender(<JukeboxBrowsePanel activeTab="nextup" />);
+  rerender(<JukeboxBrowsePanel activeTab="browse" />);
   fireEvent.click(screen.getByText('select-search-album'));
 
   expect(screen.getAllByTestId('jukebox-tracks-panel')).toHaveLength(1);
@@ -170,29 +152,28 @@ test('selecting a different album swaps the tracks panel contents', () => {
 });
 
 test('switching tabs leaves the tracks panel open', () => {
-  const { rerender } = renderPanel('quickhit');
-  fireEvent.click(screen.getByText('select-quickhit-album'));
+  const { rerender } = renderPanel('browse');
+  fireEvent.click(screen.getByText('select-search-album'));
 
-  rerender(<JukeboxBrowsePanel activeTab="search" />);
+  rerender(<JukeboxBrowsePanel activeTab="nextup" />);
 
   expect(screen.getByTestId('jukebox-tracks-panel')).toBeInTheDocument();
-  expect(screen.getByTestId('search-tab')).toBeVisible();
 });
 
 test('closing the drawer closes the tracks panel too, and it does not reappear on reopen', () => {
-  const { rerender } = renderPanel('quickhit');
-  fireEvent.click(screen.getByText('select-quickhit-album'));
+  const { rerender } = renderPanel('browse');
+  fireEvent.click(screen.getByText('select-search-album'));
   expect(screen.getByTestId('jukebox-tracks-panel')).toBeInTheDocument();
 
   rerender(<JukeboxBrowsePanel activeTab={null} />);
   expect(screen.queryByTestId('jukebox-tracks-panel')).not.toBeInTheDocument();
 
-  rerender(<JukeboxBrowsePanel activeTab="quickhit" />);
+  rerender(<JukeboxBrowsePanel activeTab="browse" />);
   expect(screen.queryByTestId('jukebox-tracks-panel')).not.toBeInTheDocument();
 });
 
 test('the search tab is hidden, not unmounted, while an artist view is on top — so Back returns to the same query', () => {
-  renderPanel('search');
+  renderPanel('browse');
   fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'monk' } });
 
   fireEvent.click(screen.getByText('select-search-artist'));
@@ -206,43 +187,43 @@ test('the search tab is hidden, not unmounted, while an artist view is on top �
 });
 
 test('switching to another tab and back, or closing and reopening, keeps the search query', () => {
-  const { rerender } = renderPanel('search');
+  const { rerender } = renderPanel('browse');
   fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'monk' } });
 
   rerender(<JukeboxBrowsePanel activeTab="nextup" />);
-  rerender(<JukeboxBrowsePanel activeTab="search" />);
+  rerender(<JukeboxBrowsePanel activeTab="browse" />);
   expect(screen.getByTestId('search-input')).toHaveValue('monk');
 
   rerender(<JukeboxBrowsePanel activeTab={null} />);
-  rerender(<JukeboxBrowsePanel activeTab="search" />);
+  rerender(<JukeboxBrowsePanel activeTab="browse" />);
   expect(screen.getByTestId('search-input')).toHaveValue('monk');
 });
 
 test('switching to a different tab dismisses an open artist view', () => {
-  const { rerender } = renderPanel('search');
+  const { rerender } = renderPanel('browse');
   fireEvent.click(screen.getByText('select-search-artist'));
   expect(screen.getByTestId('jukebox-artist-view')).toBeInTheDocument();
 
   rerender(<JukeboxBrowsePanel activeTab="nextup" />);
-  rerender(<JukeboxBrowsePanel activeTab="search" />);
+  rerender(<JukeboxBrowsePanel activeTab="browse" />);
 
   expect(screen.queryByTestId('jukebox-artist-view')).not.toBeInTheDocument();
   expect(screen.getByTestId('search-tab')).toBeVisible();
 });
 
 test('closing and reopening the SAME tab keeps an open artist view', () => {
-  const { rerender } = renderPanel('search');
+  const { rerender } = renderPanel('browse');
   fireEvent.click(screen.getByText('select-search-artist'));
 
   rerender(<JukeboxBrowsePanel activeTab={null} />);
-  rerender(<JukeboxBrowsePanel activeTab="search" />);
+  rerender(<JukeboxBrowsePanel activeTab="browse" />);
 
   expect(screen.getByTestId('jukebox-artist-view')).toBeInTheDocument();
 });
 
 test('onEnqueue is passed through to the tracks panel, the artist view, and Search', () => {
   const onEnqueue = vi.fn();
-  renderPanel('search', { onEnqueue });
+  renderPanel('browse', { onEnqueue });
   fireEvent.click(screen.getByText('select-search-artist'));
 
   fireEvent.click(screen.getByText('artist-view-enqueue'));
@@ -259,7 +240,7 @@ test('onEnqueue is passed through to the tracks panel, the artist view, and Sear
 
 test('selecting a playlist from Search opens the playlist panel, and onEnqueue reaches it', () => {
   const onEnqueue = vi.fn();
-  renderPanel('search', { onEnqueue });
+  renderPanel('browse', { onEnqueue });
 
   fireEvent.click(screen.getByText('select-search-playlist'));
 
@@ -269,7 +250,7 @@ test('selecting a playlist from Search opens the playlist panel, and onEnqueue r
 });
 
 test('the playlist panel is a sibling of the drawer, not inside it', () => {
-  const { container } = renderPanel('search');
+  const { container } = renderPanel('browse');
   fireEvent.click(screen.getByText('select-search-playlist'));
 
   expect(screen.getByTestId('jukebox-playlist-panel').closest('.jukebox-browse-panel')).toBeNull();
@@ -277,7 +258,7 @@ test('the playlist panel is a sibling of the drawer, not inside it', () => {
 });
 
 test('closing the playlist panel removes it without closing the drawer', () => {
-  const { container } = renderPanel('search');
+  const { container } = renderPanel('browse');
   fireEvent.click(screen.getByText('select-search-playlist'));
 
   fireEvent.click(screen.getByText('close-playlist-panel'));
@@ -287,7 +268,7 @@ test('closing the playlist panel removes it without closing the drawer', () => {
 });
 
 test('selecting a playlist closes an open album tracks panel, and vice versa — only one at a time', () => {
-  renderPanel('search');
+  renderPanel('browse');
   fireEvent.click(screen.getByText('select-search-album'));
   expect(screen.getByTestId('jukebox-tracks-panel')).toBeInTheDocument();
 
@@ -301,19 +282,19 @@ test('selecting a playlist closes an open album tracks panel, and vice versa —
 });
 
 test('closing the drawer closes the playlist panel too, and it does not reappear on reopen', () => {
-  const { rerender } = renderPanel('search');
+  const { rerender } = renderPanel('browse');
   fireEvent.click(screen.getByText('select-search-playlist'));
   expect(screen.getByTestId('jukebox-playlist-panel')).toBeInTheDocument();
 
   rerender(<JukeboxBrowsePanel activeTab={null} />);
   expect(screen.queryByTestId('jukebox-playlist-panel')).not.toBeInTheDocument();
 
-  rerender(<JukeboxBrowsePanel activeTab="search" />);
+  rerender(<JukeboxBrowsePanel activeTab="browse" />);
   expect(screen.queryByTestId('jukebox-playlist-panel')).not.toBeInTheDocument();
 });
 
 test('selecting a collection drills into the collection view; an album from there opens the tracks panel', () => {
-  renderPanel('search');
+  renderPanel('browse');
   fireEvent.click(screen.getByText('select-search-collection'));
   expect(screen.getByText('collection-view: Search Collection')).toBeInTheDocument();
   expect(screen.queryByTestId('jukebox-tracks-panel')).not.toBeInTheDocument();
@@ -325,7 +306,7 @@ test('selecting a collection drills into the collection view; an album from ther
 });
 
 test('Back from the collection view returns to search results', () => {
-  renderPanel('search');
+  renderPanel('browse');
   fireEvent.click(screen.getByText('select-search-collection'));
 
   fireEvent.click(screen.getByText('back-from-collection'));
@@ -336,7 +317,7 @@ test('Back from the collection view returns to search results', () => {
 
 test('onEnqueue reaches the collection view\'s Shuffle All', () => {
   const onEnqueue = vi.fn();
-  renderPanel('search', { onEnqueue });
+  renderPanel('browse', { onEnqueue });
   fireEvent.click(screen.getByText('select-search-collection'));
 
   fireEvent.click(screen.getByText('collection-view-enqueue'));
@@ -346,8 +327,8 @@ test('onEnqueue reaches the collection view\'s Shuffle All', () => {
 
 test('the artist link in the tracks panel closes it and hands the artist up via onJumpToArtist', () => {
   const onJumpToArtist = vi.fn();
-  renderPanel('quickhit', { onJumpToArtist });
-  fireEvent.click(screen.getByText('select-quickhit-album'));
+  renderPanel('browse', { onJumpToArtist });
+  fireEvent.click(screen.getByText('select-search-album'));
   expect(screen.getByTestId('jukebox-tracks-panel')).toBeInTheDocument();
 
   fireEvent.click(screen.getByText('select-artist-from-tracks-panel'));
@@ -356,13 +337,13 @@ test('the artist link in the tracks panel closes it and hands the artist up via 
   expect(onJumpToArtist).toHaveBeenCalledWith(expect.objectContaining({ id: 8, name: 'Album Artist' }));
 });
 
-test('a pending artist is pushed as the drill-down view once the parent has switched to Search, and reported consumed', () => {
+test('a pending artist is pushed as the drill-down view once the parent hands it over, and reported consumed', () => {
   const onPendingArtistConsumed = vi.fn();
-  const { rerender } = renderPanel('quickhit');
+  const { rerender } = renderPanel('nextup');
 
   rerender(
     <JukeboxBrowsePanel
-      activeTab="search"
+      activeTab="browse"
       pendingArtist={{ id: 8, name: 'Album Artist' }}
       onPendingArtistConsumed={onPendingArtistConsumed}
     />
@@ -373,13 +354,13 @@ test('a pending artist is pushed as the drill-down view once the parent has swit
 });
 
 test('a pending artist replaces whatever was on the drill-down stack, not stacked on top of it', () => {
-  const { rerender } = renderPanel('search');
+  const { rerender } = renderPanel('browse');
   fireEvent.click(screen.getByText('select-search-artist'));
   expect(screen.getByText('artist-view: Search Artist')).toBeInTheDocument();
 
   rerender(
     <JukeboxBrowsePanel
-      activeTab="search"
+      activeTab="browse"
       pendingArtist={{ id: 8, name: 'Album Artist' }}
       onPendingArtistConsumed={vi.fn()}
     />
@@ -390,12 +371,12 @@ test('a pending artist replaces whatever was on the drill-down stack, not stacke
 });
 
 test('switching to a different tab dismisses an open collection view, same as an artist view', () => {
-  const { rerender } = renderPanel('search');
+  const { rerender } = renderPanel('browse');
   fireEvent.click(screen.getByText('select-search-collection'));
   expect(screen.getByTestId('jukebox-collection-view')).toBeInTheDocument();
 
   rerender(<JukeboxBrowsePanel activeTab="nextup" />);
-  rerender(<JukeboxBrowsePanel activeTab="search" />);
+  rerender(<JukeboxBrowsePanel activeTab="browse" />);
 
   expect(screen.queryByTestId('jukebox-collection-view')).not.toBeInTheDocument();
 });

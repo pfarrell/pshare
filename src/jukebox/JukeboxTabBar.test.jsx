@@ -6,15 +6,14 @@ vi.mock('./JukeboxProgressLine', () => ({ default: () => <div data-testid="progr
 
 const renderBar = (props = {}) => render(<JukeboxTabBar activeTab={null} onTabPress={vi.fn()} {...props} />);
 
-test('renders the three tabs in order', () => {
+test('renders the two tabs in order', () => {
   renderBar();
-  expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Quick Hit', 'Search', 'Next Up']);
+  expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Browse', 'Next Up']);
 });
 
 test('marks only the active tab as pressed', () => {
-  renderBar({ activeTab: 'search' });
-  expect(screen.getByRole('button', { name: 'Search' })).toHaveAttribute('aria-pressed', 'true');
-  expect(screen.getByRole('button', { name: 'Quick Hit' })).toHaveAttribute('aria-pressed', 'false');
+  renderBar({ activeTab: 'browse' });
+  expect(screen.getByRole('button', { name: 'Browse' })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('button', { name: 'Next Up' })).toHaveAttribute('aria-pressed', 'false');
 });
 
@@ -27,11 +26,10 @@ test('tapping a tab reports its key', () => {
   const onTabPress = vi.fn();
   renderBar({ onTabPress });
 
-  fireEvent.click(screen.getByRole('button', { name: 'Quick Hit' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Browse' }));
   fireEvent.click(screen.getByRole('button', { name: 'Next Up' }));
 
-  expect(onTabPress.mock.calls.map((c) => c[0])).toEqual(['quickhit', 'search', 'nextup']);
+  expect(onTabPress.mock.calls.map((c) => c[0])).toEqual(['browse', 'nextup']);
 });
 
 test('includes the progress line', () => {

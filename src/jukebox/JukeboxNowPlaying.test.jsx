@@ -12,7 +12,7 @@ import { usePlayerStore } from '../stores/playerStore';
 test('shows an empty state when nothing is playing', () => {
   usePlayerStore.mockReturnValue(null);
   render(<JukeboxNowPlaying />);
-  expect(screen.getByText('Nothing playing — tap Quick Hit or Search to pick something')).toBeInTheDocument();
+  expect(screen.getByText('Nothing playing — tap Browse to pick something')).toBeInTheDocument();
 });
 
 test('shows the current track\'s art, title, and artist', () => {

@@ -6,6 +6,7 @@ import SearchTab from './SearchTab';
 vi.mock('../services/api', () => ({
   apiService: {
     search: vi.fn(),
+    getRecentAlbums: vi.fn(),
     getImageUrl: vi.fn(() => '/img/sm/x.jpg'),
   },
 }));
@@ -47,16 +48,67 @@ const section = (name) => screen.getByRole('heading', { name }).closest('section
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Quick Hit mounts immediately (the box starts empty) in every test unless
+  // a test overrides this — a harmless empty grid by default so unrelated
+  // search-behavior tests aren't left with an unresolved fetch.
+  apiService.getRecentAlbums.mockResolvedValue({ data: [] });
 });
 
 afterEach(() => {
   vi.useRealTimers();
 });
 
-test('shows a prompt before any search has been run, and no filter chips yet', () => {
+test('shows the Quick Hit grid instead of a prompt before any search has been run, and no filter chips yet', async () => {
+  apiService.getRecentAlbums.mockResolvedValue({
+    data: [{ id: 1, title: 'Quick Hit Album', image_path: 'a.jpg', artist: { id: 1, name: 'Quick Hit Artist' }, track_count: 10 }],
+  });
   renderTab();
-  expect(screen.getByText('Search for something to play')).toBeInTheDocument();
+
+  await waitFor(() => expect(screen.getByText('Quick Hit Album')).toBeInTheDocument());
+  expect(screen.queryByText('Search for something to play')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /^Albums/ })).not.toBeInTheDocument();
+});
+
+test('typing a query hides the Quick Hit grid', async () => {
+  apiService.getRecentAlbums.mockResolvedValue({
+    data: [{ id: 1, title: 'Quick Hit Album', image_path: 'a.jpg', artist: { id: 1, name: 'Quick Hit Artist' }, track_count: 10 }],
+  });
+  apiService.search.mockResolvedValue({ data: smallResponse });
+  renderTab();
+  await waitFor(() => expect(screen.getByText('Quick Hit Album')).toBeInTheDocument());
+
+  await runSearch('test query');
+
+  expect(screen.queryByText('Quick Hit Album')).not.toBeInTheDocument();
+});
+
+test('clearing the search box brings back the Quick Hit grid, even after a previous search', async () => {
+  apiService.getRecentAlbums.mockResolvedValue({
+    data: [{ id: 1, title: 'Quick Hit Album', image_path: 'a.jpg', artist: { id: 1, name: 'Quick Hit Artist' }, track_count: 10 }],
+  });
+  apiService.search.mockResolvedValue({ data: smallResponse });
+  renderTab();
+  await waitFor(() => expect(screen.getByText('Quick Hit Album')).toBeInTheDocument());
+  await runSearch('test query');
+  await waitFor(() => expect(screen.getByText('Found Album')).toBeInTheDocument());
+
+  fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: '' } });
+
+  expect(screen.queryByText('Found Album')).not.toBeInTheDocument();
+  await waitFor(() => expect(screen.getByText('Quick Hit Album')).toBeInTheDocument());
+});
+
+test('tapping a Quick Hit album calls onSelectAlbum, same as a search result album', async () => {
+  apiService.getRecentAlbums.mockResolvedValue({
+    data: [{ id: 1, title: 'Quick Hit Album', image_path: 'a.jpg', artist: { id: 1, name: 'Quick Hit Artist' }, track_count: 10 }],
+  });
+  const onSelectAlbum = vi.fn();
+  renderTab({ onSelectAlbum });
+  await waitFor(() => screen.getByText('Quick Hit Album'));
+
+  fireEvent.click(screen.getByText('Quick Hit Album'));
+
+  expect(onSelectAlbum).toHaveBeenCalledWith(expect.objectContaining({ id: 1, title: 'Quick Hit Album' }));
 });
 
 test('searches on submit and renders artist, album, and track results', async () => {

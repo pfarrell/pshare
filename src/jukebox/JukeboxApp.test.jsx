@@ -59,11 +59,6 @@ test('shows the now-playing view, the tab bar and the drawer when authenticated'
   expect(screen.getByTestId('jukebox-browse-panel')).toBeInTheDocument();
 });
 
-test('has no Browse button any more', () => {
-  renderApp();
-  expect(screen.queryByRole('button', { name: 'Browse' })).not.toBeInTheDocument();
-});
-
 test('keeps the audio engine mounted but hidden', () => {
   renderApp();
   const engine = screen.getByTestId('player-engine');
@@ -78,65 +73,65 @@ test('the drawer starts closed', () => {
 
 test('tapping a tab while the drawer is closed opens it on that tab', () => {
   renderApp();
-  fireEvent.click(tab('Search'));
-  expect(activeTab()).toBe('search');
-  expect(tab('Search')).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(tab('Browse'));
+  expect(activeTab()).toBe('browse');
+  expect(tab('Browse')).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('tapping the active tab closes the drawer', () => {
   renderApp();
-  fireEvent.click(tab('Quick Hit'));
-  fireEvent.click(tab('Quick Hit'));
+  fireEvent.click(tab('Browse'));
+  fireEvent.click(tab('Browse'));
   expect(activeTab()).toBe('none');
-  expect(tab('Quick Hit')).toHaveAttribute('aria-pressed', 'false');
+  expect(tab('Browse')).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('tapping a different tab switches to it', () => {
   renderApp();
-  fireEvent.click(tab('Quick Hit'));
+  fireEvent.click(tab('Browse'));
   fireEvent.click(tab('Next Up'));
   expect(activeTab()).toBe('nextup');
-  expect(tab('Quick Hit')).toHaveAttribute('aria-pressed', 'false');
+  expect(tab('Browse')).toHaveAttribute('aria-pressed', 'false');
   expect(tab('Next Up')).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('reopening after a close starts on whichever tab was tapped', () => {
   renderApp();
-  fireEvent.click(tab('Search'));
-  fireEvent.click(tab('Search'));
+  fireEvent.click(tab('Browse'));
+  fireEvent.click(tab('Browse'));
   fireEvent.click(tab('Next Up'));
   expect(activeTab()).toBe('nextup');
 });
 
 test('passes the drawer an onEnqueue callback that closes the drawer when called', () => {
   renderApp();
-  fireEvent.click(tab('Quick Hit'));
-  expect(activeTab()).toBe('quickhit');
+  fireEvent.click(tab('Browse'));
+  expect(activeTab()).toBe('browse');
 
   fireEvent.click(screen.getByText('trigger-enqueue'));
 
   expect(activeTab()).toBe('none');
-  expect(tab('Quick Hit')).toHaveAttribute('aria-pressed', 'false');
+  expect(tab('Browse')).toHaveAttribute('aria-pressed', 'false');
 });
 
-test('jumping to an artist from a different tab switches to Search and carries the artist along', () => {
+test('jumping to an artist from a different tab switches to Browse and carries the artist along', () => {
   renderApp();
-  fireEvent.click(tab('Quick Hit'));
+  fireEvent.click(tab('Next Up'));
 
   fireEvent.click(screen.getByText('trigger-jump-to-artist'));
 
-  expect(activeTab()).toBe('search');
-  expect(tab('Search')).toHaveAttribute('aria-pressed', 'true');
+  expect(activeTab()).toBe('browse');
+  expect(tab('Browse')).toHaveAttribute('aria-pressed', 'true');
   expect(pendingArtistName()).toBe('Jumped Artist');
 });
 
-test('jumping to an artist while already on Search still carries the artist along', () => {
+test('jumping to an artist while already on Browse still carries the artist along', () => {
   renderApp();
-  fireEvent.click(tab('Search'));
+  fireEvent.click(tab('Browse'));
 
   fireEvent.click(screen.getByText('trigger-jump-to-artist'));
 
-  expect(activeTab()).toBe('search');
+  expect(activeTab()).toBe('browse');
   expect(pendingArtistName()).toBe('Jumped Artist');
 });
 

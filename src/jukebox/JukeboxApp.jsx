@@ -26,14 +26,14 @@ const JukeboxApp = () => {
 
   const handleTabPress = (tab) => setActiveTab((current) => (current === tab ? null : tab));
   // Enqueueing something (a track, an album, an artist/collection shuffle)
-  // from Quick Hit or Search closes everything, so the kiosk lands back on
-  // Now Playing instead of leaving the drawer open over it.
+  // from Browse closes everything, so the kiosk lands back on Now Playing
+  // instead of leaving the drawer open over it.
   const closeAll = () => setActiveTab(null);
   // "Close the album page and show this artist's albums as if we'd
-  // searched" — switches to Search (a no-op if already there) and hands the
+  // searched" — switches to Browse (a no-op if already there) and hands the
   // artist to the drawer.
   const jumpToArtist = (artist) => {
-    setActiveTab('search');
+    setActiveTab('browse');
     setPendingArtist(artist);
   };
 

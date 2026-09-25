@@ -14,7 +14,7 @@ const renderTab = () => render(<MemoryRouter><JukeboxNextUpTab /></MemoryRouter>
 test('shows an empty state when nothing is queued', () => {
   usePlayerStore.mockImplementation((selector) => selector({ playlist: [], currentTrackIndex: -1 }));
   renderTab();
-  expect(screen.getByText('Nothing queued yet — try Quick Hit or Search')).toBeInTheDocument();
+  expect(screen.getByText('Nothing queued yet — try Browse')).toBeInTheDocument();
 });
 
 test('renders every queued track', () => {

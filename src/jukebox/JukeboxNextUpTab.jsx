@@ -15,7 +15,7 @@ const JukeboxNextUpTab = () => {
     <>
       <JukeboxTransport />
       {playlist.length === 0 ? (
-        <p className="jukebox-panel-empty">Nothing queued yet — try Quick Hit or Search</p>
+        <p className="jukebox-panel-empty">Nothing queued yet — try Browse</p>
       ) : (
         <div className="jukebox-search-tracks">
           {playlist.map((track, index) => (

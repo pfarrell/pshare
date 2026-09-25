@@ -1,8 +1,7 @@
 import JukeboxProgressLine from './JukeboxProgressLine';
 
 const TABS = [
-  { key: 'quickhit', label: 'Quick Hit' },
-  { key: 'search', label: 'Search' },
+  { key: 'browse', label: 'Browse' },
   { key: 'nextup', label: 'Next Up' },
 ];
 

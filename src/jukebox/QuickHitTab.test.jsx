@@ -64,7 +64,7 @@ test('shows an empty-state message when there is no play history yet', async () 
   renderTab();
 
   await waitFor(() => {
-    expect(screen.getByText('Nothing played yet — try Search instead')).toBeInTheDocument();
+    expect(screen.getByText('Nothing played yet — try searching for something')).toBeInTheDocument();
   });
 });
 
