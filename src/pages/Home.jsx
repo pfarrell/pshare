@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'react';
 import { useInfiniteItems } from '../hooks/useInfiniteItems';
 import { useHomeModeStore } from '../stores/homeModeStore';
-import { useTagFilterStore } from '../stores/tagFilterStore';
+import { useProfileFilterStore } from '../stores/profileFilterStore';
 import { useHomeFeedStore } from '../stores/homeFeedStore';
 import { apiService } from '../services/api';
 import ArtistGrid from '../components/ArtistGrid';
@@ -10,11 +10,11 @@ import AlbumGrid from '../components/AlbumGrid';
 import Loading from '../components/Loading';
 import Retry from '../components/Retry';
 
-const HomeFeed = ({ mode, activeTag }) => {
-  const cacheKey = `${mode}:${activeTag ?? ''}`;
+const HomeFeed = ({ mode, activeProfileId }) => {
+  const cacheKey = `${mode}:${activeProfileId ?? ''}`;
   const fetchFn = mode === 'albums'
-    ? (size) => apiService.getRandomAlbums(size, activeTag)
-    : (size) => apiService.getRandomArtists(size, activeTag);
+    ? (size) => apiService.getRandomAlbums(size, activeProfileId)
+    : (size) => apiService.getRandomArtists(size, activeProfileId);
 
   const { items, isLoading, error, loadMore, hydrated } = useInfiniteItems(fetchFn, cacheKey);
   const gridRef     = useRef(null);
@@ -61,7 +61,7 @@ const HomeFeed = ({ mode, activeTag }) => {
   }, [loadMore, items.length]);
 
   if (items.length === 0 && isLoading) {
-    return <Loading message={`Loading ${mode}${activeTag ? ` tagged #${activeTag}` : ''}`} />;
+    return <Loading message={`Loading ${mode}`} />;
   }
 
   if (error && items.length === 0) {
@@ -85,8 +85,8 @@ const HomeFeed = ({ mode, activeTag }) => {
 
 const Home = () => {
   const { mode } = useHomeModeStore();
-  const { activeTag } = useTagFilterStore();
-  return <HomeFeed key={`${mode}:${activeTag ?? ''}`} mode={mode} activeTag={activeTag} />;
+  const { activeProfileId } = useProfileFilterStore();
+  return <HomeFeed key={`${mode}:${activeProfileId ?? ''}`} mode={mode} activeProfileId={activeProfileId} />;
 };
 
 export default Home;
