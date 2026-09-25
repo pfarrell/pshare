@@ -4,6 +4,7 @@ import { getArtistSummary } from '../services/wikipedia.js'
 import { streamBase } from '../db/streamUrl.js'
 import { sql } from 'kysely'
 import { countsService } from '../services/countsService.js'
+import { profilesService } from '../services/profilesService.js'
 import { requireAuth } from '../middleware/auth.js'
 import type { Variables } from '../types.js'
 
@@ -106,25 +107,28 @@ async function fetchArtistDiscography(c: any, id: number, name: string, imagePat
 // because /artist/:id (below, in this same router) is public.
 artists.get('/random', requireAuth, async (c) => {
   const size = Math.min(parseInt(c.req.query('size') ?? '10'), 200)
-  const tag = c.req.query('tag')
+  const profileIdParam = c.req.query('profileId')
+  const tagIds = profileIdParam ? await profilesService.getTagIds(parseInt(profileIdParam)) : null
 
-  const rows = tag
-    ? await sql<any>`
-        WITH eligible_artist_ids AS (
-          SELECT DISTINCT a.id
-          FROM artists a
-          INNER JOIN albums al ON al.artist_id = a.id
-          INNER JOIN artists_tags at ON at.artist_id = a.id
-          INNER JOIN tags tg ON tg.id = at.tag_id AND tg.name = ${tag}
-          WHERE a.image_path IS NOT NULL
-        ),
-        random_ids AS (
-          SELECT id FROM eligible_artist_ids ORDER BY random() LIMIT ${size}
-        )
-        SELECT a.*
-        FROM artists a
-        INNER JOIN random_ids r ON a.id = r.id
-      `.execute(db)
+  const rows = tagIds
+    ? (tagIds.length === 0
+        ? { rows: [] }
+        : await sql<any>`
+            WITH eligible_artist_ids AS (
+              SELECT DISTINCT a.id
+              FROM artists a
+              INNER JOIN albums al ON al.artist_id = a.id
+              INNER JOIN artists_tags at ON at.artist_id = a.id
+              WHERE at.tag_id IN (${sql.join(tagIds)})
+                AND a.image_path IS NOT NULL
+            ),
+            random_ids AS (
+              SELECT id FROM eligible_artist_ids ORDER BY random() LIMIT ${size}
+            )
+            SELECT a.*
+            FROM artists a
+            INNER JOIN random_ids r ON a.id = r.id
+          `.execute(db))
     : await sql<any>`
         WITH eligible_artist_ids AS (
           SELECT DISTINCT a.id
