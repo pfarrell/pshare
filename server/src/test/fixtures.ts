@@ -38,6 +38,12 @@ export const createUser = (label: string, { password = null, admin = false }: { 
     .returningAll()
     .executeTakeFirstOrThrow()
 
+export const createJukeboxDevice = (label: string, userId: number) =>
+  db.insertInto('jukebox_devices')
+    .values({ user_id: userId, name: fixtureName(label) })
+    .returningAll()
+    .executeTakeFirstOrThrow()
+
 export const createLog = (albumId: number, trackId: number | null, artistId: number | null, createdAt: Date) =>
   db.insertInto('logs')
     .values({ album_id: albumId, track_id: trackId, artist_id: artistId, action: 'stream', created_at: createdAt, ip_address: null })
