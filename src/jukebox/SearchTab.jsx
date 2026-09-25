@@ -4,7 +4,6 @@ import JukeboxAlbumTile from './JukeboxAlbumTile';
 import JukeboxArtistTile from './JukeboxArtistTile';
 import JukeboxPlaylistTile from './JukeboxPlaylistTile';
 import JukeboxCollectionTile from './JukeboxCollectionTile';
-import JukeboxProfilePicker from './JukeboxProfilePicker';
 import QuickHitTab from './QuickHitTab';
 import Track from '../components/Track';
 import { useProfileFilterStore } from '../stores/profileFilterStore';
@@ -247,8 +246,6 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
           />
           <button type="submit">Search</button>
         </form>
-
-        <JukeboxProfilePicker />
 
         {!isEmpty && results !== null && !noResults && !error && (
           <div className="jukebox-search-chips" role="group" aria-label="Filter results">

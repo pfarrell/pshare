@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { useProfileFilterStore } from '../stores/profileFilterStore';
 import { getProfilesCached } from '../utils/profilesCache';
 
-// Gear-icon popover living in the Browse tab's search bar — the jukebox
-// equivalent of ProfileFilterChip, but kiosk-styled and without an
-// outside-click dismiss (no page behind it to click through to on a
-// touch-only kiosk; a dedicated close control is more reliable there).
+// Gear-icon popover living in the tab bar's right edge (rendered by
+// JukeboxTabBar), as a slim finger-width slot rather than a third equal-size
+// tab — the jukebox equivalent of ProfileFilterChip, but kiosk-styled and
+// without an outside-click dismiss (no page behind it to click through to on
+// a touch-only kiosk; a dedicated close control is more reliable there).
 // Applying a profile does NOT close this — see
 // docs/superpowers/specs/2026-09-24-profiles-design.md Design §5: this is
 // a filter/settings change, not a playback action, so it stays open with

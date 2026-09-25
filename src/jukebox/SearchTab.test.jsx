@@ -57,8 +57,8 @@ beforeEach(() => {
   // a test overrides this — a harmless empty grid by default so unrelated
   // search-behavior tests aren't left with an unresolved fetch.
   apiService.getRecentAlbums.mockResolvedValue({ data: [] });
-  // Same defensive-default reasoning as getRecentAlbums above — the gear
-  // icon's picker and the active-profile-name lookup both fetch this.
+  // Same defensive-default reasoning as getRecentAlbums above — the
+  // active-profile-name lookup (and its self-heal check) fetches this.
   apiService.getProfiles.mockResolvedValue({ data: [] });
 });
 
@@ -120,11 +120,10 @@ test('tapping a Quick Hit album calls onSelectAlbum, same as a search result alb
 });
 
 // --- Profile filtering ------------------------------------------------
-
-test('renders the profile settings gear icon in the search bar', () => {
-  renderTab();
-  expect(screen.getByRole('button', { name: /profile settings/i })).toBeInTheDocument();
-});
+// The settings gear itself now lives in JukeboxTabBar, not here — see
+// JukeboxTabBar.test.jsx. SearchTab still owns filtering its own results by
+// activeProfileId and resolving/self-healing the active profile's name for
+// display, regardless of where the gear control is rendered.
 
 test('shows the active profile name under the search bar when one is set', async () => {
   useProfileFilterStore.setState({ activeProfileId: 1 });
