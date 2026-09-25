@@ -77,13 +77,13 @@ export const apiService = {
   resetPassword: (token, newPassword) => api.post('/auth/reset-password', { token, newPassword }),
 
   // Artists
-  getRandomArtists: (size = 60, tag = null) => api.get(`/artists/random${qs({ size, tag })}`),
+  getRandomArtists: (size = 60, profileId = null) => api.get(`/artists/random${qs({ size, profileId })}`),
   getArtist: (id) => api.get(`/artist/${id}`), // Returns { artist, summary, albums }
 
   // Albums
   getAlbum: (id) => api.get(`/album/${id}`), // Returns { artist, album, tracks }
-  getRandomAlbums: (size = 30, tag = null) => api.get(`/albums/random${qs({ size, tag })}`),
-  getRecentAlbums: (size = 20) => api.get(`/albums/recent${qs({ size })}`),
+  getRandomAlbums: (size = 30, profileId = null) => api.get(`/albums/random${qs({ size, profileId })}`),
+  getRecentAlbums: (size = 20, profileId = null) => api.get(`/albums/recent${qs({ size, profileId })}`),
   getAdjacentAlbums: (id, collectionId = null) => api.get(`/album/${id}/adjacent${qs({ collection_id: collectionId })}`), // Returns { prev, next }
 
   // Tracks
@@ -109,10 +109,16 @@ export const apiService = {
   removeTagFromAlbum: (id, tagName) => api.delete(`/tags/album/${id}/${encodeURIComponent(tagName)}`),
   addTagToArtist: (id, name) => api.post(`/tags/artist/${id}`, { name }),
   removeTagFromArtist: (id, tagName) => api.delete(`/tags/artist/${id}/${encodeURIComponent(tagName)}`),
-  setDefaultTag: (tag) => api.put('/auth/default-tag', { tag }),
+  setDefaultProfile: (profileId) => api.put('/auth/default-profile', { profile_id: profileId }),
+
+  // Profiles
+  getProfiles: () => api.get('/profiles'),
+  createProfile: (name, tagIds) => api.post('/admin/profiles', { name, tag_ids: tagIds }),
+  updateProfile: (id, name, tagIds) => api.put(`/admin/profiles/${id}`, { name, tag_ids: tagIds }),
+  deleteProfile: (id) => api.delete(`/admin/profiles/${id}`),
 
   // Search
-  search: (query, offset) => api.get(`/search${qs({ q: query, offset: offset || undefined })}`),
+  search: (query, offset, profileId = null) => api.get(`/search${qs({ q: query, offset: offset || undefined, profileId })}`),
 
   // log
   log: (id) => api.get(`/log/${id}`),
