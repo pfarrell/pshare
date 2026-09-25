@@ -2,11 +2,13 @@ import { render, screen, fireEvent, waitFor, within, act } from '@testing-librar
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import SearchTab from './SearchTab';
+import { useProfileFilterStore } from '../stores/profileFilterStore';
 
 vi.mock('../services/api', () => ({
   apiService: {
     search: vi.fn(),
     getRecentAlbums: vi.fn(),
+    getProfiles: vi.fn(),
     getImageUrl: vi.fn(() => '/img/sm/x.jpg'),
   },
 }));
@@ -19,7 +21,7 @@ const renderTab = (props = {}) =>
 const runSearch = async (query = 'q') => {
   fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: query } });
   fireEvent.submit(screen.getByRole('search'));
-  await waitFor(() => expect(apiService.search).toHaveBeenCalledWith(query));
+  await waitFor(() => expect(apiService.search).toHaveBeenCalled());
 };
 
 // Small result set: one of each.
@@ -48,10 +50,14 @@ const section = (name) => screen.getByRole('heading', { name }).closest('section
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useProfileFilterStore.setState({ activeProfileId: null });
   // Quick Hit mounts immediately (the box starts empty) in every test unless
   // a test overrides this — a harmless empty grid by default so unrelated
   // search-behavior tests aren't left with an unresolved fetch.
   apiService.getRecentAlbums.mockResolvedValue({ data: [] });
+  // Same defensive-default reasoning as getRecentAlbums above — the gear
+  // icon's picker and the active-profile-name lookup both fetch this.
+  apiService.getProfiles.mockResolvedValue({ data: [] });
 });
 
 afterEach(() => {
@@ -109,6 +115,40 @@ test('tapping a Quick Hit album calls onSelectAlbum, same as a search result alb
   fireEvent.click(screen.getByText('Quick Hit Album'));
 
   expect(onSelectAlbum).toHaveBeenCalledWith(expect.objectContaining({ id: 1, title: 'Quick Hit Album' }));
+});
+
+// --- Profile filtering ------------------------------------------------
+
+test('renders the profile settings gear icon in the search bar', () => {
+  renderTab();
+  expect(screen.getByRole('button', { name: /profile settings/i })).toBeInTheDocument();
+});
+
+test('shows the active profile name under the search bar when one is set', async () => {
+  useProfileFilterStore.setState({ activeProfileId: 1 });
+  apiService.getProfiles.mockResolvedValue({ data: [{ id: 1, name: 'Kids', tags: [] }] });
+  renderTab();
+  await waitFor(() => expect(screen.getByText('Kids')).toBeInTheDocument());
+});
+
+test('shows nothing under the search bar when no profile is active (All)', () => {
+  useProfileFilterStore.setState({ activeProfileId: null });
+  renderTab();
+  expect(screen.queryByText(/^Kids$/)).not.toBeInTheDocument();
+});
+
+test('passes the active profile id to getRecentAlbums (Quick Hit)', async () => {
+  useProfileFilterStore.setState({ activeProfileId: 5 });
+  renderTab();
+  await waitFor(() => expect(apiService.getRecentAlbums).toHaveBeenCalledWith(20, 5));
+});
+
+test('passes the active profile id to search', async () => {
+  useProfileFilterStore.setState({ activeProfileId: 5 });
+  apiService.search.mockResolvedValue({ data: smallResponse });
+  renderTab();
+  await runSearch('test query');
+  expect(apiService.search).toHaveBeenCalledWith('test query', undefined, 5);
 });
 
 test('searches on submit and renders artist, album, and track results', async () => {
@@ -393,7 +433,7 @@ test('shows a retry option when search fails, and retry re-runs the same query',
   fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
   await waitFor(() => {
-    expect(apiService.search).toHaveBeenCalledWith('test query');
+    expect(apiService.search).toHaveBeenCalledWith('test query', undefined, null);
     expect(screen.getByText('No results')).toBeInTheDocument();
   });
 });
@@ -410,7 +450,7 @@ test('incremental search fires automatically after a short pause, without an exp
 
   await act(async () => { await vi.advanceTimersByTimeAsync(350); });
 
-  expect(apiService.search).toHaveBeenCalledWith('monk');
+  expect(apiService.search).toHaveBeenCalledWith('monk', undefined, null);
   expect(screen.getByText('Found Album')).toBeInTheDocument();
 });
 
@@ -436,7 +476,7 @@ test('debounces — only the settled query is searched, not every keystroke', as
   await act(async () => { await vi.advanceTimersByTimeAsync(350); });
 
   expect(apiService.search).toHaveBeenCalledTimes(1);
-  expect(apiService.search).toHaveBeenCalledWith('monk');
+  expect(apiService.search).toHaveBeenCalledWith('monk', undefined, null);
 });
 
 test('only the latest search response is applied, even if an earlier request resolves later', async () => {

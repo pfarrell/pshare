@@ -4,8 +4,11 @@ import JukeboxAlbumTile from './JukeboxAlbumTile';
 import JukeboxArtistTile from './JukeboxArtistTile';
 import JukeboxPlaylistTile from './JukeboxPlaylistTile';
 import JukeboxCollectionTile from './JukeboxCollectionTile';
+import JukeboxProfilePicker from './JukeboxProfilePicker';
 import QuickHitTab from './QuickHitTab';
 import Track from '../components/Track';
+import { useProfileFilterStore } from '../stores/profileFilterStore';
+import { getProfilesCached } from '../utils/profilesCache';
 
 // Artists, albums, playlists and collections all drill into a browse view
 // (via onSelectArtist/onSelectAlbum/onSelectPlaylist/onSelectCollection, all
@@ -49,6 +52,16 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
   const [error, setError] = useState(false);
   const [filter, setFilter] = useState('all'); // 'all' | 'artists' | 'albums' | 'playlists' | 'collections' | 'tracks'
 
+  const { activeProfileId } = useProfileFilterStore();
+  const [activeProfileName, setActiveProfileName] = useState(null);
+
+  useEffect(() => {
+    if (!activeProfileId) { setActiveProfileName(null); return; }
+    getProfilesCached().then((res) => {
+      setActiveProfileName(res.data.find((p) => p.id === activeProfileId)?.name ?? null);
+    }).catch(() => setActiveProfileName(null));
+  }, [activeProfileId]);
+
   // Guards against a slow earlier request's response landing after a faster
   // later one and clobbering it — only the response matching the most
   // recently *dispatched* request is ever applied.
@@ -64,7 +77,7 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
     setError(false);
     const generation = ++searchGenerationRef.current;
     try {
-      const response = await apiService.search(q);
+      const response = await apiService.search(q, undefined, activeProfileId);
       if (generation !== searchGenerationRef.current) return; // superseded by a newer search
       setResults(response.data);
       if (resetFilter) setFilter('all');
@@ -96,7 +109,7 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
       runSearch(query, { resetFilter: isFreshSearch });
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, activeProfileId]);
 
   const artistResults = (results?.results || []).filter((r) => r.type === 'artist');
   const albumResults = (results?.results || []).filter((r) => r.type === 'album');
@@ -228,6 +241,8 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
           <button type="submit">Search</button>
         </form>
 
+        <JukeboxProfilePicker />
+
         {!isEmpty && results !== null && !noResults && !error && (
           <div className="jukebox-search-chips" role="group" aria-label="Filter results">
             {chips.map((chip) => (
@@ -244,10 +259,12 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
         )}
       </div>
 
+      {activeProfileName && <p className="jukebox-active-profile">{activeProfileName}</p>}
+
       {/* An empty box is always Quick Hit — even after a previous search,
           clearing the box gets you back to browsing, not a frozen view of
           stale results. See SearchTab.test.jsx. */}
-      {isEmpty && <QuickHitTab onSelectAlbum={onSelectAlbum} />}
+      {isEmpty && <QuickHitTab onSelectAlbum={onSelectAlbum} profileId={activeProfileId} />}
 
       {!isEmpty && error && (
         <div className="jukebox-panel-error">

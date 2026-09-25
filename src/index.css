@@ -2835,6 +2835,76 @@ body:has(.jukebox-app) {
   border-radius: 0.5rem;
   cursor: pointer;
 }
+/* Gear-icon profile picker (JukeboxProfilePicker) — kiosk-scale counterpart
+   of ProfileFilterChip's popover. Starting point only, per the plan's own
+   note; adjust during live-device verification rather than treating this as
+   final. */
+.jukebox-app .jukebox-profile-picker {
+  position: relative;
+  align-self: flex-end;
+}
+.jukebox-app .jukebox-profile-picker > button {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  font-size: 1.25rem;
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.jukebox-app .jukebox-profile-picker-popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 0.4rem;
+  min-width: 12rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  background: #1a252f;
+  border: 1px solid #4a5a68;
+  border-radius: 0.5rem;
+  padding: 0.6rem;
+  z-index: 60;
+}
+.jukebox-app .jukebox-profile-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: white;
+  font-size: 1rem;
+}
+.jukebox-app .jukebox-profile-picker-header button {
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  font-size: 1.1rem;
+  color: white;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.jukebox-app .jukebox-profile-picker-popover > button {
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  font-size: 1rem;
+  text-align: left;
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+.jukebox-app .jukebox-profile-picker-popover > button[aria-pressed="true"] {
+  background: #2f6fd6;
+  border-color: #2f6fd6;
+  font-weight: 600;
+}
+.jukebox-app .jukebox-active-profile {
+  margin: 0;
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.6);
+}
 .jukebox-app .jukebox-search-chips {
   display: flex;
   flex-wrap: wrap;
