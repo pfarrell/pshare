@@ -3,6 +3,7 @@ import type { Variables } from '../types.js'
 import { getAlbumSummary } from '../services/wikipedia.js'
 import { streamBase } from '../db/streamUrl.js'
 import { albumsService } from '../services/albumsService.js'
+import { profilesService } from '../services/profilesService.js'
 import { countsService } from '../services/countsService.js'
 import { notesService } from '../services/notesService.js'
 import { getRecallItem, decryptRecallToken, stripBacklink } from '../services/recallService.js'
@@ -15,10 +16,10 @@ const albums = new Hono<{ Variables: Variables }>()
 // artists.ts's /random: powers the logged-in Home feed.
 albums.get('/random', requireAuth, async (c) => {
   const size = Math.min(parseInt(c.req.query('size') ?? '10'), 200)
-  const tag = c.req.query('tag')
+  const profileIdParam = c.req.query('profileId')
 
-  const rows = tag
-    ? await albumsService.randomByTag(tag, size)
+  const rows = profileIdParam
+    ? await albumsService.randomByTagIds(await profilesService.getTagIds(parseInt(profileIdParam)), size)
     : await albumsService.randomAll(size)
 
   const albumIds = rows.rows.map((row: any) => row.id)
@@ -39,8 +40,10 @@ albums.get('/random', requireAuth, async (c) => {
 // docs/superpowers/specs/2026-09-20-jukebox-mode-design.md.
 albums.get('/recent', requireAuth, async (c) => {
   const size = Math.min(parseInt(c.req.query('size') ?? '10'), 200)
+  const profileIdParam = c.req.query('profileId')
 
-  const rows = await albumsService.recentlyPlayed(size)
+  const tagIds = profileIdParam ? await profilesService.getTagIds(parseInt(profileIdParam)) : null
+  const rows = await albumsService.recentlyPlayed(size, tagIds)
   const albumIds = rows.rows.map((row: any) => row.id)
   const trackCounts = await countsService.trackCountsByAlbumIds(albumIds)
 

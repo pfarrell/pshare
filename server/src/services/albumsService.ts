@@ -4,15 +4,17 @@ import { SINGLES_ALBUM_TITLE } from '../constants/singles.js'
 
 export function createAlbumsService(db: Kysely<Database>) {
   return {
-    async randomByTag(tag: string, size: number) {
+    async randomByTagIds(tagIds: number[], size: number) {
+      if (tagIds.length === 0) return { rows: [] } as any
+
       return sql<any>`
         WITH eligible_album_ids AS (
           SELECT DISTINCT al.id
           FROM albums al
           INNER JOIN tracks t ON t.album_id = al.id AND t.approved = true
           INNER JOIN albums_tags at ON at.album_id = al.id
-          INNER JOIN tags tg ON tg.id = at.tag_id AND tg.name = ${tag}
-          WHERE al.image_path IS NOT NULL AND al.image_path != ''
+          WHERE at.tag_id IN (${sql.join(tagIds)})
+            AND al.image_path IS NOT NULL AND al.image_path != ''
             AND al.title != '_Singles'
         ),
         random_ids AS (
@@ -52,7 +54,13 @@ export function createAlbumsService(db: Kysely<Database>) {
       `.execute(db)
     },
 
-    async recentlyPlayed(size: number) {
+    async recentlyPlayed(size: number, tagIds: number[] | null = null) {
+      if (tagIds && tagIds.length === 0) return { rows: [] } as any
+
+      const tagJoin = tagIds
+        ? sql`INNER JOIN albums_tags at ON at.album_id = al.id AND at.tag_id IN (${sql.join(tagIds)})`
+        : sql``
+
       return sql<any>`
         SELECT al.id, al.title, al.image_path,
                ar.id AS artist_id, ar.name AS artist_name,
@@ -63,6 +71,7 @@ export function createAlbumsService(db: Kysely<Database>) {
         FROM logs lg
         INNER JOIN albums al ON al.id = lg.album_id
         INNER JOIN artists ar ON ar.id = al.artist_id
+        ${tagJoin}
         WHERE al.image_path IS NOT NULL AND al.image_path != ''
           AND al.title != '_Singles'
         GROUP BY al.id, al.title, al.image_path, ar.id, ar.name
