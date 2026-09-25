@@ -14,8 +14,20 @@ const ProfileFilterChip = () => {
   const [profiles, setProfiles] = useState(null);
   const ref = useRef(null);
 
+  // This chip is on every page, and it fetches the list unconditionally on
+  // mount, so it's the earliest place that can notice a stale activeProfileId
+  // (a deleted profile, or an id left in localStorage by a previous session).
+  // Left alone, nothing resolves a name for the dead id — the trigger falls
+  // back to its inactive label, indistinguishable from "All" — while Home and
+  // Search keep sending it to the backend, which treats an unrecognized
+  // profileId as "no match" and returns nothing. Clearing it in the shared
+  // store self-heals every consumer at once.
   useEffect(() => {
-    getProfilesCached().then((res) => setProfiles(res.data)).catch(() => setProfiles([]));
+    getProfilesCached().then((res) => {
+      setProfiles(res.data);
+      const { activeProfileId: active, clearProfile } = useProfileFilterStore.getState();
+      if (active != null && !res.data.some((p) => p.id === active)) clearProfile();
+    }).catch(() => setProfiles([]));
   }, []);
 
   useEffect(() => {
@@ -48,7 +60,7 @@ const ProfileFilterChip = () => {
           cursor: 'pointer',
         }}
       >
-        {activeName ?? 'Profile'}
+        {activeName ?? 'Filter'}
       </button>
       {open && (
         <div style={{

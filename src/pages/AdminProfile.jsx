@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import Loading from '../components/Loading';
 import Retry from '../components/Retry';
+import { invalidateProfilesCache } from '../utils/profilesCache';
 
 export default function AdminProfile() {
   const { id } = useParams();
@@ -53,6 +54,13 @@ export default function AdminProfile() {
       tagsPromiseRef.current = apiService.getTags().then((res) => {
         setAllTags(res.data);
         return res.data;
+      }).catch((err) => {
+        // Clear the ref so the next keystroke/focus can retry — otherwise it
+        // would stay latched to this rejected promise forever, and every
+        // caller's `await` would become an unhandled rejection.
+        tagsPromiseRef.current = null;
+        setSaveError(err.response?.data?.error || err.message);
+        return [];
       });
     }
     return tagsPromiseRef.current;
@@ -91,6 +99,10 @@ export default function AdminProfile() {
       } else {
         await apiService.updateProfile(Number(id), name.trim(), tagIds);
       }
+      // Every non-admin consumer reads the module-scope cache, so without this
+      // a new/renamed profile never shows up in the header chip or the jukebox
+      // picker until the page is reloaded.
+      invalidateProfilesCache();
       navigate('/admin/profiles');
     } catch (err) {
       setSaveError(err.response?.data?.error || err.message);

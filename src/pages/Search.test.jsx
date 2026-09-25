@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import Search from './Search';
 import { apiService } from '../services/api';
+import { useProfileFilterStore } from '../stores/profileFilterStore';
 
 vi.mock('../services/api', () => ({
   apiService: {
@@ -32,6 +33,7 @@ beforeEach(() => {
   // from earlier tests in the file and fail spuriously when run together,
   // even though each test still sets its own fresh mockResolvedValue(Once).
   apiService.search.mockClear();
+  useProfileFilterStore.setState({ activeProfileId: null });
 });
 
 function triggerIntersection() {
@@ -406,6 +408,62 @@ test('discards a loadMore response that resolves after a new search has already 
 
   expect(screen.queryByText('Stale Page Two Artist')).toBeNull();
   expect(screen.getByText('Results (1)')).toBeInTheDocument();
+});
+
+test('re-runs the search when the profile filter is switched while already on the page', async () => {
+  apiService.search.mockResolvedValue({
+    data: {
+      results: [{ type: 'artist', data: { id: 1, name: 'Profiled Artist', image_path: 'a.jpg' } }],
+      hasMore: false,
+      resultCounts: { album: 0, artist: 1, playlist: 0, collection: 0 },
+      tracks: [],
+      count: 1,
+    },
+  });
+
+  renderSearch('jazz');
+  await screen.findByText('Profiled Artist');
+  expect(apiService.search).toHaveBeenLastCalledWith('jazz', undefined, null);
+
+  // The header's profile chip is rendered on every page, so switching the
+  // filter without touching the query is a normal interaction here.
+  await act(async () => {
+    useProfileFilterStore.setState({ activeProfileId: 3 });
+  });
+
+  await waitFor(() => expect(apiService.search).toHaveBeenLastCalledWith('jazz', undefined, 3));
+});
+
+test('loads more with the new profile id after a profile switch, not the old one', async () => {
+  apiService.search.mockResolvedValue({
+    data: {
+      results: [{ type: 'artist', data: { id: 1, name: 'Paged Profiled Artist', image_path: 'a.jpg' } }],
+      hasMore: true,
+      resultCounts: { album: 0, artist: 40, playlist: 0, collection: 0 },
+      tracks: [],
+      count: 1,
+      pageSize: 30,
+    },
+  });
+
+  renderSearch('paged');
+  await screen.findByText('Paged Profiled Artist');
+  await waitFor(() => expect(intersectionCallback).not.toBeNull());
+  const observersBeforeSwitch = global.IntersectionObserver.mock.calls.length;
+
+  await act(async () => {
+    useProfileFilterStore.setState({ activeProfileId: 3 });
+  });
+  // loadMore's identity changes with activeProfileId, which re-runs the
+  // observer effect and re-captures intersectionCallback — waiting for that
+  // fresh observer is what guarantees the trigger below goes through the
+  // post-switch loadMore rather than the stale closure this test is about.
+  await waitFor(() =>
+    expect(global.IntersectionObserver.mock.calls.length).toBeGreaterThan(observersBeforeSwitch));
+
+  await act(async () => { triggerIntersection(); });
+
+  await waitFor(() => expect(apiService.search).toHaveBeenLastCalledWith('paged', 30, 3));
 });
 
 test('a failed loadMore keeps existing results in place and shows an inline error, not the full-page error view', async () => {

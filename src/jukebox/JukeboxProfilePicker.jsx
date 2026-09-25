@@ -26,7 +26,7 @@ const JukeboxProfilePicker = () => {
       {open && (
         <div className="jukebox-profile-picker-popover">
           <div className="jukebox-profile-picker-header">
-            <span>Profile</span>
+            <span>Filter</span>
             <button type="button" aria-label="Close" onClick={() => setOpen(false)}>✕</button>
           </div>
           <button type="button" aria-pressed={activeProfileId === null} onClick={() => setProfile(null)}>

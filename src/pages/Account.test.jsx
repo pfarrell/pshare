@@ -93,13 +93,18 @@ describe('Account — Preferences and Log Out', () => {
     expect(screen.getByText('Albums')).toBeInTheDocument();
   });
 
-  test('renders the Profile control with set-default enabled', async () => {
+  test('renders the Filter control with set-default enabled', async () => {
     useAuthStore.setState({ user: { id: 1, username: 'pat', admin: false, google_connected: false, has_password: true } });
     useProfileFilterStore.setState({ activeProfileId: 1 });
     apiService.getProfiles.mockResolvedValueOnce({ data: [{ id: 1, name: 'Jazz', tags: [] }] });
     renderAccount();
     await waitFor(() => expect(screen.getByText('Jazz')).toBeInTheDocument());
     expect(screen.getByText('set default')).toBeInTheDocument();
+    // The picker card is headed "Filter" — "Profile" stays reserved for the
+    // pre-existing identity card above it (username/email), which is a
+    // different concept entirely.
+    expect(screen.getByText('Filter')).toBeInTheDocument();
+    expect(screen.getByText('Profile')).toBeInTheDocument();
   });
 
   test('clicking Log Out calls logout', async () => {

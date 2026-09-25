@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import AdminProfile from './AdminProfile';
 import { apiService } from '../services/api';
+import { getProfilesCached, __resetProfilesCacheForTests } from '../utils/profilesCache';
 
 vi.mock('../services/api', () => ({
   apiService: {
@@ -25,6 +26,7 @@ const renderAt = (path) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  __resetProfilesCacheForTests();
   apiService.getTags.mockResolvedValue({ data: [{ id: 1, name: 'kids' }, { id: 2, name: 'disney' }] });
   apiService.getProfiles.mockResolvedValue({
     data: [{ id: 7, name: 'Kids', tags: [{ id: 1, name: 'kids' }] }],
@@ -79,6 +81,40 @@ test('edit mode: Save calls updateProfile with the current id, name, and tag ids
   await waitFor(() => expect(apiService.updateProfile).toHaveBeenCalledWith(7, 'Kids', [1]));
 });
 
+test('a successful save invalidates the shared profile-list cache', async () => {
+  apiService.updateProfile.mockResolvedValue({ data: { id: 7, name: 'Kids' } });
+  renderAt('/admin/profiles/7');
+  await waitFor(() => screen.getByText('#kids'));
+
+  // Seed the module-scope cache the way the header chip / jukebox picker do,
+  // then prove a later read refetches instead of serving the pre-save list.
+  await getProfilesCached();
+  const callsAfterSeed = apiService.getProfiles.mock.calls.length;
+  await getProfilesCached();
+  expect(apiService.getProfiles).toHaveBeenCalledTimes(callsAfterSeed);
+
+  fireEvent.click(screen.getByRole('button', { name: /save/i }));
+  await waitFor(() => expect(screen.getByText('Profiles list page')).toBeInTheDocument());
+
+  await getProfilesCached();
+  expect(apiService.getProfiles).toHaveBeenCalledTimes(callsAfterSeed + 1);
+});
+
+test('a failed save leaves the shared profile-list cache alone', async () => {
+  apiService.updateProfile.mockRejectedValue(new Error('nope'));
+  renderAt('/admin/profiles/7');
+  await waitFor(() => screen.getByText('#kids'));
+
+  await getProfilesCached();
+  const callsAfterSeed = apiService.getProfiles.mock.calls.length;
+
+  fireEvent.click(screen.getByRole('button', { name: /save/i }));
+  await waitFor(() => expect(screen.getByText('nope')).toBeInTheDocument());
+
+  await getProfilesCached();
+  expect(apiService.getProfiles).toHaveBeenCalledTimes(callsAfterSeed);
+});
+
 test('rapid typing before the tag list finishes loading does not trigger duplicate getTags calls', async () => {
   let resolveTags;
   apiService.getTags.mockReturnValue(new Promise((resolve) => { resolveTags = resolve; }));
@@ -95,6 +131,22 @@ test('rapid typing before the tag list finishes loading does not trigger duplica
   await waitFor(() => screen.getByText('#kids'));
 
   expect(apiService.getTags).toHaveBeenCalledTimes(1);
+});
+
+test('a failed tag fetch surfaces an error and a later keystroke retries it', async () => {
+  apiService.getTags.mockRejectedValueOnce(new Error('Tags unavailable'));
+  renderAt('/admin/profiles/new');
+  await waitFor(() => screen.getByPlaceholderText('add tag…'));
+  const input = screen.getByPlaceholderText('add tag…');
+
+  fireEvent.change(input, { target: { value: 'k' } });
+  await waitFor(() => expect(screen.getByText('Tags unavailable')).toBeInTheDocument());
+
+  // The rejected promise must not stay latched on the ref, or there would be
+  // no retry path for the rest of the page's life.
+  fireEvent.change(input, { target: { value: 'ki' } });
+  await waitFor(() => expect(screen.getByText('#kids')).toBeInTheDocument());
+  expect(apiService.getTags).toHaveBeenCalledTimes(2);
 });
 
 test('edit mode: navigating to a profile id that no longer exists redirects to the list', async () => {

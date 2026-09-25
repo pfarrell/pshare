@@ -29,8 +29,8 @@ describe('apiService query strings are unchanged', () => {
   test('random artists/albums with and without profileId', () => {
     apiService.getRandomArtists(60);
     expect(http.get).toHaveBeenLastCalledWith('/artists/random?size=60');
-    apiService.getRandomAlbums(30, 'hip hop');
-    expect(http.get).toHaveBeenLastCalledWith('/albums/random?size=30&profileId=hip%20hop');
+    apiService.getRandomAlbums(30, 5);
+    expect(http.get).toHaveBeenLastCalledWith('/albums/random?size=30&profileId=5');
   });
 
   test('errors page with source', () => {

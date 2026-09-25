@@ -139,6 +139,24 @@ test('shows nothing under the search bar when no profile is active (All)', () =>
   expect(screen.queryByText(/^Kids$/)).not.toBeInTheDocument();
 });
 
+test('clears an active profile id that no longer exists in the fetched list', async () => {
+  useProfileFilterStore.setState({ activeProfileId: 99 });
+  apiService.getProfiles.mockResolvedValue({ data: [{ id: 1, name: 'Kids', tags: [] }] });
+  renderTab();
+
+  await waitFor(() => expect(useProfileFilterStore.getState().activeProfileId).toBeNull());
+  expect(screen.queryByText('Kids')).not.toBeInTheDocument();
+});
+
+test('keeps an active profile id that is still present in the fetched list', async () => {
+  useProfileFilterStore.setState({ activeProfileId: 1 });
+  apiService.getProfiles.mockResolvedValue({ data: [{ id: 1, name: 'Kids', tags: [] }] });
+  renderTab();
+
+  await waitFor(() => expect(screen.getByText('Kids')).toBeInTheDocument());
+  expect(useProfileFilterStore.getState().activeProfileId).toBe(1);
+});
+
 test('passes the active profile id to getRecentAlbums (Quick Hit)', async () => {
   useProfileFilterStore.setState({ activeProfileId: 5 });
   renderTab();

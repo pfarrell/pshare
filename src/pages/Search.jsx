@@ -80,11 +80,14 @@ const Search = () => {
     }
   };
 
+  // activeProfileId is a dependency because the header chip is on this page
+  // too: switching profiles while already on /search must re-run the search
+  // rather than leave results filtered by the previous profile.
   useEffect(() => {
     if (query) {
       performSearch(query);
     }
-  }, [query]);
+  }, [query, activeProfileId]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || !query) return;
@@ -118,7 +121,7 @@ const Search = () => {
     } finally {
       setLoadingMore(false);
     }
-  }, [loadingMore, hasMore, query]);
+  }, [loadingMore, hasMore, query, activeProfileId]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;

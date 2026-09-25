@@ -169,7 +169,7 @@ const Account = () => {
 
       <div style={cardStyle}>
         <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-faint)', marginBottom: '0.75rem' }}>
-          Profile
+          Filter
         </div>
         <ProfilePickerControl allowSetDefault variant="light" />
       </div>

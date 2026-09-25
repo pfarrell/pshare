@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { apiService } from '../services/api';
 import Loading from '../components/Loading';
 import Retry from '../components/Retry';
+import { invalidateProfilesCache } from '../utils/profilesCache';
 
 export default function AdminProfiles() {
   const [profiles, setProfiles] = useState(null);
@@ -22,6 +23,10 @@ export default function AdminProfiles() {
     if (!window.confirm(`Delete profile "${profile.name}"?`)) return;
     try {
       await apiService.deleteProfile(profile.id);
+      // Drop the shared cached list so the header chip and jukebox picker stop
+      // offering a profile that no longer exists (and so the chip's
+      // stale-id check can see the deleted id is gone).
+      invalidateProfilesCache();
       setProfiles((prev) => prev.filter((p) => p.id !== profile.id));
     } catch (err) {
       setError(err.message);

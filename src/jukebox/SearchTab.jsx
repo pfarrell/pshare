@@ -55,10 +55,17 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
   const { activeProfileId } = useProfileFilterStore();
   const [activeProfileName, setActiveProfileName] = useState(null);
 
+  // Same self-healing check as ProfileFilterChip (which the kiosk doesn't
+  // render): if the active id isn't in the real list any more — profile
+  // deleted, or a stale id in localStorage — clear it in the shared store
+  // rather than silently filtering everything down to nothing, since the
+  // backend treats an unrecognized profileId as "no match".
   useEffect(() => {
     if (!activeProfileId) { setActiveProfileName(null); return; }
     getProfilesCached().then((res) => {
-      setActiveProfileName(res.data.find((p) => p.id === activeProfileId)?.name ?? null);
+      const found = res.data.find((p) => p.id === activeProfileId);
+      if (!found) useProfileFilterStore.getState().clearProfile();
+      setActiveProfileName(found?.name ?? null);
     }).catch(() => setActiveProfileName(null));
   }, [activeProfileId]);
 

@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import ProfileFilterChip from './ProfileFilterChip';
+import { __resetProfilesCacheForTests } from '../utils/profilesCache';
 import { useProfileFilterStore } from '../stores/profileFilterStore';
 import { apiService } from '../services/api';
 
@@ -7,6 +8,7 @@ vi.mock('../services/api', () => ({ apiService: { getProfiles: vi.fn() } }));
 
 beforeEach(() => {
   vi.clearAllMocks();
+  __resetProfilesCacheForTests();
   useProfileFilterStore.setState({ activeProfileId: null });
   apiService.getProfiles.mockResolvedValue({ data: [{ id: 1, name: 'Kids', tags: [] }] });
 });
@@ -38,6 +40,26 @@ describe('ProfileFilterChip', () => {
     fireEvent.mouseDown(screen.getByTestId('outside'));
 
     expect(screen.queryByRole('button', { name: 'All' })).not.toBeInTheDocument();
+  });
+
+  test('the trigger reads "Filter", not "Profile", when nothing is active', () => {
+    render(<ProfileFilterChip />);
+    expect(screen.getByRole('button', { name: /profile filter/i })).toHaveTextContent('Filter');
+  });
+
+  test('clears an active profile id that no longer exists in the fetched list', async () => {
+    useProfileFilterStore.setState({ activeProfileId: 99 });
+    render(<ProfileFilterChip />);
+
+    await waitFor(() => expect(useProfileFilterStore.getState().activeProfileId).toBeNull());
+  });
+
+  test('keeps an active profile id that is still present in the fetched list', async () => {
+    useProfileFilterStore.setState({ activeProfileId: 1 });
+    render(<ProfileFilterChip />);
+
+    await waitFor(() => expect(screen.getByText('Kids')).toBeInTheDocument());
+    expect(useProfileFilterStore.getState().activeProfileId).toBe(1);
   });
 
   test('selecting a profile in the popover closes it', async () => {
