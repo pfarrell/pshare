@@ -1,5 +1,5 @@
 import { useAuthStore } from './authStore';
-import { useTagFilterStore } from './tagFilterStore';
+import { useProfileFilterStore } from './profileFilterStore';
 import { useFavoritesStore } from './favoritesStore';
 import { apiService } from '../services/api';
 
@@ -22,7 +22,7 @@ const initialState = {
 
 beforeEach(() => {
   useAuthStore.setState(initialState);
-  useTagFilterStore.setState({ activeTag: null });
+  useProfileFilterStore.setState({ activeProfileId: null });
   useFavoritesStore.setState({ items: [], loading: false, loaded: false });
   localStorage.clear();
   vi.clearAllMocks();
@@ -49,7 +49,7 @@ describe('authStore — initial state', () => {
 describe('authStore — initialize', () => {
   test('sets isAuthenticated on success', async () => {
     apiService.getMe.mockResolvedValue({
-      data: { user: { id: 1, username: 'pat', admin: false, default_tag: null } },
+      data: { user: { id: 1, username: 'pat', admin: false, default_profile_id: null } },
     });
 
     await useAuthStore.getState().initialize();
@@ -99,7 +99,7 @@ describe('authStore — initialize', () => {
 describe('authStore — login', () => {
   test('sets isAuthenticated on success', async () => {
     apiService.login.mockResolvedValue({
-      data: { user: { id: 1, username: 'pat', admin: false, default_tag: null } },
+      data: { user: { id: 1, username: 'pat', admin: false, default_profile_id: null } },
     });
 
     await useAuthStore.getState().login('pat', 'password');
@@ -109,7 +109,7 @@ describe('authStore — login', () => {
 
   test('sets isAdmin true for admin users', async () => {
     apiService.login.mockResolvedValue({
-      data: { user: { id: 1, username: 'pat', admin: true, default_tag: null } },
+      data: { user: { id: 1, username: 'pat', admin: true, default_profile_id: null } },
     });
 
     await useAuthStore.getState().login('pat', 'password');
@@ -119,7 +119,7 @@ describe('authStore — login', () => {
 
   test('sets isAdmin false for non-admin users', async () => {
     apiService.login.mockResolvedValue({
-      data: { user: { id: 2, username: 'regular', admin: false, default_tag: null } },
+      data: { user: { id: 2, username: 'regular', admin: false, default_profile_id: null } },
     });
 
     await useAuthStore.getState().login('regular', 'password');
@@ -129,7 +129,7 @@ describe('authStore — login', () => {
 
   test('returns { success: true } on success', async () => {
     apiService.login.mockResolvedValue({
-      data: { user: { id: 1, username: 'pat', admin: false, default_tag: null } },
+      data: { user: { id: 1, username: 'pat', admin: false, default_profile_id: null } },
     });
 
     const result = await useAuthStore.getState().login('pat', 'password');
@@ -160,7 +160,7 @@ describe('authStore — login', () => {
 
   test('loads favorites on successful login', async () => {
     apiService.login.mockResolvedValue({
-      data: { user: { id: 1, username: 'pat', admin: false, default_tag: null } },
+      data: { user: { id: 1, username: 'pat', admin: false, default_profile_id: null } },
     });
 
     await useAuthStore.getState().login('pat', 'password');
@@ -172,7 +172,7 @@ describe('authStore — login', () => {
 describe('authStore — signup', () => {
   test('sets isAuthenticated on success', async () => {
     apiService.signup.mockResolvedValue({
-      data: { user: { id: 3, username: 'newuser', admin: false, default_tag: null } },
+      data: { user: { id: 3, username: 'newuser', admin: false, default_profile_id: null } },
     });
 
     await useAuthStore.getState().signup('newuser', 'password');
@@ -182,12 +182,12 @@ describe('authStore — signup', () => {
 
   test('sets user from the response', async () => {
     apiService.signup.mockResolvedValue({
-      data: { user: { id: 3, username: 'newuser', admin: false, default_tag: null } },
+      data: { user: { id: 3, username: 'newuser', admin: false, default_profile_id: null } },
     });
 
     await useAuthStore.getState().signup('newuser', 'password');
 
-    expect(useAuthStore.getState().user).toEqual({ id: 3, username: 'newuser', admin: false, default_tag: null });
+    expect(useAuthStore.getState().user).toEqual({ id: 3, username: 'newuser', admin: false, default_profile_id: null });
   });
 
   test('returns { success: false, error } on failure without changing auth state', async () => {
