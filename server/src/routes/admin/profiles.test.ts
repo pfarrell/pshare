@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { Hono } from 'hono'
 import adminProfiles from './profiles.js'
 import { requireAdmin } from '../../middleware/auth.js'
-import { createTag, createProfile, createUser, cleanupFixtures } from '../../test/fixtures.js'
+import { createTag, createProfile, createUser, cleanupFixtures, fixtureName } from '../../test/fixtures.js'
 import { db } from '../../db/database.js'
 
 after(cleanupFixtures)
@@ -29,11 +29,11 @@ test('POST /admin/profiles requires admin', async () => {
 
 test('POST /admin/profiles creates a profile with tags', async () => {
   const tag = await createTag('admin-create-tag')
-  const res = await postJson(appWithUser(), '/profiles', { name: '__dry_test_admin_create_profile', tag_ids: [tag.id] })
+  const res = await postJson(appWithUser(), '/profiles', { name: fixtureName('admin-create-profile'), tag_ids: [tag.id] })
 
   assert.equal(res.status, 201)
   const body = await res.json()
-  assert.equal(body.name, '__dry_test_admin_create_profile')
+  assert.equal(body.name, fixtureName('admin-create-profile'))
 
   const links = await db.selectFrom('profile_tags').selectAll().where('profile_id', '=', body.id).execute()
   assert.deepEqual(links.map((l) => l.tag_id), [tag.id])
@@ -46,7 +46,7 @@ test('POST /admin/profiles rejects an empty name', async () => {
 })
 
 test('POST /admin/profiles rejects an empty tag_ids array', async () => {
-  const res = await postJson(appWithUser(), '/profiles', { name: '__dry_test_admin_empty_tags', tag_ids: [] })
+  const res = await postJson(appWithUser(), '/profiles', { name: fixtureName('admin-empty-tags'), tag_ids: [] })
   assert.equal(res.status, 400)
 })
 
@@ -61,7 +61,7 @@ test('PUT /admin/profiles/:id renames and replaces the tag set', async () => {
   const tagB = await createTag('admin-put-tag-b')
   const profile = await createProfile('admin-put-profile', [tagA.id])
 
-  const res = await putJson(appWithUser(), `/profiles/${profile.id}`, { name: '__dry_test_admin_put_renamed', tag_ids: [tagB.id] })
+  const res = await putJson(appWithUser(), `/profiles/${profile.id}`, { name: fixtureName('admin-put-renamed'), tag_ids: [tagB.id] })
 
   assert.equal(res.status, 200)
   const links = await db.selectFrom('profile_tags').selectAll().where('profile_id', '=', profile.id).execute()
