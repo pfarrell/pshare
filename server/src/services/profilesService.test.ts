@@ -2,7 +2,7 @@ import 'dotenv/config'
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { db } from '../db/database.js'
-import { createTag, createProfile, cleanupFixtures } from '../test/fixtures.js'
+import { createTag, createProfile, cleanupFixtures, fixtureName } from '../test/fixtures.js'
 import { profilesService } from './profilesService.js'
 
 after(cleanupFixtures)
@@ -42,8 +42,8 @@ test('getTagIds() returns an empty array for a profile that does not exist', asy
 
 test('create() inserts a profile with its tags', async () => {
   const tag = await createTag('create-tag')
-  const created = await profilesService.create('__dry_test_profilesvc_create', [tag.id])
-  assert.equal(created.name, '__dry_test_profilesvc_create')
+  const created = await profilesService.create(fixtureName('profilesvc-create'), [tag.id])
+  assert.equal(created.name, fixtureName('profilesvc-create'))
   assert.deepEqual(await profilesService.getTagIds(created.id), [tag.id])
 })
 
@@ -52,9 +52,9 @@ test('update() replaces the profile\'s tag set entirely and renames it', async (
   const tagB = await createTag('update-tag-b')
   const profile = await createProfile('update-profile', [tagA.id])
 
-  const updated = await profilesService.update(profile.id, '__dry_test_profilesvc_renamed', [tagB.id])
+  const updated = await profilesService.update(profile.id, fixtureName('profilesvc-renamed'), [tagB.id])
 
-  assert.equal(updated?.name, '__dry_test_profilesvc_renamed')
+  assert.equal(updated?.name, fixtureName('profilesvc-renamed'))
   assert.deepEqual(await profilesService.getTagIds(profile.id), [tagB.id])
 })
 
