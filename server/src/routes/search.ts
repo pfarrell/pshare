@@ -118,7 +118,19 @@ search.get('/', async (c) => {
 
   const likeParam = `%${query}%`
   const profileIdParam = c.req.query('profileId')
-  const tagIds = profileIdParam ? await profilesService.getTagIds(parseInt(profileIdParam)) : null
+  let tagIds: number[] | null = null
+  if (profileIdParam) {
+    const profileId = parseInt(profileIdParam)
+    // A profile always carries >=1 tag in practice (enforced at the API
+    // layer), so getTagIds() only ever comes back empty for a stale/deleted
+    // or malformed profileId — which would otherwise silently empty out
+    // Playlist/Collection results too, even though those have no tag
+    // concept and must never be filtered. Reject it here instead.
+    if (Number.isNaN(profileId) || !(await profilesService.findById(profileId))) {
+      return c.json({ error: 'Invalid profileId' }, 400)
+    }
+    tagIds = await profilesService.getTagIds(profileId)
+  }
 
   // Tracks are unpaginated and unlimited by design (the full match list is
   // fetched on page 1), and resultCounts reflects the query's total, which
