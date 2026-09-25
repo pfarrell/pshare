@@ -49,7 +49,7 @@ for (const path of GATED_ROUTES) {
 
 // Session-only auth endpoints: anonymous calls must be rejected with 401.
 const GATED_AUTH_ROUTES: Array<[string, string]> = [
-  ['PUT', '/auth/default-tag'],
+  ['PUT', '/auth/default-profile'],
   ['GET', '/auth/recall/connect'],
   ['DELETE', '/auth/recall/connect'],
   ['PUT', '/auth/set-password'],
