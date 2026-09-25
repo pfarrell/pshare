@@ -1,8 +1,9 @@
 // src/pages/AdminProfile.jsx
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import Loading from '../components/Loading';
+import Retry from '../components/Retry';
 
 export default function AdminProfile() {
   const { id } = useParams();
@@ -12,40 +13,60 @@ export default function AdminProfile() {
   const [name, setName] = useState('');
   const [tags, setTags] = useState([]); // [{ id, name }]
   const [loading, setLoading] = useState(!isNew);
+  const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
   const [tagInput, setTagInput] = useState('');
   const [allTags, setAllTags] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
+  const tagsPromiseRef = useRef(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (isNew) return;
-    apiService.getProfiles().then((res) => {
-      const found = res.data.find((p) => p.id === Number(id));
-      if (found) {
+    setError(null);
+    setLoading(true);
+    apiService.getProfiles()
+      .then((res) => {
+        const found = res.data.find((p) => p.id === Number(id));
+        if (!found) {
+          navigate('/admin/profiles', { replace: true });
+          return;
+        }
         setName(found.name);
         setTags(found.tags);
-      }
-      setLoading(false);
-    });
-  }, [id, isNew]);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setLoading(false);
+      });
+  }, [id, isNew, navigate]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Shared between the tag input's onChange and onFocus handlers so a burst
+  // of keystrokes fired before the initial getTags() resolves reuses the
+  // same in-flight request instead of each keystroke kicking off its own.
+  const ensureTags = () => {
+    if (allTags !== null) return Promise.resolve(allTags);
+    if (!tagsPromiseRef.current) {
+      tagsPromiseRef.current = apiService.getTags().then((res) => {
+        setAllTags(res.data);
+        return res.data;
+      });
+    }
+    return tagsPromiseRef.current;
+  };
 
   const handleTagInputChange = async (e) => {
     const value = e.target.value;
     setTagInput(value);
-    let list = allTags;
-    if (list === null) {
-      const res = await apiService.getTags();
-      list = res.data;
-      setAllTags(list);
-    }
+    const list = await ensureTags();
     setSuggestions(list.filter((t) => (t.name ?? '').includes(value.toLowerCase()) && !tags.some((existing) => existing.id === t.id)).slice(0, 8));
   };
 
-  const handleTagInputFocus = async () => {
-    if (allTags === null) {
-      const res = await apiService.getTags();
-      setAllTags(res.data);
-    }
+  const handleTagInputFocus = () => {
+    ensureTags();
   };
 
   const addTag = (tag) => {
@@ -62,6 +83,7 @@ export default function AdminProfile() {
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveError(null);
     try {
       const tagIds = tags.map((t) => t.id);
       if (isNew) {
@@ -70,11 +92,14 @@ export default function AdminProfile() {
         await apiService.updateProfile(Number(id), name.trim(), tagIds);
       }
       navigate('/admin/profiles');
+    } catch (err) {
+      setSaveError(err.response?.data?.error || err.message);
     } finally {
       setSaving(false);
     }
   };
 
+  if (error) return <Retry message={error} onRetry={load} />;
   if (loading) return <Loading />;
 
   return (
@@ -82,6 +107,8 @@ export default function AdminProfile() {
       <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--color-text-primary)', marginBottom: '1.5rem' }}>
         {isNew ? 'New Profile' : 'Edit Profile'}
       </h1>
+
+      {saveError && <div className="admin-error-banner">{saveError}</div>}
 
       <input
         type="text"
