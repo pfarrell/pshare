@@ -6,7 +6,7 @@ import { getProfilesCached } from '../utils/profilesCache';
 import toast from 'react-hot-toast';
 
 // Select-from-list profile picker, shared by the header dropdown popover
-// and the Account page — unlike the free-text TagFilterControl it replaces,
+// and the Account page — unlike the free-text tag-filter control it replaces,
 // profiles are a fixed, admin-managed list, so this is just a list of
 // buttons plus "All". `allowSetDefault` gates the "set default" action —
 // only meaningful for a signed-in user. `variant` picks surface colors:

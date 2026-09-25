@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
+import { useProfileFilterStore } from '../stores/profileFilterStore';
 import Loading from '../components/Loading';
 import Track from '../components/Track';
 import SearchResultCard from '../components/SearchResultCard';
@@ -16,6 +17,7 @@ const Search = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { isAdmin } = useAuthStore();
+  const { activeProfileId } = useProfileFilterStore();
   const [results, setResults] = useState({ results: [], tracks: [] });
   const [resultCounts, setResultCounts] = useState(EMPTY_COUNTS);
   const [hasMore, setHasMore] = useState(false);
@@ -51,7 +53,7 @@ const Search = () => {
     setLoadMoreError(null);
 
     try {
-      const response = await apiService.search(searchQuery);
+      const response = await apiService.search(searchQuery, undefined, activeProfileId);
       const data = response.data;
       setResults(data);
       setResultCounts(data.resultCounts || EMPTY_COUNTS);
@@ -91,7 +93,7 @@ const Search = () => {
     setLoadMoreError(null);
 
     try {
-      const response = await apiService.search(query, offsetRef.current);
+      const response = await apiService.search(query, offsetRef.current, activeProfileId);
       if (generation !== searchGenerationRef.current) return; // superseded by a new search
       const data = response.data;
       const fresh = (data.results || []).filter((r) => !seenRef.current.has(`${r.type}:${r.data.id}`));

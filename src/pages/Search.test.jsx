@@ -214,7 +214,7 @@ test('loads and appends the next page when the sentinel intersects', async () =>
 
   await screen.findByText('Page Two Artist');
   expect(screen.getByText('Page One Artist')).toBeInTheDocument();
-  expect(apiService.search).toHaveBeenLastCalledWith('paged', 30);
+  expect(apiService.search).toHaveBeenLastCalledWith('paged', 30, null);
 });
 
 test('does not duplicate an entity that reappears on a later page', async () => {
@@ -330,10 +330,11 @@ test('resets pagination state when a new search query is submitted', async () =>
 
   await screen.findByText('Second Search Artist');
   expect(screen.queryByText('First Page Artist')).toBeNull();
-  // performSearch calls apiService.search with a single argument (no offset) —
-  // asserting the single-arg form here, not a trailing explicit `undefined`,
-  // since toHaveBeenCalledWith compares argument arrays by length too.
-  expect(apiService.search).toHaveBeenLastCalledWith('second');
+  // performSearch calls apiService.search with an explicit `undefined` offset
+  // and the active profile id (null here, since no test sets the profile
+  // filter store) — toHaveBeenCalledWith compares argument arrays by length,
+  // so all three positions must be asserted.
+  expect(apiService.search).toHaveBeenLastCalledWith('second', undefined, null);
 });
 
 test('discards a loadMore response that resolves after a new search has already started', async () => {
