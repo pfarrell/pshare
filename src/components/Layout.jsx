@@ -358,7 +358,7 @@ const Layout = ({ children }) => {
                     </div>
                     <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #3a4853' }}>
                       <div style={{ color: '#9ca3af', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
-                        Tag Filter
+                        Profile
                       </div>
                       <ProfilePickerControl onSelect={() => setShowDropdown(false)} />
                     </div>
