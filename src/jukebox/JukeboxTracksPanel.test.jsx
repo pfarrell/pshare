@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import JukeboxTracksPanel from './JukeboxTracksPanel';
+import { usePlayerStore } from '../stores/playerStore';
 
 vi.mock('../services/api', () => ({
   apiService: {
@@ -35,9 +36,29 @@ const renderPanel = (props = {}) =>
     </MemoryRouter>
   );
 
+const mockAudioElement = () => ({
+  play: vi.fn().mockResolvedValue(undefined),
+  pause: vi.fn(),
+  load: vi.fn(),
+  paused: true,
+  src: '',
+  currentTime: 0,
+  duration: 0,
+  readyState: 0,
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   apiService.getAlbum.mockResolvedValue(albumResponse);
+  usePlayerStore.setState({
+    audioElementA: mockAudioElement(),
+    audioElementB: mockAudioElement(),
+    activeSlot: 'a',
+    playlist: [],
+    currentTrackIndex: -1,
+    currentTrack: null,
+    isPlaying: false,
+  });
 });
 
 test('fetches the album and renders its title, artist and tracks', async () => {
@@ -105,6 +126,33 @@ test('tapping a track calls onEnqueue too', async () => {
   fireEvent.click(screen.getByText(/Track One/));
 
   expect(onEnqueue).toHaveBeenCalledTimes(1);
+});
+
+// Regression test: onEnqueue (wired to closeAll in the real app) used to be an
+// onClickCapture on the track list wrapper, which fires in the *capture*
+// phase — before the target track's own onClick, which only runs in the
+// bubble phase. In the real app onEnqueue synchronously unmounts this panel
+// (JukeboxBrowsePanel only renders it while `open && selectedAlbum`), and on
+// real browsers that unmount can complete before the bubble phase ever
+// reaches the track's handler, silently dropping the enqueue — confirmed
+// against the live jukebox kiosk (Track 2 of an album never made it into the
+// queue). jsdom's event dispatch doesn't reproduce that same-tick unmount
+// race, so this asserts the underlying, environment-independent guarantee
+// instead: the track's own enqueue must complete before onEnqueue fires, not
+// after — which onClickCapture violates and onClick does not.
+test('tapping a track enqueues it before onEnqueue fires (not after — a capture-phase onEnqueue can otherwise race ahead of and discard the enqueue)', async () => {
+  const order = [];
+  const onEnqueue = vi.fn(() => order.push('onEnqueue'));
+  const unsubscribe = usePlayerStore.subscribe((state, prevState) => {
+    if (state.playlist.length !== prevState.playlist.length) order.push('enqueued');
+  });
+  renderPanel({ onEnqueue });
+  await waitFor(() => screen.getByText(/Track One/));
+
+  fireEvent.click(screen.getByRole('button', { name: 'Play Track One' }));
+
+  unsubscribe();
+  expect(order).toEqual(['enqueued', 'onEnqueue']);
 });
 
 test('does not blow up when onEnqueue is not provided', async () => {

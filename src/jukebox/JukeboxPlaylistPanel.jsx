@@ -70,7 +70,13 @@ const JukeboxPlaylistPanel = ({ playlist, onClose, onEnqueue }) => {
         )}
         {!error && data === null && <div className="jukebox-panel-loading">Loading…</div>}
         {!error && data !== null && (
-          <div className="jukebox-search-tracks" onClickCapture={() => onEnqueue?.()}>
+          // Must be onClick, not onClickCapture: a capture-phase listener fires
+          // before Track's own bubble-phase tap-to-enqueue handler, and since
+          // onEnqueue (closeAll) synchronously unmounts this panel, it can win
+          // that race and discard the enqueue before Track's handler runs —
+          // see JukeboxTracksPanel.jsx / JukeboxTracksPanel.test.jsx, which hit
+          // this on real hardware.
+          <div className="jukebox-search-tracks" onClick={() => onEnqueue?.()}>
             {data.tracks.map((track, index) => (
               <Track key={track.id} track={track} index={index} trackCount={data.tracks.length} />
             ))}

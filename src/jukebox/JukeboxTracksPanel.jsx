@@ -87,10 +87,16 @@ const JukeboxTracksPanel = ({ album, onClose, onEnqueue, onSelectArtist }) => {
         {!error && data === null && <div className="jukebox-panel-loading">Loading…</div>}
         {!error && data !== null && (
           // Track (src/components/Track.jsx) has no onClick prop of its own — a
-          // capture-phase listener here fires before Track's internal tap-to-
-          // enqueue handlers, so it catches every track tap regardless of which
-          // element inside the row was actually tapped.
-          <div className="jukebox-search-tracks" onClickCapture={() => onEnqueue?.()}>
+          // bubble-phase listener here fires after Track's internal tap-to-
+          // enqueue handlers, so it still catches every track tap regardless of
+          // which element inside the row was actually tapped, without racing
+          // ahead of the enqueue. This must be onClick, not onClickCapture: a
+          // capture-phase listener runs *before* Track's own bubble-phase
+          // handler, and since onEnqueue (closeAll) synchronously unmounts this
+          // whole panel, it could win that race and discard the enqueue before
+          // Track's handler ever ran — confirmed on real hardware, not just in
+          // theory (see JukeboxTracksPanel.test.jsx).
+          <div className="jukebox-search-tracks" onClick={() => onEnqueue?.()}>
             {data.tracks.map((track, index) => (
               <Track key={track.id} track={track} index={index} trackCount={data.tracks.length} />
             ))}

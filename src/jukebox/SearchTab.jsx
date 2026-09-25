@@ -175,11 +175,17 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
   // has no <Routes>) that just pile up history entries. Track still appends
   // " - <artist>" to the title line when the track artist differs from the
   // album artist, so nothing informative is lost.
-  // Track has no onClick prop of its own — a capture-phase listener here
-  // fires before Track's internal tap-to-enqueue handlers, so it catches
-  // every track tap regardless of which element inside the row was tapped.
+  // Track has no onClick prop of its own — a bubble-phase listener here
+  // fires after Track's internal tap-to-enqueue handlers, so it still catches
+  // every track tap regardless of which element inside the row was tapped,
+  // without racing ahead of the enqueue. Must be onClick, not onClickCapture:
+  // a capture-phase listener runs before Track's own bubble-phase handler,
+  // and since onEnqueue (closeAll) synchronously unmounts the panel/drawer,
+  // it can win that race and discard the enqueue before Track's handler runs
+  // — see JukeboxTracksPanel.jsx / JukeboxTracksPanel.test.jsx, which hit
+  // this on real hardware.
   const renderTracks = (list) => (
-    <div className="jukebox-search-tracks" onClickCapture={() => onEnqueue?.()}>
+    <div className="jukebox-search-tracks" onClick={() => onEnqueue?.()}>
       {list.map((track, index) => (
         <Track key={track.id} track={track} index={index} trackCount={list.length} />
       ))}
