@@ -13,6 +13,7 @@ import playlists from './routes/playlists.js'
 import collections from './routes/collections.js'
 import favorites from './routes/favorites.js'
 import tags from './routes/tags.js'
+import profiles from './routes/profiles.js'
 import share from './routes/share.js'
 import lookup from './routes/lookup.js'
 import admin from './routes/admin/index.js'
@@ -89,6 +90,7 @@ app.route('/newborns', playlists)
 app.route('/surprise', playlists)
 app.route('/stream', streams)
 app.route('/tags', tags)
+app.route('/profiles', profiles)
 
 // Everything else requires a logged-in session.
 const protectedApp = new Hono()
