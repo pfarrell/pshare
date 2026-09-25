@@ -68,6 +68,9 @@ const Admin = () => {
         <button onClick={() => navigate('/admin/tags')} style={buttonStyle}>Tags</button>
       </div>
       <div style={cardStyle}>
+        <button onClick={() => navigate('/admin/profiles')} style={buttonStyle}>Profiles</button>
+      </div>
+      <div style={cardStyle}>
         <button onClick={() => navigate('/admin/errors')} style={buttonStyle}>Errors</button>
       </div>
       <div style={cardStyle}>
