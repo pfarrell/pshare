@@ -9,11 +9,22 @@ const EXACT_MATCH_SCORE = 2.0
 const FUZZY_SIMILARITY_THRESHOLD = 0.24
 export const RESULT_LIMIT = 30
 
-function buildSearchClauses(exactOnly: boolean): { exactClauses: string; fuzzyClauses: string } {
+function buildSearchClauses(exactOnly: boolean, tagParamIndex: number | null): { exactClauses: string; fuzzyClauses: string } {
+  // Album/Artist branches optionally join to their own tag rows (own-tags
+  // only, no artist→album inheritance — see spec's Non-goals). Playlist and
+  // Collection branches never get this join; they have no tag concept.
+  const albumTagJoin = tagParamIndex
+    ? `INNER JOIN albums_tags stag ON stag.album_id = a.id AND stag.tag_id = ANY($${tagParamIndex})`
+    : ''
+  const artistTagJoin = tagParamIndex
+    ? `INNER JOIN artists_tags stag ON stag.artist_id = a.id AND stag.tag_id = ANY($${tagParamIndex})`
+    : ''
+
   const exactClauses = `
     (SELECT DISTINCT ON (a.id) 'Album' AS model_type, a.id, ${EXACT_MATCH_SCORE} AS similarity_score
       FROM albums a
       INNER JOIN tracks t ON t.album_id = a.id AND t.approved = true
+      ${albumTagJoin}
       WHERE f_unaccent(lower(a.title)) ILIKE f_unaccent(lower($1))
         AND a.title != '_Singles'
       ORDER BY a.id)
@@ -22,12 +33,14 @@ function buildSearchClauses(exactOnly: boolean): { exactClauses: string; fuzzyCl
       FROM artists a
       INNER JOIN albums al ON al.artist_id = a.id
       INNER JOIN tracks t ON t.album_id = al.id AND t.approved = true
+      ${artistTagJoin}
       WHERE f_unaccent(lower(a.name)) ILIKE f_unaccent(lower($1))
       ORDER BY a.id)
     UNION ALL
     (SELECT DISTINCT ON (a.id) 'Artist' AS model_type, a.id, ${EXACT_MATCH_SCORE} AS similarity_score
       FROM artists a
       INNER JOIN tracks t ON t.artist_id = a.id AND t.approved = true
+      ${artistTagJoin}
       WHERE f_unaccent(lower(a.name)) ILIKE f_unaccent(lower($1))
       ORDER BY a.id)
     UNION ALL
@@ -52,6 +65,7 @@ function buildSearchClauses(exactOnly: boolean): { exactClauses: string; fuzzyCl
         ROW_NUMBER() OVER(PARTITION BY a.id ORDER BY similarity(f_unaccent(lower(a.title)), f_unaccent(lower($2))) DESC) AS rn
       FROM albums a
       INNER JOIN tracks t ON t.album_id = a.id AND t.approved = true
+      ${albumTagJoin}
       WHERE f_unaccent(lower(a.title)) % f_unaccent(lower($2))
         AND a.title != '_Singles'
     ) ranked WHERE rn = 1)
@@ -63,6 +77,7 @@ function buildSearchClauses(exactOnly: boolean): { exactClauses: string; fuzzyCl
       FROM artists a
       INNER JOIN albums al ON al.artist_id = a.id
       INNER JOIN tracks t ON t.album_id = al.id AND t.approved = true
+      ${artistTagJoin}
       WHERE f_unaccent(lower(a.name)) % f_unaccent(lower($2))
     ) ranked WHERE rn = 1)
     UNION ALL
@@ -72,6 +87,7 @@ function buildSearchClauses(exactOnly: boolean): { exactClauses: string; fuzzyCl
         ROW_NUMBER() OVER(PARTITION BY a.id ORDER BY similarity(f_unaccent(lower(a.name)), f_unaccent(lower($2))) DESC) AS rn
       FROM artists a
       INNER JOIN tracks t ON t.artist_id = a.id AND t.approved = true
+      ${artistTagJoin}
       WHERE f_unaccent(lower(a.name)) % f_unaccent(lower($2))
     ) ranked WHERE rn = 1)
     UNION ALL
@@ -131,13 +147,16 @@ export function createSearchService(db: Kysely<Database>) {
       filteredQ: string,
       exactOnly: boolean,
       limit: number,
-      offset: number
+      offset: number,
+      tagIds: number[] | null = null
     ) {
       if (!Number.isInteger(limit) || limit < 0 || !Number.isInteger(offset) || offset < 0) {
         throw new Error('runUnionSearch: limit and offset must be non-negative integers')
       }
+      if (tagIds && tagIds.length === 0) return []
 
-      const { exactClauses, fuzzyClauses } = buildSearchClauses(exactOnly)
+      const tagParamIndex = tagIds ? (exactOnly ? 2 : 3) : null
+      const { exactClauses, fuzzyClauses } = buildSearchClauses(exactOnly, tagParamIndex)
 
       // Secondary sort keys (model_type, id) make ordering deterministic across
       // separate paginated queries — many rows tie at the exact-match score of
@@ -151,7 +170,8 @@ export function createSearchService(db: Kysely<Database>) {
         ) q ORDER BY q.similarity_score DESC, q.model_type, q.id LIMIT ${limit} OFFSET ${offset}
       `
 
-      const params = exactOnly ? [likeParam] : [likeParam, filteredQ]
+      const baseParams = exactOnly ? [likeParam] : [likeParam, filteredQ]
+      const params = tagIds ? [...baseParams, tagIds] : baseParams
       return runSearchQuery<{ model_type: string; id: number; similarity_score: number }>(
         searchSql,
         params,
@@ -163,8 +183,13 @@ export function createSearchService(db: Kysely<Database>) {
     // fuzzy branches can both match the same entity (UNION ALL, not UNION),
     // so a plain GROUP BY over the raw rows would overcount anything that
     // matched both branches.
-    async countRankedResults(likeParam: string, filteredQ: string, exactOnly: boolean) {
-      const { exactClauses, fuzzyClauses } = buildSearchClauses(exactOnly)
+    async countRankedResults(likeParam: string, filteredQ: string, exactOnly: boolean, tagIds: number[] | null = null) {
+      if (tagIds && tagIds.length === 0) {
+        return { Album: 0, Artist: 0, Playlist: 0, Collection: 0 }
+      }
+
+      const tagParamIndex = tagIds ? (exactOnly ? 2 : 3) : null
+      const { exactClauses, fuzzyClauses } = buildSearchClauses(exactOnly, tagParamIndex)
 
       const countSql = `
         SELECT model_type, COUNT(*) AS count FROM (
@@ -176,7 +201,8 @@ export function createSearchService(db: Kysely<Database>) {
         GROUP BY model_type
       `
 
-      const params = exactOnly ? [likeParam] : [likeParam, filteredQ]
+      const baseParams = exactOnly ? [likeParam] : [likeParam, filteredQ]
+      const params = tagIds ? [...baseParams, tagIds] : baseParams
       const rows = await runSearchQuery<{ model_type: string; count: string }>(countSql, params, exactOnly)
 
       const counts = { Album: 0, Artist: 0, Playlist: 0, Collection: 0 }
@@ -188,10 +214,16 @@ export function createSearchService(db: Kysely<Database>) {
       return counts
     },
 
-    async findTrackIds(likeParam: string): Promise<number[]> {
+    async findTrackIds(likeParam: string, tagIds: number[] | null = null): Promise<number[]> {
+      if (tagIds && tagIds.length === 0) return []
+
+      const tagJoin = tagIds ? 'INNER JOIN tags_tracks tt ON tt.track_id = tracks.id AND tt.tag_id = ANY($2)' : ''
+      const params: unknown[] = tagIds ? [likeParam, tagIds] : [likeParam]
+
       const { rows } = await pool.query<{ id: number }>(
-        `SELECT id FROM tracks WHERE f_unaccent(lower(title)) ILIKE f_unaccent(lower($1)) AND approved = true`,
-        [likeParam]
+        `SELECT DISTINCT tracks.id FROM tracks ${tagJoin}
+         WHERE f_unaccent(lower(tracks.title)) ILIKE f_unaccent(lower($1)) AND tracks.approved = true`,
+        params
       )
       return rows.map((r) => r.id)
     },
