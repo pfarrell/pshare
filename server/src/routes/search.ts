@@ -121,15 +121,13 @@ search.get('/', async (c) => {
   let tagIds: number[] | null = null
   if (profileIdParam) {
     const profileId = parseInt(profileIdParam)
-    // A profile always carries >=1 tag in practice (enforced at the API
-    // layer), so getTagIds() only ever comes back empty for a stale/deleted
-    // or malformed profileId — which would otherwise silently empty out
-    // Playlist/Collection results too, even though those have no tag
-    // concept and must never be filtered. Reject it here instead.
-    if (Number.isNaN(profileId) || !(await profilesService.findById(profileId))) {
-      return c.json({ error: 'Invalid profileId' }, 400)
-    }
-    tagIds = await profilesService.getTagIds(profileId)
+    // An unrecognized profileId means "no match", never an error — same as
+    // /albums/random, /albums/recent and /artists/random. A non-numeric value
+    // skips the query entirely (no point binding NaN); a numeric id that
+    // doesn't exist falls out of getTagIds() as an empty array on its own.
+    // Either way tagIds=[] filters Album/Artist/track results down to nothing
+    // while leaving Playlist/Collection results untouched.
+    tagIds = Number.isNaN(profileId) ? [] : await profilesService.getTagIds(profileId)
   }
 
   // Tracks are unpaginated and unlimited by design (the full match list is

@@ -88,6 +88,24 @@ test('PUT /auth/default-profile requires the profile to exist', async () => {
   assert.equal(res.status, 404)
 })
 
+test('PUT /auth/default-profile rejects a non-integer profile_id with 400, not a 500', async () => {
+  const passwordHash = await bcrypt.hash('correct-horse', 4)
+  const user = await createUser('default-profile-noninteger-user', { password: passwordHash })
+  const login = await app().request('/auth/jukebox-login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: user.username, password: 'correct-horse', deviceName: 'Test' }),
+  })
+  const cookie = login.headers.get('set-cookie')
+
+  const res = await app().request('/auth/default-profile', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie ?? '' },
+    body: JSON.stringify({ profile_id: 'abc' }),
+  })
+  assert.equal(res.status, 400)
+  assert.ok((await res.json()).error)
+})
+
 test('PUT /auth/default-profile sets default_profile_id, null clears it', async () => {
   const profile = await createProfile('default-profile-set', [])
   const passwordHash = await bcrypt.hash('correct-horse', 4)

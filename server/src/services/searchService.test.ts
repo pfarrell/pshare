@@ -23,9 +23,33 @@ test('runUnionSearch with tagIds only matches albums/artists carrying one of tho
   assert.equal(ids.includes(nonMatchingAlbum.id), false)
 })
 
-test('runUnionSearch with an empty tagIds array matches nothing', async () => {
-  const rows = await searchService.runUnionSearch('%a%', 'a', false, 30, 0, [])
-  assert.equal(rows.length, 0)
+test('runUnionSearch with an empty tagIds array drops albums/artists but keeps playlists/collections', async () => {
+  // Intentional: a profile can end up with zero tags (e.g. its last tag was
+  // deleted, cascading through profile_tags), and playlists/collections have
+  // no tag concept at all — they must still come back even when the tag
+  // filter matches nothing. Only the tag-joined Album/Artist branches go empty.
+  const artist = await createArtist('search-emptytags-artist')
+  const album = await createAlbum('search-emptytags-album-zzzemptytags', artist.id)
+  await createTrack('search-emptytags-track', album.id, artist.id)
+  const playlist = await createPlaylist('search-emptytags-playlist-zzzemptytags')
+
+  const rows = await searchService.runUnionSearch('%zzzemptytags%', 'zzzemptytags', false, 30, 0, [])
+
+  assert.ok(rows.some((r: any) => r.model_type === 'Playlist' && r.id === playlist.id))
+  assert.equal(rows.some((r: any) => r.model_type === 'Album' && r.id === album.id), false)
+})
+
+test('countRankedResults with an empty tagIds array zeroes albums/artists but still counts playlists', async () => {
+  const artist = await createArtist('search-emptytags-count-artist')
+  const album = await createAlbum('search-emptytags-count-album-zzzemptycount', artist.id)
+  await createTrack('search-emptytags-count-track', album.id, artist.id)
+  await createPlaylist('search-emptytags-count-playlist-zzzemptycount')
+
+  const counts = await searchService.countRankedResults('%zzzemptycount%', 'zzzemptycount', false, [])
+
+  assert.equal(counts.Album, 0)
+  assert.equal(counts.Artist, 0)
+  assert.equal(counts.Playlist, 1)
 })
 
 test('runUnionSearch never filters Playlist/Collection results by tagIds', async () => {

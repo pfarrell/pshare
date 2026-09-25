@@ -153,8 +153,13 @@ export function createSearchService(db: Kysely<Database>) {
       if (!Number.isInteger(limit) || limit < 0 || !Number.isInteger(offset) || offset < 0) {
         throw new Error('runUnionSearch: limit and offset must be non-negative integers')
       }
-      if (tagIds && tagIds.length === 0) return []
 
+      // No early return for an empty tagIds array: `= ANY($n)` with an empty
+      // array matches zero rows in Postgres, so the Album/Artist branches
+      // (the only ones carrying the tag join) naturally come back empty while
+      // the Playlist/Collection branches — which have no tag concept and must
+      // never be filtered — still return their matches. Short-circuiting here
+      // would abandon the whole UNION and wrongly drop those too.
       const tagParamIndex = tagIds ? (exactOnly ? 2 : 3) : null
       const { exactClauses, fuzzyClauses } = buildSearchClauses(exactOnly, tagParamIndex)
 
@@ -184,10 +189,9 @@ export function createSearchService(db: Kysely<Database>) {
     // so a plain GROUP BY over the raw rows would overcount anything that
     // matched both branches.
     async countRankedResults(likeParam: string, filteredQ: string, exactOnly: boolean, tagIds: number[] | null = null) {
-      if (tagIds && tagIds.length === 0) {
-        return { Album: 0, Artist: 0, Playlist: 0, Collection: 0 }
-      }
-
+      // Same reasoning as runUnionSearch above: an empty tagIds array must
+      // zero out only the Album/Artist counts, not the Playlist/Collection
+      // ones, so the query runs as normal and `ANY($n)` does the filtering.
       const tagParamIndex = tagIds ? (exactOnly ? 2 : 3) : null
       const { exactClauses, fuzzyClauses } = buildSearchClauses(exactOnly, tagParamIndex)
 
@@ -215,6 +219,9 @@ export function createSearchService(db: Kysely<Database>) {
     },
 
     async findTrackIds(likeParam: string, tagIds: number[] | null = null): Promise<number[]> {
+      // Safe to short-circuit here (unlike runUnionSearch/countRankedResults):
+      // this query only touches `tracks`, with no Playlist/Collection branches
+      // to accidentally wipe out.
       if (tagIds && tagIds.length === 0) return []
 
       const tagJoin = tagIds ? 'INNER JOIN tags_tracks tt ON tt.track_id = tracks.id AND tt.tag_id = ANY($2)' : ''

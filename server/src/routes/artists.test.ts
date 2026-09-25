@@ -40,3 +40,10 @@ test('GET /artists/random?profileId= for a nonexistent profile returns no artist
   const body = await res.json()
   assert.deepEqual(body, [])
 })
+
+test('GET /artists/random?profileId= with a non-numeric value returns no artists, not a 500', async () => {
+  // A NaN profileId used to reach Postgres as an integer bind and throw.
+  const res = await appWithUser().request('/artists/random?size=50&profileId=not-a-number')
+  assert.equal(res.status, 200)
+  assert.deepEqual(await res.json(), [])
+})

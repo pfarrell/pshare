@@ -43,28 +43,37 @@ export function createProfilesService(db: Kysely<Database>) {
       return db.selectFrom('profiles').select(['id', 'name']).where('id', '=', id).executeTakeFirst()
     },
 
+    // db.transaction(): the profile row and its tag links must land together.
+    // A bad tag_ids array (duplicate id vs. the UNIQUE (profile_id, tag_id)
+    // constraint, or an id with no tags row vs. the FK) throws on the link
+    // insert, and without a transaction that leaves a committed profile with
+    // no tags — which search/random treat as "matches nothing".
     async create(name: string, tagIds: number[]) {
-      const profile = await db.insertInto('profiles').values({ name }).returning(['id', 'name']).executeTakeFirstOrThrow()
-      if (tagIds.length > 0) {
-        await db.insertInto('profile_tags').values(tagIds.map((tag_id) => ({ profile_id: profile.id, tag_id }))).execute()
-      }
-      return profile
+      return db.transaction().execute(async (trx) => {
+        const profile = await trx.insertInto('profiles').values({ name }).returning(['id', 'name']).executeTakeFirstOrThrow()
+        if (tagIds.length > 0) {
+          await trx.insertInto('profile_tags').values(tagIds.map((tag_id) => ({ profile_id: profile.id, tag_id }))).execute()
+        }
+        return profile
+      })
     },
 
     async update(id: number, name: string, tagIds: number[]) {
-      const updated = await db
-        .updateTable('profiles')
-        .set({ name, updated_at: new Date().toISOString() })
-        .where('id', '=', id)
-        .returning(['id', 'name'])
-        .executeTakeFirst()
-      if (!updated) return undefined
+      return db.transaction().execute(async (trx) => {
+        const updated = await trx
+          .updateTable('profiles')
+          .set({ name, updated_at: new Date().toISOString() })
+          .where('id', '=', id)
+          .returning(['id', 'name'])
+          .executeTakeFirst()
+        if (!updated) return undefined
 
-      await db.deleteFrom('profile_tags').where('profile_id', '=', id).execute()
-      if (tagIds.length > 0) {
-        await db.insertInto('profile_tags').values(tagIds.map((tag_id) => ({ profile_id: id, tag_id }))).execute()
-      }
-      return updated
+        await trx.deleteFrom('profile_tags').where('profile_id', '=', id).execute()
+        if (tagIds.length > 0) {
+          await trx.insertInto('profile_tags').values(tagIds.map((tag_id) => ({ profile_id: id, tag_id }))).execute()
+        }
+        return updated
+      })
     },
 
     async remove(id: number): Promise<boolean> {

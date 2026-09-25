@@ -17,6 +17,12 @@ CREATE TABLE profile_tags (
 );
 
 ALTER TABLE users ADD COLUMN default_profile_id INTEGER NULL REFERENCES profiles(id) ON DELETE SET NULL;
+-- FORWARD-ONLY: dropping default_tag is deliberate (no data migration, per the
+-- spec) and there is no down-migration. Rolling back to a pre-profiles release
+-- by flipping the `current` symlink is NOT sufficient on its own — that older
+-- code still selects users.default_tag and will 500 on every login and
+-- /auth/me once this column is gone. A rollback must also restore the database
+-- from an `npm run db:snapshot` taken before this migration was applied.
 ALTER TABLE users DROP COLUMN IF EXISTS default_tag;
 
 COMMENT ON TABLE profiles IS 'Named, admin-managed sets of labels used to filter browsing/search (replaces the old single-tag filter)';

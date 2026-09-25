@@ -31,6 +31,10 @@ const GATED_ROUTES = [
   '/favorites',
   '/tags',
   '/tags/x/content',
+  // Mounted on the public app in index.ts, gated only by an in-handler
+  // requireAuth call in routes/profiles.ts — there's no router-level backstop,
+  // so this entry is the only thing that would catch that call going missing.
+  '/profiles',
 ]
 
 for (const path of PUBLIC_ROUTES) {

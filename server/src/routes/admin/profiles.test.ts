@@ -50,6 +50,26 @@ test('POST /admin/profiles rejects an empty tag_ids array', async () => {
   assert.equal(res.status, 400)
 })
 
+test('POST /admin/profiles rejects unknown tag ids with 400 instead of a raw FK 500', async () => {
+  const res = await postJson(appWithUser(), '/profiles', { name: fixtureName('admin-badtag-profile'), tag_ids: [999999999] })
+
+  assert.equal(res.status, 400)
+  assert.ok((await res.json()).error)
+  // The profile row must not have been left behind by a failed tag-link insert.
+  const rows = await db.selectFrom('profiles').select('id').where('name', '=', fixtureName('admin-badtag-profile')).execute()
+  assert.equal(rows.length, 0)
+})
+
+test('POST /admin/profiles de-duplicates repeated tag ids', async () => {
+  const tag = await createTag('admin-dupetag-tag')
+  const res = await postJson(appWithUser(), '/profiles', { name: fixtureName('admin-dupetag-profile'), tag_ids: [tag.id, tag.id] })
+
+  assert.equal(res.status, 201)
+  const body = await res.json()
+  const links = await db.selectFrom('profile_tags').selectAll().where('profile_id', '=', body.id).execute()
+  assert.deepEqual(links.map((l) => l.tag_id), [tag.id])
+})
+
 test('POST /admin/profiles rejects a duplicate name', async () => {
   const existing = await createProfile('admin-dupe-profile', [])
   const res = await postJson(appWithUser(), '/profiles', { name: existing.name, tag_ids: [(await createTag('admin-dupe-tag')).id] })

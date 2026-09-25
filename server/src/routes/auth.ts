@@ -475,6 +475,12 @@ auth.put('/default-profile', requireAuth, async (c) => {
   const body = await c.req.json()
   const profileId = body.profile_id ?? null
 
+  // findById() does no coercion, so a non-integer value would reach Postgres
+  // as an uncastable integer bind and surface as an unhandled 500.
+  if (profileId !== null && !Number.isInteger(profileId)) {
+    return c.json({ error: 'profile_id must be an integer or null' }, 400)
+  }
+
   if (profileId !== null && !(await profilesService.findById(profileId))) {
     return c.json({ error: 'Profile not found' }, 404)
   }
