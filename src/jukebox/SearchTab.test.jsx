@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor, within, act } from '@testing-librar
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import SearchTab from './SearchTab';
+import { __resetProfilesCacheForTests } from '../utils/profilesCache';
 import { useProfileFilterStore } from '../stores/profileFilterStore';
 
 vi.mock('../services/api', () => ({
@@ -50,6 +51,7 @@ const section = (name) => screen.getByRole('heading', { name }).closest('section
 
 beforeEach(() => {
   vi.clearAllMocks();
+  __resetProfilesCacheForTests();
   useProfileFilterStore.setState({ activeProfileId: null });
   // Quick Hit mounts immediately (the box starts empty) in every test unless
   // a test overrides this — a harmless empty grid by default so unrelated

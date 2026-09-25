@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import JukeboxProfilePicker from './JukeboxProfilePicker';
+import { __resetProfilesCacheForTests } from '../utils/profilesCache';
 import { useProfileFilterStore } from '../stores/profileFilterStore';
 import { apiService } from '../services/api';
 
@@ -7,6 +8,7 @@ vi.mock('../services/api', () => ({ apiService: { getProfiles: vi.fn() } }));
 
 beforeEach(() => {
   vi.clearAllMocks();
+  __resetProfilesCacheForTests();
   useProfileFilterStore.setState({ activeProfileId: null });
   apiService.getProfiles.mockResolvedValue({ data: [{ id: 1, name: 'Kids', tags: [] }] });
 });
