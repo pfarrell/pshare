@@ -1,15 +1,15 @@
 // src/components/Layout.jsx
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
-import { useTagFilterStore } from '../stores/tagFilterStore';
 import { useHomeFeedStore } from '../stores/homeFeedStore';
 import { useUnsavedChangesStore } from '../stores/unsavedChangesStore';
 import UnsavedChangesModal from './UnsavedChangesModal';
 import SearchBar from './SearchBar';
 import HomeViewToggle from './HomeViewToggle';
-import TagFilterControl from './TagFilterControl';
+import ProfileFilterChip from './ProfileFilterChip';
+import ProfilePickerControl from './ProfilePickerControl';
 import ThemeToggle from './ThemeToggle';
 import ViewModeToggle from './ViewModeToggle';
 
@@ -17,7 +17,6 @@ const Layout = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, isAuthenticated, isAdmin } = useAuthStore();
-  const { activeTag, clearTag } = useTagFilterStore();
   const [showDropdown, setShowDropdown] = useState(false);
   const [unseenSignups, setUnseenSignups] = useState(0);
   const dropdownRef = useRef(null);
@@ -164,29 +163,7 @@ const Layout = ({ children }) => {
             <ViewModeToggle />
           </div>
 
-          {activeTag && (
-            <span style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '3px',
-              background: '#3b82f6',
-              color: 'white',
-              padding: '2px 10px',
-              borderRadius: '10px',
-              fontSize: '0.75rem',
-              whiteSpace: 'nowrap'
-            }}>
-              <Link to={`/tags/${activeTag}`} style={{ color: 'white', textDecoration: 'none' }}>
-                #{activeTag}
-              </Link>
-              <span
-                onClick={clearTag}
-                style={{ cursor: 'pointer', marginLeft: '2px', opacity: 0.8 }}
-              >
-                ×
-              </span>
-            </span>
-          )}
+          <ProfileFilterChip />
 
           <div className="user-menu" ref={dropdownRef} style={{ position: 'relative' }}>
             <button
@@ -383,7 +360,7 @@ const Layout = ({ children }) => {
                       <div style={{ color: '#9ca3af', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
                         Tag Filter
                       </div>
-                      <TagFilterControl onSelect={() => setShowDropdown(false)} />
+                      <ProfilePickerControl onSelect={() => setShowDropdown(false)} />
                     </div>
                     <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #3a4853' }}>
                       <div style={{ color: '#9ca3af', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>

@@ -9,6 +9,7 @@ vi.mock('../services/api', () => ({
   apiService: {
     getTags: vi.fn(() => Promise.resolve({ data: [] })),
     getSignupUnseenCount: vi.fn(() => Promise.resolve({ data: { count: 0 } })),
+    getProfiles: vi.fn(() => Promise.resolve({ data: [] })),
   },
 }));
 
