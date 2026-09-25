@@ -26,11 +26,11 @@ describe('apiService query strings are unchanged', () => {
     expect(http.get).toHaveBeenLastCalledWith('/search?q=a%20b&offset=30');
   });
 
-  test('random artists/albums with and without tag', () => {
+  test('random artists/albums with and without profileId', () => {
     apiService.getRandomArtists(60);
     expect(http.get).toHaveBeenLastCalledWith('/artists/random?size=60');
     apiService.getRandomAlbums(30, 'hip hop');
-    expect(http.get).toHaveBeenLastCalledWith('/albums/random?size=30&tag=hip%20hop');
+    expect(http.get).toHaveBeenLastCalledWith('/albums/random?size=30&profileId=hip%20hop');
   });
 
   test('errors page with source', () => {
