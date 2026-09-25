@@ -43,6 +43,27 @@ export const createLog = (albumId: number, trackId: number | null, artistId: num
     .values({ album_id: albumId, track_id: trackId, artist_id: artistId, action: 'stream', created_at: createdAt, ip_address: null })
     .execute()
 
+export const createTag = (label: string) =>
+  db.insertInto('tags').values({ name: fixtureName(label) }).returningAll().executeTakeFirstOrThrow()
+
+export const tagAlbum = (albumId: number, tagId: number) =>
+  db.insertInto('albums_tags').values({ album_id: albumId, tag_id: tagId }).execute()
+
+export const tagArtist = (artistId: number, tagId: number) =>
+  db.insertInto('artists_tags').values({ artist_id: artistId, tag_id: tagId }).execute()
+
+export const tagTrack = (trackId: number, tagId: number) =>
+  db.insertInto('tags_tracks').values({ track_id: trackId, tag_id: tagId }).execute()
+
+export const createProfile = (label: string, tagIds: number[]) =>
+  db.insertInto('profiles').values({ name: fixtureName(label) }).returningAll().executeTakeFirstOrThrow()
+    .then(async (profile) => {
+      if (tagIds.length > 0) {
+        await db.insertInto('profile_tags').values(tagIds.map((tag_id) => ({ profile_id: profile.id, tag_id }))).execute()
+      }
+      return profile
+    })
+
 export async function cleanupFixtures(): Promise<void> {
   const like = `${PREFIX}%`
   const artistIds = (await db.selectFrom('artists').select('id').where('name', 'like', like).execute()).map((r) => r.id)
@@ -69,6 +90,12 @@ export async function cleanupFixtures(): Promise<void> {
   if (albumIds.length > 0) await db.deleteFrom('albums').where('id', 'in', albumIds).execute()
   await db.deleteFrom('media_files').where('name', 'like', like).execute()
   if (artistIds.length > 0) await db.deleteFrom('artists').where('id', 'in', artistIds).execute()
+
+  const tagIds = (await db.selectFrom('tags').select('id').where('name', 'like', like).execute()).map((r) => r.id)
+  if (tagIds.length > 0) await db.deleteFrom('tags').where('id', 'in', tagIds).execute()
+
+  const profileIds = (await db.selectFrom('profiles').select('id').where('name', 'like', like).execute()).map((r) => r.id)
+  if (profileIds.length > 0) await db.deleteFrom('profiles').where('id', 'in', profileIds).execute()
 
   const userIds = (await db.selectFrom('users').select('id').where('username', 'like', like).execute()).map((r) => r.id)
   if (userIds.length > 0) {

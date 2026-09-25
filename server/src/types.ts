@@ -5,7 +5,7 @@ export interface User {
   username: string
   email: string | null
   admin: boolean
-  default_tag: string | null
+  default_profile_id: number | null
 }
 
 export type Variables = {

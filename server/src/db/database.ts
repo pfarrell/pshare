@@ -140,7 +140,7 @@ interface UserTable {
   email: string | null
   password: string | null
   admin: boolean
-  default_tag: string | null
+  default_profile_id: number | null
   password_changed_at: ColumnType<Date, never, Date | string> | null
   created_at: ColumnType<Date, never, never>
   updated_at: ColumnType<Date, never, string | Date>
@@ -256,6 +256,19 @@ interface TagTable {
   updated_at: ColumnType<Date, string | undefined, string | Date>
 }
 
+interface ProfileTable {
+  id: Generated<number>
+  name: string
+  created_at: ColumnType<Date, string | undefined, never>
+  updated_at: ColumnType<Date, string | undefined, string | Date>
+}
+
+interface ProfileTagTable {
+  id: Generated<number>
+  profile_id: number
+  tag_id: number
+}
+
 interface DiscoverySourceTable {
   id: Generated<number>
   name: string
@@ -366,6 +379,8 @@ export interface Database {
   albums_tags: AlbumTagTable
   artists_tags: ArtistTagTable
   tags_tracks: TrackTagTable
+  profiles: ProfileTable
+  profile_tags: ProfileTagTable
   discovery_sources: DiscoverySourceTable
   user_recall_tokens: UserRecallTokenTable
   notes: NoteTable
