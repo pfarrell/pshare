@@ -723,6 +723,18 @@ describe('Track row — Send to Jukebox menu item', () => {
     fireEvent.contextMenu(screen.getByText(/Test Track/).closest('.track-item'));
     fireEvent.click(screen.getByText('🎉 Send to Jukebox'));
 
-    await waitFor(() => expect(apiService.submitToJukebox).toHaveBeenCalledWith('abc123', [mockTrack.id], undefined));
+    await waitFor(() => expect(apiService.submitToJukebox).toHaveBeenCalledWith('abc123', [mockTrack.id]));
+  });
+
+  test('closes the row menu after tapping "Send to Jukebox"', async () => {
+    localStorage.setItem('jukebox-enqueue-token', 'abc123');
+    useAuthStore.setState({ isAuthenticated: true });
+    apiService.submitToJukebox.mockResolvedValue({ data: [{ id: 1 }] });
+    renderTrack();
+
+    fireEvent.contextMenu(screen.getByText(/Test Track/).closest('.track-item'));
+    fireEvent.click(screen.getByText('🎉 Send to Jukebox'));
+
+    expect(screen.queryByTestId('track-menu-backdrop')).not.toBeInTheDocument();
   });
 });

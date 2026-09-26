@@ -190,7 +190,8 @@ const Track = forwardRef(({ track, index, trackCount, includeMeta = false, isPla
   const handleSendToJukebox = () => {
     const token = getStoredJukeboxToken();
     if (!token) return;
-    apiService.submitToJukebox(token, [track.id], undefined).then(() => toast.success('Sent to jukebox')).catch(() => toast.error('Failed to send to jukebox'));
+    apiService.submitToJukebox(token, [track.id]).then(() => toast.success('Sent to jukebox')).catch(() => toast.error('Failed to send to jukebox'));
+    ctxMenu.close();
   };
 
   const playMenuActions = [
