@@ -14,7 +14,7 @@ const tabButtons = () => screen.getAllByRole('button', { name: /^(Browse|Next Up
 
 test('renders the two tabs in order', () => {
   renderBar();
-  expect(tabButtons().map((b) => b.textContent)).toEqual(['Browse', 'Next Up']);
+  expect(tabButtons().map((b) => b.textContent)).toEqual(['Next Up', 'Browse']);
 });
 
 test('marks only the active tab as pressed', () => {

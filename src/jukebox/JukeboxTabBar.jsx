@@ -2,8 +2,8 @@ import JukeboxProgressLine from './JukeboxProgressLine';
 import JukeboxProfilePicker from './JukeboxProfilePicker';
 
 const TABS = [
-  { key: 'browse', label: 'Browse' },
   { key: 'nextup', label: 'Next Up' },
+  { key: 'browse', label: 'Browse' },
 ];
 
 // The bottom bar that replaces the old footer transport, the floating Browse
