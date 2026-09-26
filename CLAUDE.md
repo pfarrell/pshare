@@ -177,3 +177,9 @@ Images are served externally: `https://patf.net/images/` in production, `/images
 - `listenbrainzSimilar` — similar artists from ListenBrainz
 - `wikipedia` — artist/album summaries from Wikipedia API
 - `imageResize` — image resizing via `sharp`
+
+## Jukebox Mode
+
+Kiosk UI for a fixed touchscreen device, entered via `?jukebox=1`/`isJukeboxMode()` (`src/jukebox/jukeboxMode.js`) and mounted from `src/App.jsx` as a single view (no `<Routes>` tree — see `docs/superpowers/specs/2026-09-20-jukebox-mode-design.md`). All jukebox-only frontend code lives in `src/jukebox/` (`JukeboxApp.jsx` and friends); backend-only logic lives in dedicated `jukeboxDeviceService.ts`/`jukeboxQueueService.ts` and `routes/jukeboxDevices.ts`/`routes/jukeboxPublic.ts` (device auth is a first-class concept — long-lived device JWTs, `requireOwnJukeboxDevice` — documented in `docs/superpowers/specs/2026-09-25-jukebox-server-queue-design.md`).
+
+**Dependencies flow one direction: `src/jukebox/` imports shared stores/services/components, not the other way around.** The only current exceptions are `src/utils/device.js` and `registerServiceWorker.js` (import the tiny `jukeboxMode.js` mode-detector — fine, generic), and `src/components/Track.jsx` (has an inline "Send to Jukebox" branch calling `apiService.submitToJukebox`). Keep it that way: new jukebox-only behavior should extend `src/jukebox/` or the dedicated backend services, not add another `if`-branch inside shared files like `Track.jsx`, `routes/auth.ts`, or `middleware/auth.ts` — that's the pattern that turns into spaghetti.
