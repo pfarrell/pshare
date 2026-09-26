@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import { searchService, RESULT_LIMIT } from '../services/searchService.js'
 import { logService } from '../services/logService.js'
 import { extractIpAddress } from '../utils/requestIp.js'
@@ -101,8 +102,9 @@ async function buildRankedResults(likeParam: string, filteredQ: string, exactOnl
   return { results, hasMore }
 }
 
-// GET /search?q=query&offset=0
-search.get('/', async (c) => {
+// Shared by GET /search and GET /jukebox/:token/search (see jukeboxPublic.ts)
+// — identical logic, the only difference is how the caller is authenticated.
+export async function handleSearchRequest(c: Context) {
   const rawQuery = c.req.query('q') ?? ''
   const { query, exactOnly } = parseQuoted(rawQuery)
   const offset = parseOffset(c.req.query('offset'))
@@ -170,6 +172,8 @@ search.get('/', async (c) => {
   const tracks = await searchService.fetchTracksByIds(trackIds, c)
 
   return c.json({ results, hasMore, resultCounts, tracks, count: results.length + tracks.length, pageSize: RESULT_LIMIT })
-})
+}
+
+search.get('/', handleSearchRequest)
 
 export default search

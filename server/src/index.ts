@@ -16,6 +16,7 @@ import tags from './routes/tags.js'
 import profiles from './routes/profiles.js'
 import share from './routes/share.js'
 import lookup from './routes/lookup.js'
+import jukeboxPublic from './routes/jukeboxPublic.js'
 import admin from './routes/admin/index.js'
 import upload from './routes/upload.js'
 import auth from './routes/auth.js'
@@ -91,6 +92,7 @@ app.route('/surprise', playlists)
 app.route('/stream', streams)
 app.route('/tags', tags)
 app.route('/profiles', profiles)
+app.route('/jukebox', jukeboxPublic)
 
 // Everything else requires a logged-in session.
 const protectedApp = new Hono()
