@@ -2,11 +2,14 @@ import { render, screen, fireEvent, waitFor, within, act } from '@testing-librar
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import SearchTab from './SearchTab';
+import { __resetProfilesCacheForTests, invalidateProfilesCache } from '../utils/profilesCache';
+import { useProfileFilterStore } from '../stores/profileFilterStore';
 
 vi.mock('../services/api', () => ({
   apiService: {
     search: vi.fn(),
     getRecentAlbums: vi.fn(),
+    getProfiles: vi.fn(),
     getImageUrl: vi.fn(() => '/img/sm/x.jpg'),
   },
 }));
@@ -19,7 +22,7 @@ const renderTab = (props = {}) =>
 const runSearch = async (query = 'q') => {
   fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: query } });
   fireEvent.submit(screen.getByRole('search'));
-  await waitFor(() => expect(apiService.search).toHaveBeenCalledWith(query));
+  await waitFor(() => expect(apiService.search).toHaveBeenCalled());
 };
 
 // Small result set: one of each.
@@ -48,10 +51,15 @@ const section = (name) => screen.getByRole('heading', { name }).closest('section
 
 beforeEach(() => {
   vi.clearAllMocks();
+  __resetProfilesCacheForTests();
+  useProfileFilterStore.setState({ activeProfileId: null });
   // Quick Hit mounts immediately (the box starts empty) in every test unless
   // a test overrides this — a harmless empty grid by default so unrelated
   // search-behavior tests aren't left with an unresolved fetch.
   apiService.getRecentAlbums.mockResolvedValue({ data: [] });
+  // Same defensive-default reasoning as getRecentAlbums above — the
+  // active-profile-name lookup (and its self-heal check) fetches this.
+  apiService.getProfiles.mockResolvedValue({ data: [] });
 });
 
 afterEach(() => {
@@ -109,6 +117,83 @@ test('tapping a Quick Hit album calls onSelectAlbum, same as a search result alb
   fireEvent.click(screen.getByText('Quick Hit Album'));
 
   expect(onSelectAlbum).toHaveBeenCalledWith(expect.objectContaining({ id: 1, title: 'Quick Hit Album' }));
+});
+
+// --- Profile filtering ------------------------------------------------
+// The settings gear itself now lives in JukeboxTabBar, not here — see
+// JukeboxTabBar.test.jsx. SearchTab still owns filtering its own results by
+// activeProfileId and resolving/self-healing the active profile's name for
+// display, regardless of where the gear control is rendered.
+
+test('shows the active profile name under the search bar when one is set', async () => {
+  useProfileFilterStore.setState({ activeProfileId: 1 });
+  apiService.getProfiles.mockResolvedValue({ data: [{ id: 1, name: 'Kids', tags: [] }] });
+  renderTab();
+  await waitFor(() => expect(screen.getByText('Kids')).toBeInTheDocument());
+});
+
+test('shows nothing under the search bar when no profile is active (All)', () => {
+  useProfileFilterStore.setState({ activeProfileId: null });
+  renderTab();
+  expect(screen.queryByText(/^Kids$/)).not.toBeInTheDocument();
+});
+
+test('clears an active profile id that no longer exists in the fetched list', async () => {
+  useProfileFilterStore.setState({ activeProfileId: 99 });
+  apiService.getProfiles.mockResolvedValue({ data: [{ id: 1, name: 'Kids', tags: [] }] });
+  renderTab();
+
+  await waitFor(() => expect(useProfileFilterStore.getState().activeProfileId).toBeNull());
+  expect(screen.queryByText('Kids')).not.toBeInTheDocument();
+});
+
+test('keeps an active profile id that is still present in the fetched list', async () => {
+  useProfileFilterStore.setState({ activeProfileId: 1 });
+  apiService.getProfiles.mockResolvedValue({ data: [{ id: 1, name: 'Kids', tags: [] }] });
+  renderTab();
+
+  await waitFor(() => expect(screen.getByText('Kids')).toBeInTheDocument());
+  expect(useProfileFilterStore.getState().activeProfileId).toBe(1);
+});
+
+test('picks up a profile rename after an external invalidate, without unmounting', async () => {
+  useProfileFilterStore.setState({ activeProfileId: 1 });
+  apiService.getProfiles.mockResolvedValue({ data: [{ id: 1, name: 'Kids', tags: [] }] });
+  renderTab();
+  await waitFor(() => expect(screen.getByText('Kids')).toBeInTheDocument());
+
+  apiService.getProfiles.mockResolvedValue({ data: [{ id: 1, name: 'Renamed Kids', tags: [] }] });
+  invalidateProfilesCache();
+
+  await waitFor(() => expect(screen.getByText('Renamed Kids')).toBeInTheDocument());
+  expect(screen.queryByText('Kids')).not.toBeInTheDocument();
+});
+
+test('clears an active profile id that is deleted while mounted, after an external invalidate', async () => {
+  useProfileFilterStore.setState({ activeProfileId: 1 });
+  apiService.getProfiles.mockResolvedValue({ data: [{ id: 1, name: 'Kids', tags: [] }] });
+  renderTab();
+  await waitFor(() => expect(screen.getByText('Kids')).toBeInTheDocument());
+
+  apiService.getProfiles.mockResolvedValue({ data: [] });
+  invalidateProfilesCache();
+
+  await waitFor(() => expect(useProfileFilterStore.getState().activeProfileId).toBeNull());
+  expect(screen.queryByText('Kids')).not.toBeInTheDocument();
+});
+
+test('passes the active profile id to getRecentAlbums (Quick Hit)', async () => {
+  useProfileFilterStore.setState({ activeProfileId: 5 });
+  renderTab();
+  await waitFor(() => expect(apiService.getRecentAlbums).toHaveBeenCalledWith(20, 5));
+});
+
+test('passes the active profile id to search', async () => {
+  useProfileFilterStore.setState({ activeProfileId: 5 });
+  apiService.search.mockResolvedValue({ data: smallResponse });
+  renderTab();
+  await runSearch('test query');
+  expect(apiService.search).toHaveBeenCalledWith('test query', undefined, 5);
 });
 
 test('searches on submit and renders artist, album, and track results', async () => {
@@ -393,7 +478,7 @@ test('shows a retry option when search fails, and retry re-runs the same query',
   fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
   await waitFor(() => {
-    expect(apiService.search).toHaveBeenCalledWith('test query');
+    expect(apiService.search).toHaveBeenCalledWith('test query', undefined, null);
     expect(screen.getByText('No results')).toBeInTheDocument();
   });
 });
@@ -410,7 +495,7 @@ test('incremental search fires automatically after a short pause, without an exp
 
   await act(async () => { await vi.advanceTimersByTimeAsync(350); });
 
-  expect(apiService.search).toHaveBeenCalledWith('monk');
+  expect(apiService.search).toHaveBeenCalledWith('monk', undefined, null);
   expect(screen.getByText('Found Album')).toBeInTheDocument();
 });
 
@@ -436,7 +521,7 @@ test('debounces — only the settled query is searched, not every keystroke', as
   await act(async () => { await vi.advanceTimersByTimeAsync(350); });
 
   expect(apiService.search).toHaveBeenCalledTimes(1);
-  expect(apiService.search).toHaveBeenCalledWith('monk');
+  expect(apiService.search).toHaveBeenCalledWith('monk', undefined, null);
 });
 
 test('only the latest search response is applied, even if an earlier request resolves later', async () => {

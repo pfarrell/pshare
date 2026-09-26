@@ -7,6 +7,7 @@ import { setCookie, getCookie, deleteCookie } from 'hono/cookie'
 import type { Variables } from '../types.js'
 import { requireAuth } from '../middleware/auth.js'
 import { authService } from '../services/authService.js'
+import { profilesService } from '../services/profilesService.js'
 import { jukeboxDeviceService } from '../services/jukeboxDeviceService.js'
 import { signupLogService } from '../services/signupLogService.js'
 import { sendPasswordResetEmail } from '../services/emailService.js'
@@ -92,7 +93,7 @@ function clearGoogleOAuthCookies(c: Context, domain: string | undefined) {
   }
 }
 
-type AuthUser = { id: number; username: string; email: string | null; admin: boolean; default_tag: string | null }
+type AuthUser = { id: number; username: string; email: string | null; admin: boolean; default_profile_id: number | null }
 
 async function buildUserPayload(user: AuthUser) {
   const [recallConnection, googleIdentity, hasPassword] = await Promise.all([
@@ -105,7 +106,7 @@ async function buildUserPayload(user: AuthUser) {
     username: user.username,
     email: user.email,
     admin: user.admin,
-    default_tag: user.default_tag ?? null,
+    default_profile_id: user.default_profile_id ?? null,
     recall_connected: Boolean(recallConnection),
     google_connected: Boolean(googleIdentity),
     has_password: hasPassword,
@@ -460,26 +461,40 @@ auth.get('/me', async (c) => {
       return c.json({ error: 'Not authenticated' }, 401)
     }
 
-    return c.json({ user: await buildUserPayload(user) })
+    const jukeboxDeviceId = c.get('jukeboxDeviceId') ?? null
+    const device = jukeboxDeviceId != null ? await jukeboxDeviceService.findById(jukeboxDeviceId) : null
+
+    return c.json({
+      user: await buildUserPayload(user),
+      jukeboxDeviceId,
+      jukeboxEnqueueToken: device?.enqueue_token ?? null,
+    })
   } catch (error: any) {
     console.error('Get user error:', error)
     return c.json({ error: 'Failed to get user info' }, 500)
   }
 })
 
-// PUT /auth/default-tag — save a default tag for the current user
-auth.put('/default-tag', requireAuth, async (c) => {
+// PUT /auth/default-profile — save the current user's default profile (or clear it with null)
+auth.put('/default-profile', requireAuth, async (c) => {
   const user = c.get('user')!
 
   const body = await c.req.json()
-  const raw = body.tag ?? null
-  const tag = raw
-    ? raw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || null
-    : null
+  const profileId = body.profile_id ?? null
 
-  await authService.updateDefaultTag(user.id, tag)
+  // findById() does no coercion, so a non-integer value would reach Postgres
+  // as an uncastable integer bind and surface as an unhandled 500.
+  if (profileId !== null && !Number.isInteger(profileId)) {
+    return c.json({ error: 'profile_id must be an integer or null' }, 400)
+  }
 
-  return c.json({ default_tag: tag })
+  if (profileId !== null && !(await profilesService.findById(profileId))) {
+    return c.json({ error: 'Profile not found' }, 404)
+  }
+
+  await authService.updateDefaultProfile(user.id, profileId)
+
+  return c.json({ default_profile_id: profileId })
 })
 
 // GET /auth/recall/connect — redirect to Recall's authorize page

@@ -6,7 +6,7 @@ export function createAuthService(db: Kysely<Database>) {
     async findUserById(id: number) {
       return db
         .selectFrom('users')
-        .select(['id', 'username', 'email', 'admin', 'default_tag', 'password_changed_at'])
+        .select(['id', 'username', 'email', 'admin', 'default_profile_id', 'password_changed_at'])
         .where('id', '=', id)
         .executeTakeFirst()
     },
@@ -48,10 +48,10 @@ export function createAuthService(db: Kysely<Database>) {
         .executeTakeFirst()
     },
 
-    async updateDefaultTag(userId: number, tag: string | null) {
+    async updateDefaultProfile(userId: number, profileId: number | null) {
       await db
         .updateTable('users')
-        .set({ default_tag: tag, updated_at: new Date().toISOString() })
+        .set({ default_profile_id: profileId, updated_at: new Date().toISOString() })
         .where('id', '=', userId)
         .execute()
     },

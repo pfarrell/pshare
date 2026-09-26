@@ -6,6 +6,8 @@ import JukeboxPlaylistTile from './JukeboxPlaylistTile';
 import JukeboxCollectionTile from './JukeboxCollectionTile';
 import QuickHitTab from './QuickHitTab';
 import Track from '../components/Track';
+import { useProfileFilterStore } from '../stores/profileFilterStore';
+import { getProfilesCached, subscribeProfilesInvalidated } from '../utils/profilesCache';
 
 // Artists, albums, playlists and collections all drill into a browse view
 // (via onSelectArtist/onSelectAlbum/onSelectPlaylist/onSelectCollection, all
@@ -49,6 +51,36 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
   const [error, setError] = useState(false);
   const [filter, setFilter] = useState('all'); // 'all' | 'artists' | 'albums' | 'playlists' | 'collections' | 'tracks'
 
+  const { activeProfileId } = useProfileFilterStore();
+  const [activeProfileName, setActiveProfileName] = useState(null);
+
+  // SearchTab is never unmounted on a kiosk (same as JukeboxProfilePicker),
+  // so a profile rename/delete elsewhere only reaches this always-visible
+  // label if something pushes it. An incrementing counter, not a
+  // null-reset, because the picker's own reset-to-null approach has a known
+  // (accepted, spec-acknowledged) race where a same-value setState(null)
+  // while already null doesn't trigger a re-render — a counter always
+  // changes value, so it can't hit that.
+  const [profilesEpoch, setProfilesEpoch] = useState(0);
+  useEffect(() => subscribeProfilesInvalidated(() => setProfilesEpoch((n) => n + 1)), []);
+
+  // Same self-healing check as ProfileFilterChip (which the kiosk doesn't
+  // render): if the active id isn't in the real list any more — profile
+  // deleted, or a stale id in localStorage — clear it in the shared store
+  // rather than silently filtering everything down to nothing, since the
+  // backend treats an unrecognized profileId as "no match". Re-runs on
+  // profilesEpoch too, so a profile rename or deletion that happens while
+  // this component is mounted (i.e. always, on a kiosk) is picked up
+  // without a manual reload.
+  useEffect(() => {
+    if (!activeProfileId) { setActiveProfileName(null); return; }
+    getProfilesCached().then((res) => {
+      const found = res.data.find((p) => p.id === activeProfileId);
+      if (!found) useProfileFilterStore.getState().clearProfile();
+      setActiveProfileName(found?.name ?? null);
+    }).catch(() => setActiveProfileName(null));
+  }, [activeProfileId, profilesEpoch]);
+
   // Guards against a slow earlier request's response landing after a faster
   // later one and clobbering it — only the response matching the most
   // recently *dispatched* request is ever applied.
@@ -64,7 +96,7 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
     setError(false);
     const generation = ++searchGenerationRef.current;
     try {
-      const response = await apiService.search(q);
+      const response = await apiService.search(q, undefined, activeProfileId);
       if (generation !== searchGenerationRef.current) return; // superseded by a newer search
       setResults(response.data);
       if (resetFilter) setFilter('all');
@@ -96,7 +128,7 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
       runSearch(query, { resetFilter: isFreshSearch });
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, activeProfileId]);
 
   const artistResults = (results?.results || []).filter((r) => r.type === 'artist');
   const albumResults = (results?.results || []).filter((r) => r.type === 'album');
@@ -244,10 +276,12 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
         )}
       </div>
 
+      {activeProfileName && <p className="jukebox-active-profile">{activeProfileName}</p>}
+
       {/* An empty box is always Quick Hit — even after a previous search,
           clearing the box gets you back to browsing, not a frozen view of
           stale results. See SearchTab.test.jsx. */}
-      {isEmpty && <QuickHitTab onSelectAlbum={onSelectAlbum} />}
+      {isEmpty && <QuickHitTab onSelectAlbum={onSelectAlbum} profileId={activeProfileId} />}
 
       {!isEmpty && error && (
         <div className="jukebox-panel-error">

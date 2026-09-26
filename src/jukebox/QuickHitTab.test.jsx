@@ -68,6 +68,18 @@ test('shows an empty-state message when there is no play history yet', async () 
   });
 });
 
+test('passes profileId through to getRecentAlbums', async () => {
+  apiService.getRecentAlbums.mockResolvedValue({ data: [] });
+  renderTab({ profileId: 5 });
+  await waitFor(() => expect(apiService.getRecentAlbums).toHaveBeenCalledWith(20, 5));
+});
+
+test('defaults profileId to null when not provided', async () => {
+  apiService.getRecentAlbums.mockResolvedValue({ data: [] });
+  renderTab();
+  await waitFor(() => expect(apiService.getRecentAlbums).toHaveBeenCalledWith(20, null));
+});
+
 test('shows a retry option when fetching recent albums fails, and retry re-fetches', async () => {
   apiService.getRecentAlbums.mockRejectedValueOnce(new Error('network error'));
   renderTab();

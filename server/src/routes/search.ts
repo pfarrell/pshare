@@ -1,7 +1,9 @@
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import { searchService, RESULT_LIMIT } from '../services/searchService.js'
 import { logService } from '../services/logService.js'
 import { extractIpAddress } from '../utils/requestIp.js'
+import { profilesService } from '../services/profilesService.js'
 
 const search = new Hono()
 
@@ -51,10 +53,10 @@ const TYPE_KEY_MAP: Record<string, 'album' | 'artist' | 'playlist' | 'collection
 
 const EMPTY_RESULT_COUNTS = { album: 0, artist: 0, playlist: 0, collection: 0 }
 
-async function buildRankedResults(likeParam: string, filteredQ: string, exactOnly: boolean, offset: number) {
+async function buildRankedResults(likeParam: string, filteredQ: string, exactOnly: boolean, offset: number, tagIds: number[] | null) {
   // Fetch one extra row beyond the page size so we can tell whether another
   // page exists without a separate existence-check query.
-  const searchRows = await searchService.runUnionSearch(likeParam, filteredQ, exactOnly, RESULT_LIMIT + 1, offset)
+  const searchRows = await searchService.runUnionSearch(likeParam, filteredQ, exactOnly, RESULT_LIMIT + 1, offset, tagIds)
   const hasMore = searchRows.length > RESULT_LIMIT
   const pageRows = searchRows.slice(0, RESULT_LIMIT)
 
@@ -100,8 +102,9 @@ async function buildRankedResults(likeParam: string, filteredQ: string, exactOnl
   return { results, hasMore }
 }
 
-// GET /search?q=query&offset=0
-search.get('/', async (c) => {
+// Shared by GET /search and GET /jukebox/:token/search (see jukeboxPublic.ts)
+// — identical logic, the only difference is how the caller is authenticated.
+export async function handleSearchRequest(c: Context) {
   const rawQuery = c.req.query('q') ?? ''
   const { query, exactOnly } = parseQuoted(rawQuery)
   const offset = parseOffset(c.req.query('offset'))
@@ -116,6 +119,18 @@ search.get('/', async (c) => {
   }
 
   const likeParam = `%${query}%`
+  const profileIdParam = c.req.query('profileId')
+  let tagIds: number[] | null = null
+  if (profileIdParam) {
+    const profileId = parseInt(profileIdParam)
+    // An unrecognized profileId means "no match", never an error — same as
+    // /albums/random, /albums/recent and /artists/random. A non-numeric value
+    // skips the query entirely (no point binding NaN); a numeric id that
+    // doesn't exist falls out of getTagIds() as an empty array on its own.
+    // Either way tagIds=[] filters Album/Artist/track results down to nothing
+    // while leaving Playlist/Collection results untouched.
+    tagIds = Number.isNaN(profileId) ? [] : await profilesService.getTagIds(profileId)
+  }
 
   // Tracks are unpaginated and unlimited by design (the full match list is
   // fetched on page 1), and resultCounts reflects the query's total, which
@@ -125,7 +140,7 @@ search.get('/', async (c) => {
   // redundantly re-run and re-serialize an ever-more-wasteful pair of queries
   // whose results are simply discarded by the caller.
   if (offset > 0) {
-    const { results, hasMore } = await buildRankedResults(likeParam, filteredQ, exactOnly, offset)
+    const { results, hasMore } = await buildRankedResults(likeParam, filteredQ, exactOnly, offset, tagIds)
     return c.json({ results, hasMore, resultCounts: EMPTY_RESULT_COUNTS, tracks: [], count: results.length, pageSize: RESULT_LIMIT })
   }
 
@@ -142,9 +157,9 @@ search.get('/', async (c) => {
     .catch((err) => console.error('Failed to log search:', err))
 
   const [{ results, hasMore }, trackIds, rawCounts] = await Promise.all([
-    buildRankedResults(likeParam, filteredQ, exactOnly, offset),
-    searchService.findTrackIds(likeParam),
-    searchService.countRankedResults(likeParam, filteredQ, exactOnly),
+    buildRankedResults(likeParam, filteredQ, exactOnly, offset, tagIds),
+    searchService.findTrackIds(likeParam, tagIds),
+    searchService.countRankedResults(likeParam, filteredQ, exactOnly, tagIds),
   ])
 
   const resultCounts = {
@@ -157,6 +172,8 @@ search.get('/', async (c) => {
   const tracks = await searchService.fetchTracksByIds(trackIds, c)
 
   return c.json({ results, hasMore, resultCounts, tracks, count: results.length + tracks.length, pageSize: RESULT_LIMIT })
-})
+}
+
+search.get('/', handleSearchRequest)
 
 export default search

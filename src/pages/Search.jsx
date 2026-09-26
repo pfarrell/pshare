@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
+import { useProfileFilterStore } from '../stores/profileFilterStore';
 import Loading from '../components/Loading';
 import Track from '../components/Track';
 import SearchResultCard from '../components/SearchResultCard';
@@ -16,6 +17,7 @@ const Search = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { isAdmin } = useAuthStore();
+  const { activeProfileId } = useProfileFilterStore();
   const [results, setResults] = useState({ results: [], tracks: [] });
   const [resultCounts, setResultCounts] = useState(EMPTY_COUNTS);
   const [hasMore, setHasMore] = useState(false);
@@ -51,7 +53,7 @@ const Search = () => {
     setLoadMoreError(null);
 
     try {
-      const response = await apiService.search(searchQuery);
+      const response = await apiService.search(searchQuery, undefined, activeProfileId);
       const data = response.data;
       setResults(data);
       setResultCounts(data.resultCounts || EMPTY_COUNTS);
@@ -78,11 +80,14 @@ const Search = () => {
     }
   };
 
+  // activeProfileId is a dependency because the header chip is on this page
+  // too: switching profiles while already on /search must re-run the search
+  // rather than leave results filtered by the previous profile.
   useEffect(() => {
     if (query) {
       performSearch(query);
     }
-  }, [query]);
+  }, [query, activeProfileId]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || !query) return;
@@ -91,7 +96,7 @@ const Search = () => {
     setLoadMoreError(null);
 
     try {
-      const response = await apiService.search(query, offsetRef.current);
+      const response = await apiService.search(query, offsetRef.current, activeProfileId);
       if (generation !== searchGenerationRef.current) return; // superseded by a new search
       const data = response.data;
       const fresh = (data.results || []).filter((r) => !seenRef.current.has(`${r.type}:${r.data.id}`));
@@ -116,7 +121,7 @@ const Search = () => {
     } finally {
       setLoadingMore(false);
     }
-  }, [loadingMore, hasMore, query]);
+  }, [loadingMore, hasMore, query, activeProfileId]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;

@@ -140,7 +140,7 @@ interface UserTable {
   email: string | null
   password: string | null
   admin: boolean
-  default_tag: string | null
+  default_profile_id: number | null
   password_changed_at: ColumnType<Date, never, Date | string> | null
   created_at: ColumnType<Date, never, never>
   updated_at: ColumnType<Date, never, string | Date>
@@ -159,7 +159,18 @@ interface JukeboxDeviceTable {
   id: Generated<number>
   user_id: number
   name: string
+  enqueue_token: string
   created_at: ColumnType<Date, string | undefined, never>
+}
+
+interface JukeboxQueueSubmissionTable {
+  id: Generated<number>
+  jukebox_device_id: number
+  track_id: number
+  submitted_by_name: string | null
+  submitted_by_user_id: number | null
+  submitted_at: ColumnType<Date, string | Date | undefined, never>
+  delivered_at: ColumnType<Date, string | Date | null | undefined, string | Date | null> | null
 }
 
 interface UserPlaylistTable {
@@ -254,6 +265,19 @@ interface TagTable {
   name: string
   created_at: ColumnType<Date, string | undefined, never>
   updated_at: ColumnType<Date, string | undefined, string | Date>
+}
+
+interface ProfileTable {
+  id: Generated<number>
+  name: string
+  created_at: ColumnType<Date, string | undefined, never>
+  updated_at: ColumnType<Date, string | undefined, string | Date>
+}
+
+interface ProfileTagTable {
+  id: Generated<number>
+  profile_id: number
+  tag_id: number
 }
 
 interface DiscoverySourceTable {
@@ -353,6 +377,7 @@ export interface Database {
   users: UserTable
   password_reset_tokens: PasswordResetTokenTable
   jukebox_devices: JukeboxDeviceTable
+  jukebox_queue_submissions: JukeboxQueueSubmissionTable
   user_playlists: UserPlaylistTable
   artist_albums: ArtistAlbumTable
   track_artists: TrackArtistTable
@@ -366,6 +391,8 @@ export interface Database {
   albums_tags: AlbumTagTable
   artists_tags: ArtistTagTable
   tags_tracks: TrackTagTable
+  profiles: ProfileTable
+  profile_tags: ProfileTagTable
   discovery_sources: DiscoverySourceTable
   user_recall_tokens: UserRecallTokenTable
   notes: NoteTable

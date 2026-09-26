@@ -4,6 +4,7 @@ import { getArtistSummary } from '../services/wikipedia.js'
 import { streamBase } from '../db/streamUrl.js'
 import { sql } from 'kysely'
 import { countsService } from '../services/countsService.js'
+import { profilesService } from '../services/profilesService.js'
 import { requireAuth } from '../middleware/auth.js'
 import type { Variables } from '../types.js'
 
@@ -101,30 +102,42 @@ async function fetchArtistDiscography(c: any, id: number, name: string, imagePat
   return { albums, singles }
 }
 
-// GET /artists/random?size=N&tag=slug — gated: this powers the logged-in
+// GET /artists/random?size=N&profileId=N — gated: this powers the logged-in
 // Home feed and must not become a public catalog-browsing endpoint just
-// because /artist/:id (below, in this same router) is public.
+// because /artist/:id (below, in this same router) is public. An unrecognized
+// or non-numeric profileId means "no match", never an error.
 artists.get('/random', requireAuth, async (c) => {
   const size = Math.min(parseInt(c.req.query('size') ?? '10'), 200)
-  const tag = c.req.query('tag')
+  const profileIdParam = c.req.query('profileId')
 
-  const rows = tag
-    ? await sql<any>`
-        WITH eligible_artist_ids AS (
-          SELECT DISTINCT a.id
-          FROM artists a
-          INNER JOIN albums al ON al.artist_id = a.id
-          INNER JOIN artists_tags at ON at.artist_id = a.id
-          INNER JOIN tags tg ON tg.id = at.tag_id AND tg.name = ${tag}
-          WHERE a.image_path IS NOT NULL
-        ),
-        random_ids AS (
-          SELECT id FROM eligible_artist_ids ORDER BY random() LIMIT ${size}
-        )
-        SELECT a.*
-        FROM artists a
-        INNER JOIN random_ids r ON a.id = r.id
-      `.execute(db)
+  let tagIds: number[] | null = null
+  if (profileIdParam) {
+    const profileId = parseInt(profileIdParam)
+    // NaN would be bound as a Postgres integer and throw a raw DB error, so a
+    // non-numeric profileId resolves to "no match" instead. Same for a
+    // numeric id with no profile row — getTagIds() returns [] on its own.
+    tagIds = Number.isNaN(profileId) ? [] : await profilesService.getTagIds(profileId)
+  }
+
+  const rows = tagIds
+    ? (tagIds.length === 0
+        ? { rows: [] }
+        : await sql<any>`
+            WITH eligible_artist_ids AS (
+              SELECT DISTINCT a.id
+              FROM artists a
+              INNER JOIN albums al ON al.artist_id = a.id
+              INNER JOIN artists_tags at ON at.artist_id = a.id
+              WHERE at.tag_id IN (${sql.join(tagIds)})
+                AND a.image_path IS NOT NULL
+            ),
+            random_ids AS (
+              SELECT id FROM eligible_artist_ids ORDER BY random() LIMIT ${size}
+            )
+            SELECT a.*
+            FROM artists a
+            INNER JOIN random_ids r ON a.id = r.id
+          `.execute(db))
     : await sql<any>`
         WITH eligible_artist_ids AS (
           SELECT DISTINCT a.id

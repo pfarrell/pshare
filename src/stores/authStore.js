@@ -1,7 +1,7 @@
 // src/stores/authStore.js
 import { create } from 'zustand';
 import { apiService } from '../services/api';
-import { useTagFilterStore } from './tagFilterStore';
+import { useProfileFilterStore } from './profileFilterStore';
 import { useFavoritesStore } from './favoritesStore';
 
 export const useAuthStore = create((set) => ({
@@ -9,6 +9,8 @@ export const useAuthStore = create((set) => ({
   isAuthenticated: false,
   isAdmin: false,
   loading: false,
+  jukeboxDeviceId: null,
+  jukeboxEnqueueToken: null,
 
   setUser: (user) => {
     set({
@@ -25,8 +27,8 @@ export const useAuthStore = create((set) => ({
       const response = await apiService.signup(username, password, email);
       const { user } = response.data;
 
-      if (user.default_tag) {
-        useTagFilterStore.getState().setTag(user.default_tag);
+      if (user.default_profile_id) {
+        useProfileFilterStore.getState().setProfile(user.default_profile_id);
       }
       useFavoritesStore.getState().load();
 
@@ -53,8 +55,8 @@ export const useAuthStore = create((set) => ({
       const response = await apiService.login(username, password);
       const { user } = response.data;
 
-      if (user.default_tag) {
-        useTagFilterStore.getState().setTag(user.default_tag);
+      if (user.default_profile_id) {
+        useProfileFilterStore.getState().setProfile(user.default_profile_id);
       }
       useFavoritesStore.getState().load();
 
@@ -81,7 +83,7 @@ export const useAuthStore = create((set) => ({
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      useTagFilterStore.getState().clearTag();
+      useProfileFilterStore.getState().clearProfile();
       useFavoritesStore.getState().clear();
       set({
         user: null,
@@ -97,11 +99,11 @@ export const useAuthStore = create((set) => ({
     try {
       console.log('Initializing auth...');
       const response = await apiService.getMe();
-      const { user } = response.data;
+      const { user, jukeboxDeviceId, jukeboxEnqueueToken } = response.data;
       console.log('Auth initialized with user:', user);
 
-      if (user.default_tag) {
-        useTagFilterStore.getState().setTag(user.default_tag);
+      if (user.default_profile_id) {
+        useProfileFilterStore.getState().setProfile(user.default_profile_id);
       }
       useFavoritesStore.getState().load();
 
@@ -109,6 +111,8 @@ export const useAuthStore = create((set) => ({
         user,
         isAuthenticated: true,
         isAdmin: user.admin || false,
+        jukeboxDeviceId: jukeboxDeviceId ?? null,
+        jukeboxEnqueueToken: jukeboxEnqueueToken ?? null,
         loading: false
       });
       return true;

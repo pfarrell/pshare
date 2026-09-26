@@ -2835,6 +2835,81 @@ body:has(.jukebox-app) {
   border-radius: 0.5rem;
   cursor: pointer;
 }
+/* Settings gear (JukeboxProfilePicker) — lives in the tab bar's right edge as
+   a slim, finger-width slot, deliberately NOT sized like the Browse/Next Up
+   tabs (flex: none + a fixed width, vs. their flex: 1). Its popover opens
+   upward (bottom: 100%, not top: 100%) since it's now anchored to the bottom
+   of the screen rather than the search bar. */
+.jukebox-app .jukebox-tab-bar .jukebox-profile-picker {
+  position: relative;
+  flex: none;
+  display: flex;
+  width: 3.5rem;
+  border-right: 1px solid #2c3e50;
+}
+.jukebox-app .jukebox-tab-bar .jukebox-profile-picker > button {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  font-size: 1.35rem;
+  color: rgba(255, 255, 255, 0.75);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+}
+.jukebox-app .jukebox-profile-picker-popover {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 0.4rem;
+  min-width: 12rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  background: #1a252f;
+  border: 1px solid #4a5a68;
+  border-radius: 0.5rem;
+  padding: 0.6rem;
+  z-index: 60;
+}
+.jukebox-app .jukebox-profile-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: white;
+  font-size: 1rem;
+}
+.jukebox-app .jukebox-profile-picker-header button {
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  font-size: 1.1rem;
+  color: white;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.jukebox-app .jukebox-profile-picker-popover > button {
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  font-size: 1rem;
+  text-align: left;
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+.jukebox-app .jukebox-profile-picker-popover > button[aria-pressed="true"] {
+  background: #2f6fd6;
+  border-color: #2f6fd6;
+  font-weight: 600;
+}
+.jukebox-app .jukebox-active-profile {
+  margin: 0;
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.6);
+}
 .jukebox-app .jukebox-search-chips {
   display: flex;
   flex-wrap: wrap;
@@ -3165,6 +3240,20 @@ body:has(.jukebox-app) {
   --color-border: rgba(255, 255, 255, 0.15);
   --color-bg-page: rgba(255, 255, 255, 0.08);
   --color-bg-surface: transparent;
+}
+
+/* Next Up's "reveal one more played track" control (JukeboxNextUpTab.jsx) —
+   sits above the (already-played-hidden-by-default) queue list. */
+.jukebox-app .jukebox-next-up-show-previous {
+  align-self: stretch;
+  padding: 0.6rem;
+  margin-bottom: 0.25rem;
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 0.5rem;
+  cursor: pointer;
 }
 
 /* Album tracks panel: sits immediately left of .jukebox-browse-panel (which is

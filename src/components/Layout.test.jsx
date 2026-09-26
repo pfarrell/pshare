@@ -9,6 +9,7 @@ vi.mock('../services/api', () => ({
   apiService: {
     getTags: vi.fn(() => Promise.resolve({ data: [] })),
     getSignupUnseenCount: vi.fn(() => Promise.resolve({ data: { count: 0 } })),
+    getProfiles: vi.fn(() => Promise.resolve({ data: [] })),
   },
 }));
 
@@ -56,12 +57,15 @@ describe('Layout — logged-in hamburger menu', () => {
     expect(screen.getByText('Account page')).toBeInTheDocument();
   });
 
-  test('does not show Home View, Tag Filter, Account, or Logout', () => {
+  test('does not show Home View, Filter, Account, or Logout', () => {
     renderLayout();
     const toggle = screen.getByText('pat').closest('button');
     fireEvent.click(toggle);
     expect(screen.queryByText('Home View')).not.toBeInTheDocument();
-    expect(screen.queryByText('Tag Filter')).not.toBeInTheDocument();
+    // Scoped to the section-heading <div>, not the always-rendered
+    // ProfileFilterChip trigger button in the header, which also reads
+    // "Filter" when no profile is active.
+    expect(screen.queryByText('Filter', { selector: 'div' })).not.toBeInTheDocument();
     expect(screen.queryByText('Account')).not.toBeInTheDocument();
     expect(screen.queryByText('Logout')).not.toBeInTheDocument();
   });
@@ -128,11 +132,14 @@ describe('Layout — logged-in admin', () => {
 });
 
 describe('Layout — logged-out hamburger menu', () => {
-  test('still shows Home View and Tag Filter', () => {
+  test('still shows Home View and Filter', () => {
     renderLayout();
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
     expect(screen.getByText('Home View')).toBeInTheDocument();
-    expect(screen.getByText('Tag Filter')).toBeInTheDocument();
+    // Scoped to the section-heading <div> — the header's ProfileFilterChip
+    // trigger button also reads "Filter" when no profile is active, so an
+    // unscoped query would match both.
+    expect(screen.getByText('Filter', { selector: 'div' })).toBeInTheDocument();
   });
 
   test('shows Login / Sign Up, not Account or Logout', () => {

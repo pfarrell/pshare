@@ -8,6 +8,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Registration is done by hand in src/registerServiceWorker.js, gated
+      // on jukebox kiosk mode — see that file for why. Without this, the
+      // plugin's own auto-injected register script would run unconditionally
+      // and register a service worker on kiosk devices too.
+      injectRegister: false,
       manifest: {
         name: 'P·Share',
         short_name: 'P·Share',

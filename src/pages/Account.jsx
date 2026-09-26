@@ -5,7 +5,7 @@ import { apiService } from '../services/api';
 import { isLanAccess } from '../utils/device';
 import toast from 'react-hot-toast';
 import HomeViewToggle from '../components/HomeViewToggle';
-import TagFilterControl from '../components/TagFilterControl';
+import ProfilePickerControl from '../components/ProfilePickerControl';
 import ThemeToggle from '../components/ThemeToggle';
 
 const cardStyle = {
@@ -169,9 +169,9 @@ const Account = () => {
 
       <div style={cardStyle}>
         <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-faint)', marginBottom: '0.75rem' }}>
-          Tag Filter
+          Filter
         </div>
-        <TagFilterControl allowSetDefault variant="light" />
+        <ProfilePickerControl allowSetDefault variant="light" />
       </div>
 
       <div style={cardStyle}>

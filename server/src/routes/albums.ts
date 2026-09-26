@@ -3,6 +3,7 @@ import type { Variables } from '../types.js'
 import { getAlbumSummary } from '../services/wikipedia.js'
 import { streamBase } from '../db/streamUrl.js'
 import { albumsService } from '../services/albumsService.js'
+import { profilesService } from '../services/profilesService.js'
 import { countsService } from '../services/countsService.js'
 import { notesService } from '../services/notesService.js'
 import { getRecallItem, decryptRecallToken, stripBacklink } from '../services/recallService.js'
@@ -11,14 +12,24 @@ import { createNotesRoutes } from './notesRoutes.js'
 
 const albums = new Hono<{ Variables: Variables }>()
 
-// GET /albums/random?size=N&tag=slug — gated, same reasoning as
-// artists.ts's /random: powers the logged-in Home feed.
+// GET /albums/random?size=N&profileId=N — gated, same reasoning as
+// artists.ts's /random: powers the logged-in Home feed. An unrecognized or
+// non-numeric profileId means "no match", never an error.
 albums.get('/random', requireAuth, async (c) => {
   const size = Math.min(parseInt(c.req.query('size') ?? '10'), 200)
-  const tag = c.req.query('tag')
+  const profileIdParam = c.req.query('profileId')
 
-  const rows = tag
-    ? await albumsService.randomByTag(tag, size)
+  let tagIds: number[] | null = null
+  if (profileIdParam) {
+    const profileId = parseInt(profileIdParam)
+    // NaN would be bound as a Postgres integer and throw a raw DB error, so a
+    // non-numeric profileId resolves to "no match" instead. Same for a
+    // numeric id with no profile row — getTagIds() returns [] on its own.
+    tagIds = Number.isNaN(profileId) ? [] : await profilesService.getTagIds(profileId)
+  }
+
+  const rows = tagIds
+    ? await albumsService.randomByTagIds(tagIds, size)
     : await albumsService.randomAll(size)
 
   const albumIds = rows.rows.map((row: any) => row.id)
@@ -34,13 +45,22 @@ albums.get('/random', requireAuth, async (c) => {
   })))
 })
 
-// GET /albums/recent?size=N — gated, powers Jukebox Mode's Quick Hit panel
-// (recently-played albums, most recent first). See
-// docs/superpowers/specs/2026-09-20-jukebox-mode-design.md.
+// GET /albums/recent?size=N&profileId=N — gated, powers Jukebox Mode's Quick
+// Hit panel (recently-played albums, most recent first). See
+// docs/superpowers/specs/2026-09-20-jukebox-mode-design.md. An unrecognized or
+// non-numeric profileId means "no match", never an error.
 albums.get('/recent', requireAuth, async (c) => {
   const size = Math.min(parseInt(c.req.query('size') ?? '10'), 200)
+  const profileIdParam = c.req.query('profileId')
 
-  const rows = await albumsService.recentlyPlayed(size)
+  let tagIds: number[] | null = null
+  if (profileIdParam) {
+    const profileId = parseInt(profileIdParam)
+    // Same NaN guard as /random above.
+    tagIds = Number.isNaN(profileId) ? [] : await profilesService.getTagIds(profileId)
+  }
+
+  const rows = await albumsService.recentlyPlayed(size, tagIds)
   const albumIds = rows.rows.map((row: any) => row.id)
   const trackCounts = await countsService.trackCountsByAlbumIds(albumIds)
 

@@ -7,15 +7,20 @@ import { useAuthStore } from '../stores/authStore';
 import { useFavoritesStore } from '../stores/favoritesStore';
 import { apiService } from '../services/api';
 import { shareLink } from '../utils/shareLink';
+import toast from 'react-hot-toast';
 
 vi.mock('./AddToPlaylistModal', () => ({ default: () => null }));
 vi.mock('./TrackNotesModal', () => ({ default: () => null }));
 
 vi.mock('../services/api', () => ({
-  apiService: { makeTrackSingle: vi.fn() },
+  apiService: { makeTrackSingle: vi.fn(), submitToJukebox: vi.fn() },
 }));
 
 vi.mock('../utils/shareLink', () => ({ shareLink: vi.fn() }));
+
+vi.mock('react-hot-toast', () => ({
+  default: { success: vi.fn(), error: vi.fn() },
+}));
 
 vi.mock('react-router-dom', async (importOriginal) => {
   const actual = await importOriginal();
@@ -57,6 +62,10 @@ beforeEach(() => {
   useFavoritesStore.setState({ isFavorite: () => false, toggleFavorite: vi.fn() });
   useNavigate.mockReturnValue(vi.fn());
   shareLink.mockClear();
+  localStorage.removeItem('jukebox-enqueue-token');
+  apiService.submitToJukebox.mockReset();
+  toast.success.mockClear();
+  toast.error.mockClear();
 });
 
 describe('Track component', () => {
@@ -673,5 +682,59 @@ describe('Track component — split playback vs. row context menus', () => {
     expect(screen.queryByText('💿 Go to Album')).not.toBeInTheDocument();
 
     vi.useRealTimers();
+  });
+});
+
+describe('Track row — Send to Jukebox menu item', () => {
+  test('shows "Send to Jukebox" in the row menu when a jukebox token is stored', async () => {
+    localStorage.setItem('jukebox-enqueue-token', 'abc123');
+    useAuthStore.setState({ isAuthenticated: true });
+    renderTrack();
+
+    fireEvent.contextMenu(screen.getByText(/Test Track/).closest('.track-item'));
+
+    expect(screen.getByText('🎉 Send to Jukebox')).toBeInTheDocument();
+  });
+
+  test('does not show "Send to Jukebox" when no token is stored', async () => {
+    localStorage.removeItem('jukebox-enqueue-token');
+    renderTrack();
+
+    fireEvent.contextMenu(screen.getByText(/Test Track/).closest('.track-item'));
+
+    expect(screen.queryByText('🎉 Send to Jukebox')).not.toBeInTheDocument();
+  });
+
+  test('does not show "Send to Jukebox" when a token is stored but the user is not authenticated', () => {
+    localStorage.setItem('jukebox-enqueue-token', 'abc123');
+    renderTrack();
+
+    fireEvent.contextMenu(screen.getByText(/Test Track/).closest('.track-item'));
+
+    expect(screen.queryByText('🎉 Send to Jukebox')).not.toBeInTheDocument();
+  });
+
+  test('tapping "Send to Jukebox" submits this track with the stored token', async () => {
+    localStorage.setItem('jukebox-enqueue-token', 'abc123');
+    useAuthStore.setState({ isAuthenticated: true });
+    apiService.submitToJukebox.mockResolvedValue({ data: [{ id: 1 }] });
+    renderTrack();
+
+    fireEvent.contextMenu(screen.getByText(/Test Track/).closest('.track-item'));
+    fireEvent.click(screen.getByText('🎉 Send to Jukebox'));
+
+    await waitFor(() => expect(apiService.submitToJukebox).toHaveBeenCalledWith('abc123', [mockTrack.id]));
+  });
+
+  test('closes the row menu after tapping "Send to Jukebox"', async () => {
+    localStorage.setItem('jukebox-enqueue-token', 'abc123');
+    useAuthStore.setState({ isAuthenticated: true });
+    apiService.submitToJukebox.mockResolvedValue({ data: [{ id: 1 }] });
+    renderTrack();
+
+    fireEvent.contextMenu(screen.getByText(/Test Track/).closest('.track-item'));
+    fireEvent.click(screen.getByText('🎉 Send to Jukebox'));
+
+    expect(screen.queryByTestId('track-menu-backdrop')).not.toBeInTheDocument();
   });
 });

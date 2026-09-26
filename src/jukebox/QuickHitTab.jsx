@@ -9,21 +9,22 @@ import JukeboxAlbumTile from './JukeboxAlbumTile';
 // no scroller here — the browse panel itself scrolls vertically (see
 // useTouchScroll in JukeboxBrowsePanel), which avoids the nested
 // horizontal-inside-vertical scroll conflict the old row had.
-const QuickHitTab = ({ onSelectAlbum }) => {
+const QuickHitTab = ({ onSelectAlbum, profileId = null }) => {
   const [albums, setAlbums] = useState(null);
   const [error, setError] = useState(false);
 
   const load = () => {
     setError(false);
     setAlbums(null);
-    apiService.getRecentAlbums(20)
+    apiService.getRecentAlbums(20, profileId)
       .then((response) => setAlbums(response.data))
       .catch(() => setError(true));
   };
 
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileId]);
 
   if (error) {
     return (
