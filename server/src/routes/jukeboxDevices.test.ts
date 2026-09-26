@@ -80,6 +80,19 @@ test('POST /jukebox/devices/:id/queue/:submissionId/delivered marks it delivered
   assert.equal((await jukeboxQueueService.listPending(device.id)).length, 0)
 })
 
+test('POST /jukebox/devices/:id/queue/:submissionId/delivered 403s for a different device\'s id', async () => {
+  const owner = await createUser('jdev-delivered-forbidden-owner')
+  const device = await createJukeboxDevice('jdev-delivered-forbidden-device', owner.id)
+  const otherDevice = await createJukeboxDevice('jdev-delivered-forbidden-other', owner.id)
+
+  const res = await app().request(`/jukebox/devices/${otherDevice.id}/queue/999999/delivered`, {
+    method: 'POST',
+    headers: { Cookie: deviceCookie(owner.id, owner.username, device.id) },
+  })
+
+  assert.equal(res.status, 403)
+})
+
 test('POST /jukebox/devices/:id/rotate-token returns a new token that differs from the old one', async () => {
   const owner = await createUser('jdev-rotate-owner')
   const device = await createJukeboxDevice('jdev-rotate-device', owner.id)
