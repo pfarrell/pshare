@@ -66,6 +66,10 @@ export async function authMiddleware(c: AppContext, next: Next) {
     c.set('user', user)
   }
 
+  if (user && !passwordChangedAfterToken && !deviceRevoked && decoded.deviceId != null) {
+    c.set('jukeboxDeviceId', decoded.deviceId)
+  }
+
   await next()
 }
 
@@ -90,6 +94,20 @@ export async function requireAdmin(c: AppContext, next: Next) {
 
   if (!user.admin) {
     return c.json({ error: 'Admin privileges required' }, 403)
+  }
+
+  await next()
+}
+
+// Middleware to require that the request's own device JWT matches the
+// route's :id param — one kiosk can never act on another device's queue,
+// even one owned by the same account.
+export async function requireOwnJukeboxDevice(c: AppContext, next: Next) {
+  const deviceId = c.get('jukeboxDeviceId')
+  const routeId = parseInt(c.req.param('id'))
+
+  if (deviceId == null || deviceId !== routeId) {
+    return c.json({ error: 'Not this device' }, 403)
   }
 
   await next()
