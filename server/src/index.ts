@@ -17,6 +17,7 @@ import profiles from './routes/profiles.js'
 import share from './routes/share.js'
 import lookup from './routes/lookup.js'
 import jukeboxPublic from './routes/jukeboxPublic.js'
+import jukeboxDevices from './routes/jukeboxDevices.js'
 import admin from './routes/admin/index.js'
 import upload from './routes/upload.js'
 import auth from './routes/auth.js'
@@ -99,6 +100,7 @@ const protectedApp = new Hono()
 protectedApp.use('*', requireAuth)
 
 protectedApp.route('/search', search)
+protectedApp.route('/jukebox/devices', jukeboxDevices)
 protectedApp.route('/download', downloads)
 protectedApp.route('/log', logs)
 protectedApp.route('/collection', collections)
