@@ -461,7 +461,14 @@ auth.get('/me', async (c) => {
       return c.json({ error: 'Not authenticated' }, 401)
     }
 
-    return c.json({ user: await buildUserPayload(user) })
+    const jukeboxDeviceId = c.get('jukeboxDeviceId') ?? null
+    const device = jukeboxDeviceId != null ? await jukeboxDeviceService.findById(jukeboxDeviceId) : null
+
+    return c.json({
+      user: await buildUserPayload(user),
+      jukeboxDeviceId,
+      jukeboxEnqueueToken: device?.enqueue_token ?? null,
+    })
   } catch (error: any) {
     console.error('Get user error:', error)
     return c.json({ error: 'Failed to get user info' }, 500)

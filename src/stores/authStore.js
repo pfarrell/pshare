@@ -9,6 +9,8 @@ export const useAuthStore = create((set) => ({
   isAuthenticated: false,
   isAdmin: false,
   loading: false,
+  jukeboxDeviceId: null,
+  jukeboxEnqueueToken: null,
 
   setUser: (user) => {
     set({
@@ -97,7 +99,7 @@ export const useAuthStore = create((set) => ({
     try {
       console.log('Initializing auth...');
       const response = await apiService.getMe();
-      const { user } = response.data;
+      const { user, jukeboxDeviceId, jukeboxEnqueueToken } = response.data;
       console.log('Auth initialized with user:', user);
 
       if (user.default_profile_id) {
@@ -109,6 +111,8 @@ export const useAuthStore = create((set) => ({
         user,
         isAuthenticated: true,
         isAdmin: user.admin || false,
+        jukeboxDeviceId: jukeboxDeviceId ?? null,
+        jukeboxEnqueueToken: jukeboxEnqueueToken ?? null,
         loading: false
       });
       return true;

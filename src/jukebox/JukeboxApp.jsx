@@ -6,10 +6,12 @@ import JukeboxBrowsePanel from './JukeboxBrowsePanel';
 import JukeboxTabBar from './JukeboxTabBar';
 import JukeboxKeyboard from './JukeboxKeyboard';
 import { useJukeboxKeyboardFocus } from './useJukeboxKeyboardFocus';
+import { useJukeboxQueueEvents } from './useJukeboxQueueEvents';
 import MusicPlayerWrapper from '../components/player/MusicPlayerWrapper';
 
 const JukeboxApp = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const jukeboxDeviceId = useAuthStore((s) => s.jukeboxDeviceId ?? null);
   // Which drawer tab is showing; null = drawer closed. Tapping the active tab
   // closes the drawer, tapping another switches, tapping any while closed opens.
   const [activeTab, setActiveTab] = useState(null);
@@ -23,6 +25,10 @@ const JukeboxApp = () => {
   // see JukeboxKeyboard.jsx. Called unconditionally (before the early return
   // below) since it's a hook.
   const focusedInput = useJukeboxKeyboardFocus();
+  // Opens the kiosk's own SSE connection for phone-enqueue delivery; a no-op
+  // until jukeboxDeviceId is known (pre-login). Called unconditionally, like
+  // useJukeboxKeyboardFocus above, since it's a hook.
+  useJukeboxQueueEvents(jukeboxDeviceId);
 
   const handleTabPress = (tab) => setActiveTab((current) => (current === tab ? null : tab));
   // Enqueueing something (a track, an album, an artist/collection shuffle)

@@ -131,3 +131,40 @@ test('PUT /auth/default-profile sets default_profile_id, null clears it', async 
   })
   assert.equal((await clearRes.json()).default_profile_id, null)
 })
+
+test('GET /auth/me includes jukeboxDeviceId and jukeboxEnqueueToken for a device session', async () => {
+  const passwordHash = await bcrypt.hash('correct-horse', 4)
+  const user = await createUser('auth-me-device', { password: passwordHash })
+
+  const login = await app().request('/auth/jukebox-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: user.username, password: 'correct-horse', deviceName: 'Kitchen' }),
+  })
+  const cookie = login.headers.get('set-cookie')
+  const device = await db.selectFrom('jukebox_devices').selectAll().where('user_id', '=', user.id).executeTakeFirstOrThrow()
+
+  const res = await app().request('/auth/me', { headers: { Cookie: cookie ?? '' } })
+  const body = await res.json()
+
+  assert.equal(body.jukeboxDeviceId, device.id)
+  assert.equal(body.jukeboxEnqueueToken, device.enqueue_token)
+})
+
+test('GET /auth/me returns null jukeboxDeviceId/jukeboxEnqueueToken for a normal (non-device) session', async () => {
+  const passwordHash = await bcrypt.hash('correct-horse', 4)
+  const user = await createUser('auth-me-normal', { password: passwordHash })
+
+  const login = await app().request('/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: user.username, password: 'correct-horse' }),
+  })
+  const cookie = login.headers.get('set-cookie')
+
+  const res = await app().request('/auth/me', { headers: { Cookie: cookie ?? '' } })
+  const body = await res.json()
+
+  assert.equal(body.jukeboxDeviceId, null)
+  assert.equal(body.jukeboxEnqueueToken, null)
+})

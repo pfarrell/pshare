@@ -4,6 +4,23 @@ import { vi } from 'vitest';
 import JukeboxApp from './JukeboxApp';
 
 vi.mock('../stores/authStore', () => ({ useAuthStore: vi.fn() }));
+// useAuthStore is mocked above as a single vi.fn() that ignores its selector
+// argument (mockReturnValue applies to every call), so JukeboxApp's second
+// selector — for jukeboxDeviceId, read by useJukeboxQueueEvents below — comes
+// back as whatever isAuthenticated was set to for that test, never actually
+// null. That's enough to make the hook believe a device is known and try to
+// open a real EventSource/fetch pending queue on every render, so its
+// dependencies are stubbed here with defensive defaults rather than exercised
+// for real — this file is about the tab/drawer shell, not the SSE hook
+// (covered by useJukeboxQueueEvents.test.js).
+vi.mock('../services/api', () => ({
+  apiService: {
+    getJukeboxPendingQueue: vi.fn(() => Promise.resolve({ data: [] })),
+    markJukeboxDelivered: vi.fn(() => Promise.resolve({})),
+    getTrack: vi.fn(() => Promise.resolve({ data: { track: {} } })),
+  },
+  jukeboxEventsUrl: vi.fn((id) => `/api/jukebox/devices/${id}/events`),
+}));
 vi.mock('./JukeboxLogin', () => ({ default: () => <div data-testid="jukebox-login" /> }));
 vi.mock('./JukeboxNowPlaying', () => ({ default: () => <div data-testid="jukebox-now-playing" /> }));
 vi.mock('../components/player/MusicPlayerWrapper', () => ({ default: () => <div data-testid="player-engine" /> }));
@@ -28,9 +45,18 @@ const activeTab = () => screen.getByTestId('jukebox-browse-panel').getAttribute(
 const pendingArtistName = () => screen.getByTestId('jukebox-browse-panel').getAttribute('data-pending-artist');
 const tab = (name) => screen.getByRole('button', { name });
 
+// jsdom has no native EventSource, and useJukeboxQueueEvents (run
+// unconditionally by JukeboxApp) opens one as soon as it sees a
+// non-null-ish deviceId — a no-op stub keeps that hook from throwing here.
+class NoOpEventSource {
+  addEventListener() {}
+  close() {}
+}
+
 beforeEach(() => {
   useJukeboxKeyboardFocus.mockReturnValue(null);
   useAuthStore.mockReturnValue(true);
+  global.EventSource = NoOpEventSource;
 });
 
 test('shows JukeboxLogin when not authenticated', () => {

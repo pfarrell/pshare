@@ -94,6 +94,28 @@ describe('authStore — initialize', () => {
 
     expect(useAuthStore.getState().loading).toBe(false);
   });
+
+  test('stores jukeboxDeviceId and jukeboxEnqueueToken from the /auth/me response', async () => {
+    apiService.getMe.mockResolvedValue({
+      data: { user: { id: 1, username: 'kitchen', admin: false, default_profile_id: null }, jukeboxDeviceId: 7, jukeboxEnqueueToken: 'abc123' },
+    });
+
+    await useAuthStore.getState().initialize();
+
+    expect(useAuthStore.getState().jukeboxDeviceId).toBe(7);
+    expect(useAuthStore.getState().jukeboxEnqueueToken).toBe('abc123');
+  });
+
+  test('stores null jukeboxDeviceId/jukeboxEnqueueToken for a normal session', async () => {
+    apiService.getMe.mockResolvedValue({
+      data: { user: { id: 1, username: 'someone', admin: false, default_profile_id: null }, jukeboxDeviceId: null, jukeboxEnqueueToken: null },
+    });
+
+    await useAuthStore.getState().initialize();
+
+    expect(useAuthStore.getState().jukeboxDeviceId).toBeNull();
+    expect(useAuthStore.getState().jukeboxEnqueueToken).toBeNull();
+  });
 });
 
 describe('authStore — login', () => {
