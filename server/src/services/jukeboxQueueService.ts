@@ -12,7 +12,7 @@ export const jukeboxQueueService = {
   },
 
   async rotateToken(deviceId: number): Promise<string> {
-    const token = crypto.randomBytes(24).toString('base64')
+    const token = crypto.randomBytes(24).toString('base64url')
     await db
       .updateTable('jukebox_devices')
       .set({ enqueue_token: token })

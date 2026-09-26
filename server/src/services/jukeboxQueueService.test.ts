@@ -37,6 +37,20 @@ test('rotateToken changes the token and the old one stops resolving', async () =
   assert.equal((await jukeboxQueueService.findDeviceByToken(newToken))?.id, device.id)
 })
 
+test('rotateToken always generates a URL-safe (base64url) token', async () => {
+  const { device } = await setup()
+
+  // A single call isn't a reliable check for a probabilistic bug (standard
+  // base64's '+' and '/' each have only a 1-in-64-per-character chance of
+  // appearing) — generate many tokens to build real confidence none of them
+  // contain a character that would break unencoded use in a URL path
+  // (see migration 054 and jukeboxPublic.ts).
+  for (let i = 0; i < 50; i++) {
+    const token = await jukeboxQueueService.rotateToken(device.id)
+    assert.doesNotMatch(token, /[+/=]/)
+  }
+})
+
 test('submit with a guest name creates a pending submission', async () => {
   const { device, track } = await setup()
   const submission = await jukeboxQueueService.submit(device.id, track.id, { name: 'Riley' })
