@@ -11,6 +11,7 @@ const JukeboxEnqueuePage = ({ token }) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState(null);
   const [confirmedId, setConfirmedId] = useState(null);
+  const [error, setError] = useState(null);
 
   const handleSaveName = (e) => {
     e.preventDefault();
@@ -22,14 +23,24 @@ const JukeboxEnqueuePage = ({ token }) => {
   const handleSearch = async (e) => {
     e.preventDefault();
     if (!query.trim()) return;
-    const res = await apiService.jukeboxSearch(token, query.trim());
-    setResults(res.data.results.filter((r) => r.type === 'track'));
+    setError(null);
+    try {
+      const res = await apiService.jukeboxSearch(token, query.trim());
+      setResults(res.data.tracks);
+    } catch {
+      setError('Something went wrong. Try again.');
+    }
   };
 
   const handleAdd = async (track) => {
-    await apiService.submitToJukebox(token, [track.id], getStoredGuestName());
-    setConfirmedId(track.id);
-    setTimeout(() => setConfirmedId((current) => (current === track.id ? null : current)), 2000);
+    setError(null);
+    try {
+      await apiService.submitToJukebox(token, [track.id], getStoredGuestName());
+      setConfirmedId(track.id);
+      setTimeout(() => setConfirmedId((current) => (current === track.id ? null : current)), 2000);
+    } catch {
+      setError('Could not add that track. Try again.');
+    }
   };
 
   if (!nameSaved) {
@@ -50,12 +61,14 @@ const JukeboxEnqueuePage = ({ token }) => {
         <button type="submit">Search</button>
       </form>
 
-      {results?.map((result) => (
-        <div key={result.data.id}>
-          <span>{result.data.title}</span>
-          <span>{result.data.artist?.name}</span>
-          <button type="button" onClick={() => handleAdd(result.data)}>Add to queue</button>
-          {confirmedId === result.data.id && <span>Added!</span>}
+      {error && <div className="jukebox-enqueue-error">{error}</div>}
+
+      {results?.map((track) => (
+        <div key={track.id}>
+          <span>{track.title}</span>
+          <span>{track.artist?.name}</span>
+          <button type="button" onClick={() => handleAdd(track)}>Add to queue</button>
+          {confirmedId === track.id && <span>Added!</span>}
         </div>
       ))}
     </div>

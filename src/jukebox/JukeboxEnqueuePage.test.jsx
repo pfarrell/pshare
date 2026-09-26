@@ -34,7 +34,7 @@ test('saving a name reveals the search box and does not prompt again on remount'
 test('searching shows results with an add-to-queue action', async () => {
   localStorage.setItem('jukebox-guest-name', 'Riley');
   apiService.jukeboxSearch.mockResolvedValue({
-    data: { results: [{ type: 'track', data: { id: 1, title: 'Found Track', artist: { name: 'Found Artist' } } }], tracks: [] },
+    data: { results: [], tracks: [{ id: 1, title: 'Found Track', artist: { name: 'Found Artist' } }] },
   });
   renderPage();
 
@@ -48,7 +48,7 @@ test('searching shows results with an add-to-queue action', async () => {
 test('tapping add-to-queue submits with the stored name and shows a confirmation', async () => {
   localStorage.setItem('jukebox-guest-name', 'Riley');
   apiService.jukeboxSearch.mockResolvedValue({
-    data: { results: [{ type: 'track', data: { id: 1, title: 'Found Track', artist: { name: 'Found Artist' } } }], tracks: [] },
+    data: { results: [], tracks: [{ id: 1, title: 'Found Track', artist: { name: 'Found Artist' } }] },
   });
   apiService.submitToJukebox.mockResolvedValue({ data: [{ id: 1 }] });
   renderPage();
@@ -66,4 +66,20 @@ test('renders no player chrome — no play button, no now-playing', async () => 
   localStorage.setItem('jukebox-guest-name', 'Riley');
   renderPage();
   expect(screen.queryByRole('button', { name: /^play$/i })).not.toBeInTheDocument();
+});
+
+test('a failed add-to-queue shows an error message instead of failing silently', async () => {
+  localStorage.setItem('jukebox-guest-name', 'Riley');
+  apiService.jukeboxSearch.mockResolvedValue({
+    data: { results: [], tracks: [{ id: 1, title: 'Found Track', artist: { name: 'Found Artist' } }] },
+  });
+  apiService.submitToJukebox.mockRejectedValueOnce(new Error('boom'));
+  renderPage();
+  fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: 'found' } });
+  fireEvent.submit(screen.getByRole('search'));
+  await waitFor(() => screen.getByText('Found Track'));
+
+  fireEvent.click(screen.getByRole('button', { name: /add to queue/i }));
+
+  await waitFor(() => expect(screen.getByText(/could not add that track/i)).toBeInTheDocument());
 });
