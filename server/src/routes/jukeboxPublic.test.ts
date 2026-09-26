@@ -3,10 +3,13 @@ import 'dotenv/config'
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { Hono } from 'hono'
+import jwt from 'jsonwebtoken'
 import { createArtist, createAlbum, createTrack, createUser, createJukeboxDevice, cleanupFixtures, fixtureName } from '../test/fixtures.js'
 import jukeboxPublic from './jukeboxPublic.js'
 
 after(cleanupFixtures)
+
+const JWT_SECRET = process.env.BEMUSED_JWT_SECRET || 'default-secret-change-me'
 
 const app = () => new Hono().route('/jukebox', jukeboxPublic)
 
@@ -46,6 +49,27 @@ test('POST /jukebox/:token/queue with a name creates a pending submission', asyn
   assert.equal(res.status, 201)
   assert.equal(body[0].submitted_by_name, 'Riley')
   assert.equal(body[0].track_id, track.id)
+})
+
+test('POST /jukebox/:token/queue with a valid auth cookie attributes to the user, ignoring name', async () => {
+  const owner = await createUser('jpub-queue-cookie-owner')
+  const device = await createJukeboxDevice('jpub-queue-cookie-device', owner.id)
+  const artist = await createArtist('jpub-queue-cookie-artist')
+  const album = await createAlbum('jpub-queue-cookie-album', artist.id)
+  const track = await createTrack('jpub-queue-cookie-track', album.id, artist.id)
+  const submitter = await createUser('jpub-queue-cookie-submitter')
+  const token = jwt.sign({ id: submitter.id, username: submitter.username, admin: submitter.admin }, JWT_SECRET, { expiresIn: '3650d' })
+
+  const res = await app().request(`/jukebox/${device.enqueue_token}/queue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: `auth=${token}` },
+    body: JSON.stringify({ trackIds: [track.id], name: 'Riley' }),
+  })
+  const body = await res.json()
+
+  assert.equal(res.status, 201)
+  assert.equal(body[0].submitted_by_user_id, submitter.id)
+  assert.equal(body[0].submitted_by_name, null)
 })
 
 test('POST /jukebox/:token/queue requires a name when there is no auth cookie', async () => {
