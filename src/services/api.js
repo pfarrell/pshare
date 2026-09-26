@@ -29,6 +29,8 @@ export const qs = (params) => {
   return parts.length ? `?${parts.join('&')}` : '';
 };
 
+export const jukeboxEventsUrl = (deviceId) => `${getBaseURL()}/jukebox/devices/${deviceId}/events`;
+
 const entityImages = (kind) => ({
   list: (id) => api.get(`/admin/${kind}/${id}/images`),
   add: (id, image_url, image_name, set_primary = false) =>
@@ -119,6 +121,13 @@ export const apiService = {
 
   // Search
   search: (query, offset, profileId = null) => api.get(`/search${qs({ q: query, offset: offset || undefined, profileId })}`),
+
+  // Jukebox phone enqueue (see docs/superpowers/specs/2026-09-25-jukebox-server-queue-design.md)
+  jukeboxSearch: (token, query) => api.get(`/jukebox/${token}/search${qs({ q: query })}`),
+  submitToJukebox: (token, trackIds, name) => api.post(`/jukebox/${token}/queue`, { trackIds, name: name || undefined }),
+  getJukeboxPendingQueue: (deviceId) => api.get(`/jukebox/devices/${deviceId}/queue/pending`),
+  markJukeboxDelivered: (deviceId, submissionId) => api.post(`/jukebox/devices/${deviceId}/queue/${submissionId}/delivered`),
+  rotateJukeboxToken: (deviceId) => api.post(`/jukebox/devices/${deviceId}/rotate-token`),
 
   // log
   log: (id) => api.get(`/log/${id}`),
