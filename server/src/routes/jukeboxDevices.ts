@@ -51,6 +51,7 @@ jukeboxDevices.get('/:id/events', requireOwnJukeboxDevice, async (c) => {
     stream.onAbort(() => {
       unsubQueue()
       unsubProfiles()
+      notify?.()
     })
 
     try {

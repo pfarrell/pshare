@@ -121,7 +121,7 @@ test('POST /jukebox/devices/:id/rotate-token 403s for a different device\'s id',
   assert.equal(res.status, 403)
 })
 
-test('GET /jukebox/devices/:id/events streams a queue-item-added event when a submission is broadcast', async () => {
+test('GET /jukebox/devices/:id/events streams a queue-item-added event when a submission is broadcast', { timeout: 5000 }, async () => {
   const owner = await createUser('jdev-events-owner')
   const device = await createJukeboxDevice('jdev-events-device', owner.id)
   const artist = await createArtist('jdev-events-artist')
@@ -152,7 +152,7 @@ test('GET /jukebox/devices/:id/events streams a queue-item-added event when a su
   await reader.cancel()
 })
 
-test('GET /jukebox/devices/:id/events streams a profiles-changed event on broadcast', async () => {
+test('GET /jukebox/devices/:id/events streams a profiles-changed event on broadcast', { timeout: 5000 }, async () => {
   const owner = await createUser('jdev-events-profiles-owner')
   const device = await createJukeboxDevice('jdev-events-profiles-device', owner.id)
 
