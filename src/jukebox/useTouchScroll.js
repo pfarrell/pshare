@@ -2,6 +2,29 @@ import { useRef, useCallback } from 'react';
 
 const DRAG_THRESHOLD_PX = 6;
 
+// --- Momentum (inertial coast after release) --------------------------------
+// Native momentum scrolling comes from the browser's own touch-scroll physics,
+// which this hook already bypasses entirely (see the file comment below) by
+// setting scrollTop/scrollLeft directly — so momentum has to be hand-rolled
+// too, on both input paths, the same way the drag itself is.
+//
+// Only the last VELOCITY_WINDOW_MS of movement feeds the release velocity, so
+// a drag that starts slow and ends in a fast flick reflects the flick, not an
+// average over the whole gesture.
+const VELOCITY_WINDOW_MS = 100;
+// Below this release speed (px/ms), it reads as "just stopped dragging" —
+// no coast.
+const MIN_FLING_VELOCITY = 0.05;
+// Clamped so a single noisy/duplicate event near release can't launch an
+// absurdly long coast.
+const MAX_FLING_VELOCITY = 3.5;
+// Velocity halves every this many ms — an exponential decay, so the coast
+// naturally reads as "fast, then trailing off," not a linear ramp-down.
+const MOMENTUM_HALF_LIFE_MS = 325;
+// Momentum stops once the coast has slowed to below this — imperceptible
+// beyond this point.
+const STOP_VELOCITY = 0.02;
+
 // Chromium's native drag-to-scroll proved unreliable on the actual kiosk
 // hardware, so this hook takes drag-to-scroll over directly, tracking raw
 // pointer deltas and setting scrollTop/scrollLeft manually.
@@ -40,12 +63,27 @@ export const useTouchScroll = ({ axis = 'y' } = {}) => {
     let startY = 0;
     let startScroll = 0;
     let dragging = false;
+    // Recent (time, position) samples along the active axis, for computing a
+    // release velocity — see the momentum section below.
+    let samples = [];
+    let momentumFrame = null;
 
+    const stopMomentum = () => {
+      if (momentumFrame != null) {
+        cancelAnimationFrame(momentumFrame);
+        momentumFrame = null;
+      }
+    };
+
+    // A fresh touch/click grabs the content immediately, same as iOS — any
+    // coast still in progress from a previous release is cancelled.
     const begin = (x, y) => {
+      stopMomentum();
       startX = x;
       startY = y;
       startScroll = axis === 'y' ? el.scrollTop : el.scrollLeft;
       dragging = false;
+      samples = [];
     };
 
     // Returns true when this movement is (part of) a scroll drag we've claimed.
@@ -69,7 +107,52 @@ export const useTouchScroll = ({ axis = 'y' } = {}) => {
       } else {
         el.scrollLeft = startScroll - delta;
       }
+
+      // Track raw position (not delta) — its rate of change is identical to
+      // delta's (they differ by the constant startX/startY), and keeping the
+      // window trimmed to the last VELOCITY_WINDOW_MS is simpler this way.
+      const now = performance.now();
+      samples.push({ t: now, pos: axis === 'y' ? y : x });
+      while (samples.length > 1 && now - samples[0].t > VELOCITY_WINDOW_MS) samples.shift();
+
       return true;
+    };
+
+    // Called on release. No-op unless the gesture was an actual drag (a tap
+    // never reaches here with `dragging` true) moving fast enough at the end
+    // to read as a flick.
+    const maybeStartMomentum = () => {
+      if (samples.length < 2) return;
+      const first = samples[0];
+      const last = samples[samples.length - 1];
+      const dt = last.t - first.t;
+      if (dt <= 0) return;
+
+      let velocity = (last.pos - first.pos) / dt;
+      if (Math.abs(velocity) < MIN_FLING_VELOCITY) return;
+      velocity = Math.sign(velocity) * Math.min(Math.abs(velocity), MAX_FLING_VELOCITY);
+
+      let lastFrameTime = performance.now();
+      const step = (frameTime) => {
+        const frameDt = frameTime - lastFrameTime;
+        lastFrameTime = frameTime;
+
+        const before = axis === 'y' ? el.scrollTop : el.scrollLeft;
+        const next = before - velocity * frameDt;
+        if (axis === 'y') el.scrollTop = next; else el.scrollLeft = next;
+        const after = axis === 'y' ? el.scrollTop : el.scrollLeft;
+
+        velocity *= Math.pow(0.5, frameDt / MOMENTUM_HALF_LIFE_MS);
+
+        // Stop once imperceptibly slow, or once a scroll bound has clamped
+        // the assignment and there's no further room to coast into.
+        if (Math.abs(velocity) < STOP_VELOCITY || after === before) {
+          momentumFrame = null;
+          return;
+        }
+        momentumFrame = requestAnimationFrame(step);
+      };
+      momentumFrame = requestAnimationFrame(step);
     };
 
     // ---- Touch events ---------------------------------------------------
@@ -84,6 +167,7 @@ export const useTouchScroll = ({ axis = 'y' } = {}) => {
     };
 
     const handleTouchEnd = () => {
+      if (dragging) maybeStartMomentum();
       dragging = false;
     };
 
@@ -130,6 +214,7 @@ export const useTouchScroll = ({ axis = 'y' } = {}) => {
         suppressTimer = setTimeout(() => {
           suppressClick = false;
         }, 0);
+        maybeStartMomentum();
       }
       dragging = false;
     };
@@ -160,6 +245,7 @@ export const useTouchScroll = ({ axis = 'y' } = {}) => {
     el.addEventListener('selectstart', handleSelectStart);
 
     cleanupRef.current = () => {
+      stopMomentum();
       clearTimeout(suppressTimer);
       el.removeEventListener('touchstart', handleTouchStart);
       el.removeEventListener('touchmove', handleTouchMove);
