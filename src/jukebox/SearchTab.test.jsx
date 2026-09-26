@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor, within, act } from '@testing-librar
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import SearchTab from './SearchTab';
-import { __resetProfilesCacheForTests } from '../utils/profilesCache';
+import { __resetProfilesCacheForTests, invalidateProfilesCache } from '../utils/profilesCache';
 import { useProfileFilterStore } from '../stores/profileFilterStore';
 
 vi.mock('../services/api', () => ({
@@ -154,6 +154,32 @@ test('keeps an active profile id that is still present in the fetched list', asy
 
   await waitFor(() => expect(screen.getByText('Kids')).toBeInTheDocument());
   expect(useProfileFilterStore.getState().activeProfileId).toBe(1);
+});
+
+test('picks up a profile rename after an external invalidate, without unmounting', async () => {
+  useProfileFilterStore.setState({ activeProfileId: 1 });
+  apiService.getProfiles.mockResolvedValue({ data: [{ id: 1, name: 'Kids', tags: [] }] });
+  renderTab();
+  await waitFor(() => expect(screen.getByText('Kids')).toBeInTheDocument());
+
+  apiService.getProfiles.mockResolvedValue({ data: [{ id: 1, name: 'Renamed Kids', tags: [] }] });
+  invalidateProfilesCache();
+
+  await waitFor(() => expect(screen.getByText('Renamed Kids')).toBeInTheDocument());
+  expect(screen.queryByText('Kids')).not.toBeInTheDocument();
+});
+
+test('clears an active profile id that is deleted while mounted, after an external invalidate', async () => {
+  useProfileFilterStore.setState({ activeProfileId: 1 });
+  apiService.getProfiles.mockResolvedValue({ data: [{ id: 1, name: 'Kids', tags: [] }] });
+  renderTab();
+  await waitFor(() => expect(screen.getByText('Kids')).toBeInTheDocument());
+
+  apiService.getProfiles.mockResolvedValue({ data: [] });
+  invalidateProfilesCache();
+
+  await waitFor(() => expect(useProfileFilterStore.getState().activeProfileId).toBeNull());
+  expect(screen.queryByText('Kids')).not.toBeInTheDocument();
 });
 
 test('passes the active profile id to getRecentAlbums (Quick Hit)', async () => {

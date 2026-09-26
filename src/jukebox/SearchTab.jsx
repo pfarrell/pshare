@@ -7,7 +7,7 @@ import JukeboxCollectionTile from './JukeboxCollectionTile';
 import QuickHitTab from './QuickHitTab';
 import Track from '../components/Track';
 import { useProfileFilterStore } from '../stores/profileFilterStore';
-import { getProfilesCached } from '../utils/profilesCache';
+import { getProfilesCached, subscribeProfilesInvalidated } from '../utils/profilesCache';
 
 // Artists, albums, playlists and collections all drill into a browse view
 // (via onSelectArtist/onSelectAlbum/onSelectPlaylist/onSelectCollection, all
@@ -54,11 +54,24 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
   const { activeProfileId } = useProfileFilterStore();
   const [activeProfileName, setActiveProfileName] = useState(null);
 
+  // SearchTab is never unmounted on a kiosk (same as JukeboxProfilePicker),
+  // so a profile rename/delete elsewhere only reaches this always-visible
+  // label if something pushes it. An incrementing counter, not a
+  // null-reset, because the picker's own reset-to-null approach has a known
+  // (accepted, spec-acknowledged) race where a same-value setState(null)
+  // while already null doesn't trigger a re-render — a counter always
+  // changes value, so it can't hit that.
+  const [profilesEpoch, setProfilesEpoch] = useState(0);
+  useEffect(() => subscribeProfilesInvalidated(() => setProfilesEpoch((n) => n + 1)), []);
+
   // Same self-healing check as ProfileFilterChip (which the kiosk doesn't
   // render): if the active id isn't in the real list any more — profile
   // deleted, or a stale id in localStorage — clear it in the shared store
   // rather than silently filtering everything down to nothing, since the
-  // backend treats an unrecognized profileId as "no match".
+  // backend treats an unrecognized profileId as "no match". Re-runs on
+  // profilesEpoch too, so a profile rename or deletion that happens while
+  // this component is mounted (i.e. always, on a kiosk) is picked up
+  // without a manual reload.
   useEffect(() => {
     if (!activeProfileId) { setActiveProfileName(null); return; }
     getProfilesCached().then((res) => {
@@ -66,7 +79,7 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
       if (!found) useProfileFilterStore.getState().clearProfile();
       setActiveProfileName(found?.name ?? null);
     }).catch(() => setActiveProfileName(null));
-  }, [activeProfileId]);
+  }, [activeProfileId, profilesEpoch]);
 
   // Guards against a slow earlier request's response landing after a faster
   // later one and clobbering it — only the response matching the most
