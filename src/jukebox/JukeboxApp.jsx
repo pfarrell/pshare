@@ -57,7 +57,7 @@ const JukeboxApp = () => {
 
   return (
     <div className="jukebox-app">
-      <JukeboxNowPlaying />
+      <JukeboxNowPlaying onDismiss={closeAll} />
       <JukeboxBrowsePanel
         activeTab={activeTab}
         onEnqueue={closeAll}

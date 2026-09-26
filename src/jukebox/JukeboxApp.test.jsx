@@ -22,7 +22,13 @@ vi.mock('../services/api', () => ({
   jukeboxEventsUrl: vi.fn((id) => `/api/jukebox/devices/${id}/events`),
 }));
 vi.mock('./JukeboxLogin', () => ({ default: () => <div data-testid="jukebox-login" /> }));
-vi.mock('./JukeboxNowPlaying', () => ({ default: () => <div data-testid="jukebox-now-playing" /> }));
+vi.mock('./JukeboxNowPlaying', () => ({
+  default: ({ onDismiss }) => (
+    <div data-testid="jukebox-now-playing">
+      <button onClick={onDismiss}>trigger-dismiss</button>
+    </div>
+  ),
+}));
 vi.mock('../components/player/MusicPlayerWrapper', () => ({ default: () => <div data-testid="player-engine" /> }));
 vi.mock('./JukeboxProgressLine', () => ({ default: () => <div data-testid="progress-line" /> }));
 vi.mock('./JukeboxBrowsePanel', () => ({
@@ -135,6 +141,17 @@ test('passes the drawer an onEnqueue callback that closes the drawer when called
   expect(activeTab()).toBe('browse');
 
   fireEvent.click(screen.getByText('trigger-enqueue'));
+
+  expect(activeTab()).toBe('none');
+  expect(tab('Browse')).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('tapping the now-playing screen closes the drawer', () => {
+  renderApp();
+  fireEvent.click(tab('Browse'));
+  expect(activeTab()).toBe('browse');
+
+  fireEvent.click(screen.getByText('trigger-dismiss'));
 
   expect(activeTab()).toBe('none');
   expect(tab('Browse')).toHaveAttribute('aria-pressed', 'false');

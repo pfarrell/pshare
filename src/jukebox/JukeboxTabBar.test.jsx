@@ -52,3 +52,11 @@ test('includes the progress line', () => {
   renderBar();
   expect(screen.getByTestId('progress-line')).toBeInTheDocument();
 });
+
+test('the settings gear sits on the left, before the tabs', () => {
+  renderBar();
+  const gear = screen.getByRole('button', { name: /profile settings/i });
+  const [firstTab] = tabButtons();
+  // DOCUMENT_POSITION_FOLLOWING (4): firstTab comes after the gear.
+  expect(gear.compareDocumentPosition(firstTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});

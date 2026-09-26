@@ -2845,7 +2845,7 @@ body:has(.jukebox-app) {
   flex: none;
   display: flex;
   width: 3.5rem;
-  border-left: 1px solid #2c3e50;
+  border-right: 1px solid #2c3e50;
 }
 .jukebox-app .jukebox-tab-bar .jukebox-profile-picker > button {
   flex: 1;
@@ -2861,7 +2861,7 @@ body:has(.jukebox-app) {
 .jukebox-app .jukebox-profile-picker-popover {
   position: absolute;
   bottom: 100%;
-  right: 0;
+  left: 0;
   margin-bottom: 0.4rem;
   min-width: 12rem;
   display: flex;
@@ -3240,6 +3240,20 @@ body:has(.jukebox-app) {
   --color-border: rgba(255, 255, 255, 0.15);
   --color-bg-page: rgba(255, 255, 255, 0.08);
   --color-bg-surface: transparent;
+}
+
+/* Next Up's "reveal one more played track" control (JukeboxNextUpTab.jsx) —
+   sits above the (already-played-hidden-by-default) queue list. */
+.jukebox-app .jukebox-next-up-show-previous {
+  align-self: stretch;
+  padding: 0.6rem;
+  margin-bottom: 0.25rem;
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 0.5rem;
+  cursor: pointer;
 }
 
 /* Album tracks panel: sits immediately left of .jukebox-browse-panel (which is

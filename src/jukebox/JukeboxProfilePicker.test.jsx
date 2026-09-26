@@ -53,6 +53,42 @@ describe('JukeboxProfilePicker', () => {
     expect(screen.queryByText('Kids')).not.toBeInTheDocument();
   });
 
+  test('tapping the gear again while open closes it', async () => {
+    render(<JukeboxProfilePicker />);
+    const gear = screen.getByRole('button', { name: /profile settings/i });
+    fireEvent.click(gear);
+    await waitFor(() => screen.getByText('Kids'));
+
+    fireEvent.click(gear);
+
+    expect(screen.queryByText('Kids')).not.toBeInTheDocument();
+  });
+
+  test('a pointerdown anywhere outside the picker closes it', async () => {
+    render(
+      <div>
+        <div data-testid="outside">Now Playing</div>
+        <JukeboxProfilePicker />
+      </div>
+    );
+    fireEvent.click(screen.getByRole('button', { name: /profile settings/i }));
+    await waitFor(() => screen.getByText('Kids'));
+
+    fireEvent.pointerDown(screen.getByTestId('outside'));
+
+    expect(screen.queryByText('Kids')).not.toBeInTheDocument();
+  });
+
+  test('a pointerdown inside the picker (e.g. selecting a profile) does not close it', async () => {
+    render(<JukeboxProfilePicker />);
+    fireEvent.click(screen.getByRole('button', { name: /profile settings/i }));
+    await waitFor(() => screen.getByText('Kids'));
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Kids' }));
+
+    expect(screen.getByText('Kids')).toBeInTheDocument();
+  });
+
   test('shows a "Show QR code" entry alongside the profile list', async () => {
     render(<JukeboxProfilePicker />);
     fireEvent.click(screen.getByRole('button', { name: /profile settings/i }));

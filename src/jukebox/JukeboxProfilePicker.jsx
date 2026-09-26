@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useProfileFilterStore } from '../stores/profileFilterStore';
 import { useAuthStore } from '../stores/authStore';
 import { getProfilesCached, subscribeProfilesInvalidated } from '../utils/profilesCache';
 import JukeboxQrCode from './JukeboxQrCode';
 
-// Gear-icon popover living in the tab bar's right edge (rendered by
+// Gear-icon popover living in the tab bar's left edge (rendered by
 // JukeboxTabBar), as a slim finger-width slot rather than a third equal-size
-// tab — the jukebox equivalent of ProfileFilterChip, but kiosk-styled and
-// without an outside-click dismiss (no page behind it to click through to on
-// a touch-only kiosk; a dedicated close control is more reliable there).
-// Applying a profile does NOT close this — see
+// tab — the jukebox equivalent of ProfileFilterChip, but kiosk-styled.
+// Tapping the gear again, or tapping anywhere else on screen (the Now
+// Playing view, a footer tab, ...), dismisses it — see the outside-click
+// effect below. Applying a profile does NOT close this — see
 // docs/superpowers/specs/2026-09-24-profiles-design.md Design §5: this is
 // a filter/settings change, not a playback action, so it stays open with
 // the new selection highlighted until explicitly dismissed.
@@ -21,11 +21,26 @@ const JukeboxProfilePicker = () => {
   const deviceId = useAuthStore((s) => s.jukeboxDeviceId);
   const initialToken = useAuthStore((s) => s.jukeboxEnqueueToken);
   const [token, setToken] = useState(initialToken);
+  const containerRef = useRef(null);
 
   useEffect(() => {
     if (!open || profiles !== null) return;
     getProfilesCached().then((res) => setProfiles(res.data)).catch(() => setProfiles([]));
   }, [open, profiles]);
+
+  // Outside-click dismiss: covers the Now Playing screen and the tab bar's
+  // own Browse/Next Up buttons alike, since both sit outside this
+  // container. `pointerdown` (not `click`) so it fires before whatever's
+  // under the pointer runs its own handler, matching the touch-first
+  // kiosk interaction model.
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (e) => {
+      if (!containerRef.current?.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [open]);
 
   // This component never unmounts on a kiosk (rendered by the always-present
   // JukeboxTabBar), so a profile created/edited/deleted elsewhere only
@@ -42,8 +57,8 @@ const JukeboxProfilePicker = () => {
   const qrUrl = `${window.location.origin}${import.meta.env.DEV ? '' : '/pshare/app'}/jukebox/${token}`;
 
   return (
-    <div className="jukebox-profile-picker">
-      <button type="button" aria-label="Profile settings" onClick={() => setOpen(true)}>⚙</button>
+    <div className="jukebox-profile-picker" ref={containerRef}>
+      <button type="button" aria-label="Profile settings" onClick={() => setOpen((current) => !current)}>⚙</button>
       {open && (
         <div className="jukebox-profile-picker-popover">
           <div className="jukebox-profile-picker-header">
