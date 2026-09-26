@@ -3,6 +3,7 @@
 import { Hono } from 'hono'
 import { db } from '../../db/database.js'
 import { profilesService } from '../../services/profilesService.js'
+import { sseBroadcaster } from '../../services/sseBroadcaster.js'
 
 const router = new Hono()
 
@@ -39,6 +40,7 @@ router.post('/profiles', async (c) => {
     if (existing) return c.json({ error: 'A profile with that name already exists' }, 409)
 
     const created = await profilesService.create(name, tagIds)
+    sseBroadcaster.broadcastProfilesChanged()
     return c.json(created, 201)
   } catch (error) {
     console.error('Error creating profile:', error)
@@ -65,6 +67,7 @@ router.put('/profiles/:id', async (c) => {
 
     const updated = await profilesService.update(id, name, tagIds)
     if (!updated) return c.json({ error: 'Profile not found' }, 404)
+    sseBroadcaster.broadcastProfilesChanged()
     return c.json(updated)
   } catch (error) {
     console.error('Error updating profile:', error)
@@ -78,6 +81,7 @@ router.delete('/profiles/:id', async (c) => {
     const id = parseInt(c.req.param('id'))
     const removed = await profilesService.remove(id)
     if (!removed) return c.json({ error: 'Profile not found' }, 404)
+    sseBroadcaster.broadcastProfilesChanged()
     return c.json({ success: true })
   } catch (error) {
     console.error('Error deleting profile:', error)

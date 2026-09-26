@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken'
 import { createArtist, createAlbum, createTrack, createUser, createJukeboxDevice, cleanupFixtures } from '../test/fixtures.js'
 import { authMiddleware, requireAuth } from '../middleware/auth.js'
 import { jukeboxQueueService } from '../services/jukeboxQueueService.js'
+import { sseBroadcaster } from '../services/sseBroadcaster.js'
 import jukeboxDevices from './jukeboxDevices.js'
 
 after(cleanupFixtures)
@@ -114,6 +115,69 @@ test('POST /jukebox/devices/:id/rotate-token 403s for a different device\'s id',
 
   const res = await app().request(`/jukebox/devices/${otherDevice.id}/rotate-token`, {
     method: 'POST',
+    headers: { Cookie: deviceCookie(owner.id, owner.username, device.id) },
+  })
+
+  assert.equal(res.status, 403)
+})
+
+test('GET /jukebox/devices/:id/events streams a queue-item-added event when a submission is broadcast', async () => {
+  const owner = await createUser('jdev-events-owner')
+  const device = await createJukeboxDevice('jdev-events-device', owner.id)
+  const artist = await createArtist('jdev-events-artist')
+  const album = await createAlbum('jdev-events-album', artist.id)
+  const track = await createTrack('jdev-events-track', album.id, artist.id)
+
+  const res = await app().request(`/jukebox/devices/${device.id}/events`, {
+    headers: { Cookie: deviceCookie(owner.id, owner.username, device.id) },
+  })
+  assert.equal(res.status, 200)
+  assert.equal(res.headers.get('content-type'), 'text/event-stream')
+
+  const reader = res.body!.getReader()
+  const decoder = new TextDecoder()
+
+  // Give the handler a tick to reach its subscribe call before broadcasting —
+  // it's synchronous from the caller's perspective (subscribeToDevice runs
+  // before the handler's first await), but a tick of slack keeps this robust.
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  const submission = await jukeboxQueueService.submit(device.id, track.id, { name: 'Riley' })
+  sseBroadcaster.broadcastQueueItemAdded(device.id, submission)
+
+  const { value } = await reader.read()
+  const text = decoder.decode(value)
+
+  assert.match(text, /event: queue-item-added/)
+  assert.match(text, new RegExp(`"id":${submission.id}`))
+  await reader.cancel()
+})
+
+test('GET /jukebox/devices/:id/events streams a profiles-changed event on broadcast', async () => {
+  const owner = await createUser('jdev-events-profiles-owner')
+  const device = await createJukeboxDevice('jdev-events-profiles-device', owner.id)
+
+  const res = await app().request(`/jukebox/devices/${device.id}/events`, {
+    headers: { Cookie: deviceCookie(owner.id, owner.username, device.id) },
+  })
+  const reader = res.body!.getReader()
+  const decoder = new TextDecoder()
+
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  sseBroadcaster.broadcastProfilesChanged()
+
+  const { value } = await reader.read()
+  const text = decoder.decode(value)
+
+  assert.match(text, /event: profiles-changed/)
+  await reader.cancel()
+})
+
+test('GET /jukebox/devices/:id/events 403s for a different device\'s id', async () => {
+  const owner = await createUser('jdev-events-forbidden-owner')
+  const device = await createJukeboxDevice('jdev-events-forbidden-device', owner.id)
+  const otherDevice = await createJukeboxDevice('jdev-events-forbidden-other', owner.id)
+
+  const res = await app().request(`/jukebox/devices/${otherDevice.id}/events`, {
     headers: { Cookie: deviceCookie(owner.id, owner.username, device.id) },
   })
 

@@ -6,8 +6,10 @@
 // ever act on its own queue, even one owned by the same account as another
 // device.
 import { Hono } from 'hono'
+import { streamSSE } from 'hono/streaming'
 import { requireOwnJukeboxDevice } from '../middleware/auth.js'
 import { jukeboxQueueService } from '../services/jukeboxQueueService.js'
+import { sseBroadcaster } from '../services/sseBroadcaster.js'
 
 const jukeboxDevices = new Hono()
 
@@ -29,6 +31,44 @@ jukeboxDevices.post('/:id/rotate-token', requireOwnJukeboxDevice, async (c) => {
   const deviceId = parseInt(c.req.param('id'))
   const enqueue_token = await jukeboxQueueService.rotateToken(deviceId)
   return c.json({ enqueue_token })
+})
+
+jukeboxDevices.get('/:id/events', requireOwnJukeboxDevice, async (c) => {
+  const deviceId = parseInt(c.req.param('id'))
+
+  return streamSSE(c, async (stream) => {
+    const pending: Array<{ event: string; data: string }> = []
+    let notify: (() => void) | null = null
+
+    const push = (event: string, data: unknown) => {
+      pending.push({ event, data: JSON.stringify(data) })
+      notify?.()
+    }
+
+    const unsubQueue = sseBroadcaster.subscribeToDevice(deviceId, (payload) => push('queue-item-added', payload))
+    const unsubProfiles = sseBroadcaster.subscribeToProfiles(() => push('profiles-changed', {}))
+
+    stream.onAbort(() => {
+      unsubQueue()
+      unsubProfiles()
+    })
+
+    try {
+      while (!stream.closed && !stream.aborted) {
+        if (pending.length === 0) {
+          await new Promise<void>((resolve) => { notify = resolve })
+          notify = null
+        }
+        while (pending.length > 0) {
+          const next = pending.shift()!
+          await stream.writeSSE(next)
+        }
+      }
+    } finally {
+      unsubQueue()
+      unsubProfiles()
+    }
+  })
 })
 
 export default jukeboxDevices

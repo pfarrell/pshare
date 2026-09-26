@@ -6,6 +6,7 @@ import adminProfiles from './profiles.js'
 import { requireAdmin } from '../../middleware/auth.js'
 import { createTag, createProfile, createUser, cleanupFixtures, fixtureName } from '../../test/fixtures.js'
 import { db } from '../../db/database.js'
+import { sseBroadcaster } from '../../services/sseBroadcaster.js'
 
 after(cleanupFixtures)
 
@@ -74,6 +75,18 @@ test('POST /admin/profiles rejects a duplicate name', async () => {
   const existing = await createProfile('admin-dupe-profile', [])
   const res = await postJson(appWithUser(), '/profiles', { name: existing.name, tag_ids: [(await createTag('admin-dupe-tag')).id] })
   assert.equal(res.status, 409)
+})
+
+test('POST /admin/profiles broadcasts profiles-changed', async () => {
+  const calls: number[] = []
+  const unsub = sseBroadcaster.subscribeToProfiles(() => calls.push(1))
+  const tag = await createTag('admin-profiles-broadcast-tag')
+
+  const res = await postJson(appWithUser(), '/profiles', { name: fixtureName('broadcast-profile'), tag_ids: [tag.id] })
+
+  assert.equal(res.status, 201)
+  assert.equal(calls.length, 1)
+  unsub()
 })
 
 test('PUT /admin/profiles/:id renames and replaces the tag set', async () => {
