@@ -14,6 +14,8 @@ import AddToPlaylistModal from './AddToPlaylistModal';
 import TrackNotesModal from './TrackNotesModal';
 import PlayButton from './PlayButton';
 import { shareLink } from '../utils/shareLink';
+import { getStoredJukeboxToken } from '../utils/jukeboxEnqueueToken';
+import toast from 'react-hot-toast';
 
 // forwardRef lets Album.jsx grab the DOM node of the track that arrived
 // playing (via the mobile now-playing tap) and scroll it into view.
@@ -185,6 +187,12 @@ const Track = forwardRef(({ track, index, trackCount, includeMeta = false, isPla
     ctxMenu.close();
   };
 
+  const handleSendToJukebox = () => {
+    const token = getStoredJukeboxToken();
+    if (!token) return;
+    apiService.submitToJukebox(token, [track.id], undefined).then(() => toast.success('Sent to jukebox')).catch(() => toast.error('Failed to send to jukebox'));
+  };
+
   const playMenuActions = [
     { key: 'play-now', icon: '▶', label: 'Play Now', onClick: handlePlayNow },
     { key: 'play-next', icon: '⏭', label: 'Play Next', onClick: handlePlayNext, className: pressedButton === 'next' ? 'menu-btn-pressed' : '' },
@@ -206,6 +214,7 @@ const Track = forwardRef(({ track, index, trackCount, includeMeta = false, isPla
     },
     downloadsEnabled && isAuthenticated && track.download_url && !isMobile && { key: 'download', icon: '⬇', label: 'Download', onClick: handleDownload },
     isAuthenticated && { key: 'share', icon: '📤', label: 'Share', onClick: handleShare },
+    isAuthenticated && getStoredJukeboxToken() && { key: 'jukebox', icon: '🎉', label: 'Send to Jukebox', onClick: handleSendToJukebox },
   ];
 
   return (
