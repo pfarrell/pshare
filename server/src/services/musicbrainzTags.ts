@@ -9,6 +9,9 @@
 // docs/superpowers/specs/2026-09-27-musicbrainz-tag-backfill-design.md.
 
 import { mbDb } from '../db/musicbrainzDb.js'
+import { db } from '../db/database.js'
+import type { Transaction } from 'kysely'
+import type { Database } from '../db/database.js'
 
 export interface MbTagRow {
   name: string
@@ -37,4 +40,76 @@ export async function fetchAlbumTagsFromMirror(releaseMbid: string): Promise<MbT
     .execute()
 
   return rows.map(r => ({ name: r.name, count: r.count }))
+}
+
+async function upsertMbTagId(trx: Transaction<Database>, name: string): Promise<number> {
+  const inserted = await trx
+    .insertInto('mb_tags')
+    .values({ name })
+    .onConflict(oc => oc.column('name').doUpdateSet({ name }))
+    .returning('id')
+    .executeTakeFirstOrThrow()
+  return inserted.id
+}
+
+export async function applyArtistTags(artistId: number, mbid: string, tagRows: MbTagRow[]): Promise<void> {
+  await db.transaction().execute(async trx => {
+    // Delete rows from superseded mbids
+    await trx
+      .deleteFrom('artist_mb_tags')
+      .where('artist_id', '=', artistId)
+      .where('source_mbid', '!=', mbid)
+      .execute()
+
+    // Delete rows from the current mbid (we'll re-insert only what's in tagRows)
+    await trx
+      .deleteFrom('artist_mb_tags')
+      .where('artist_id', '=', artistId)
+      .where('source_mbid', '=', mbid)
+      .execute()
+
+    for (const row of tagRows) {
+      const tagId = await upsertMbTagId(trx, row.name)
+      await trx
+        .insertInto('artist_mb_tags')
+        .values({ artist_id: artistId, source_mbid: mbid, tag_id: tagId, tag_count: row.count })
+        .execute()
+    }
+  })
+}
+
+export async function applyAlbumTags(albumId: number, mbid: string, tagRows: MbTagRow[]): Promise<void> {
+  await db.transaction().execute(async trx => {
+    // Delete rows from superseded mbids
+    await trx
+      .deleteFrom('album_mb_tags')
+      .where('album_id', '=', albumId)
+      .where('source_mbid', '!=', mbid)
+      .execute()
+
+    // Delete rows from the current mbid (we'll re-insert only what's in tagRows)
+    await trx
+      .deleteFrom('album_mb_tags')
+      .where('album_id', '=', albumId)
+      .where('source_mbid', '=', mbid)
+      .execute()
+
+    for (const row of tagRows) {
+      const tagId = await upsertMbTagId(trx, row.name)
+      await trx
+        .insertInto('album_mb_tags')
+        .values({ album_id: albumId, source_mbid: mbid, tag_id: tagId, tag_count: row.count })
+        .execute()
+    }
+  })
+}
+
+export async function captureArtistTags(artistId: number, mbid: string): Promise<void> {
+  const tagRows = await fetchArtistTagsFromMirror(mbid)
+  await applyArtistTags(artistId, mbid, tagRows)
+}
+
+export async function captureAlbumTags(albumId: number, mbid: string): Promise<void> {
+  const tagRows = await fetchAlbumTagsFromMirror(mbid)
+  await applyAlbumTags(albumId, mbid, tagRows)
 }
