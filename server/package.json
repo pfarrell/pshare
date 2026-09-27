@@ -27,6 +27,7 @@
     "db:reset": "bash scripts/db-reset.sh"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
     "@hono/node-server": "^1.13.0",
     "arctic": "^3.7.0",
     "bcrypt": "^6.0.0",
