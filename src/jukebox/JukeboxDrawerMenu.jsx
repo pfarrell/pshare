@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 
-const LABELS = { browse: 'Browse', nextup: 'Next Up', settings: 'Settings' };
-const ALL_DESTINATIONS = ['browse', 'nextup', 'settings'];
+const LABELS = { browse: 'Browse', nextup: 'Next Up', settings: 'Settings', aimix: 'AI Mix' };
+const ALL_DESTINATIONS = ['browse', 'nextup', 'settings', 'aimix'];
 
 // Small round icon, fixed in a corner of the drawer (see JukeboxBrowsePanel),
 // that replaces the old bottom tab bar's Next Up/Browse tabs and settings
-// gear. Its popover only ever lists the two destinations you're not
-// currently on, so there's no separate "back to Browse" control to design —
-// the same menu takes you anywhere, including back.
+// gear. Its popover only ever lists the destinations you're not currently
+// on, so there's no separate "back to Browse" control to design — the same
+// menu takes you anywhere, including back.
 const JukeboxDrawerMenu = ({ activeDestination, onSelectDestination }) => {
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);

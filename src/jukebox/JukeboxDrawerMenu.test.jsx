@@ -14,21 +14,23 @@ test('starts closed, opens on tapping the menu icon', () => {
   expect(screen.getByRole('button', { name: 'Next Up' })).toBeInTheDocument();
 });
 
-test('lists only the two destinations that are not currently active', () => {
+test('lists only the destinations that are not currently active', () => {
   renderMenu({ activeDestination: 'browse' });
   fireEvent.click(screen.getByRole('button', { name: /drawer menu/i }));
 
   expect(screen.getByRole('button', { name: 'Next Up' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'AI Mix' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Browse' })).not.toBeInTheDocument();
 });
 
-test('shows Browse and Settings when Next Up is active', () => {
+test('shows the other three destinations when Next Up is active', () => {
   renderMenu({ activeDestination: 'nextup' });
   fireEvent.click(screen.getByRole('button', { name: /drawer menu/i }));
 
   expect(screen.getByRole('button', { name: 'Browse' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'AI Mix' })).toBeInTheDocument();
 });
 
 test('selecting a destination reports it and closes the menu', () => {

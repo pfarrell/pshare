@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import SearchTab from './SearchTab';
 import JukeboxNextUpTab from './JukeboxNextUpTab';
 import JukeboxSettingsTab from './JukeboxSettingsTab';
+import JukeboxAiMixTab from './JukeboxAiMixTab';
 import JukeboxDrawerMenu from './JukeboxDrawerMenu';
 import JukeboxArtistView from './JukeboxArtistView';
 import JukeboxCollectionView from './JukeboxCollectionView';
@@ -30,11 +31,12 @@ import { useTouchScroll } from './useTouchScroll';
 // select an album; only Search can select a playlist so far. Both panels
 // close with the drawer.
 //
-// There are three destinations: 'browse' (Search, with Quick Hit as its
-// empty-box state — see SearchTab.jsx), 'nextup', and 'settings' (profile
-// filter + QR code, formerly the standalone JukeboxProfilePicker gear).
-// Settings and Next Up both unmount when switched away from, same as before —
-// only Search's query/results are worth preserving hidden-but-mounted.
+// There are four destinations: 'browse' (Search, with Quick Hit as its
+// empty-box state — see SearchTab.jsx), 'nextup', 'settings' (profile
+// filter + QR code, formerly the standalone JukeboxProfilePicker gear), and
+// 'aimix' (prompt-driven playlist generation — see JukeboxAiMixTab.jsx).
+// Settings, Next Up, and AI Mix all unmount when switched away from, same as
+// before — only Search's query/results are worth preserving hidden-but-mounted.
 const JukeboxBrowsePanel = ({ activeDestination, onSelectDestination, onEnqueue, pendingArtist, onJumpToArtist, onPendingArtistConsumed }) => {
   const [viewStack, setViewStack] = useState([]);
   const [selectedAlbum, setSelectedAlbum] = useState(null);
@@ -124,6 +126,7 @@ const JukeboxBrowsePanel = ({ activeDestination, onSelectDestination, onEnqueue,
         </div>
         {!currentView && activeDestination === 'nextup' && <JukeboxNextUpTab />}
         {!currentView && activeDestination === 'settings' && <JukeboxSettingsTab />}
+        {!currentView && activeDestination === 'aimix' && <JukeboxAiMixTab onEnqueue={onEnqueue} />}
       </div>
       {open && selectedAlbum && (
         <JukeboxTracksPanel
