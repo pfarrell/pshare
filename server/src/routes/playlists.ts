@@ -16,10 +16,14 @@ const playlists = new Hono<{ Variables: Variables }>()
 export const DEFAULT_GENERATE_SIZE = 20
 export const MAX_GENERATE_SIZE = 30
 
+// The prompt is re-sent on every tool-loop turn (up to 20), so its length
+// multiplies input-token cost — cap it.
+export const MAX_PROMPT_LENGTH = 500
+
 export function resolvePrompt(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
   const trimmed = raw.trim()
-  return trimmed.length > 0 ? trimmed : null
+  return trimmed.length > 0 && trimmed.length <= MAX_PROMPT_LENGTH ? trimmed : null
 }
 
 export function resolveGenerateSize(raw: unknown): number {
@@ -304,12 +308,20 @@ playlists.post('/generate', requireAuth, async (c) => {
   const body = await c.req.json().catch(() => ({}))
   const prompt = resolvePrompt((body as Record<string, unknown>).prompt)
   if (!prompt) {
-    return c.json({ error: 'prompt is required' }, 400)
+    return c.json({ error: `prompt is required (max ${MAX_PROMPT_LENGTH} characters)` }, 400)
   }
   const size = resolveGenerateSize((body as Record<string, unknown>).size)
 
   const user = c.get('user')!
   const jukeboxDeviceId = c.get('jukeboxDeviceId') ?? null
+
+  // v1 scope is kiosk-triggered generation only (plus admins): /auth/signup
+  // is public, so leaving this billed endpoint open to any account would let
+  // self-registered users (or many of them) spend Anthropic credits. Checked
+  // before the rate limiter so a rejected caller doesn't consume a slot.
+  if (jukeboxDeviceId == null && !user.admin) {
+    return c.json({ error: 'AI playlist generation is currently available from the jukebox kiosk only.' }, 403)
+  }
 
   const { allowed } = await checkAndRecordGeneration({ userId: user.id, jukeboxDeviceId })
   if (!allowed) {
@@ -324,10 +336,10 @@ playlists.post('/generate', requireAuth, async (c) => {
       tracks,
     })
   } catch (err) {
-    // Catches both typed Anthropic API errors and the service's own overall-
-    // timeout Error (see playlistGeneratorService.ts) — either way, the
-    // caller gets the same generic message; a normal "model found nothing"
-    // result never reaches this branch, since that resolves with trackIds: [].
+    // Catches typed Anthropic API errors (and any other unexpected failure) —
+    // the caller gets a generic message. Neither a normal "model found
+    // nothing" result nor the service's overall timeout reaches this branch:
+    // both resolve with whatever trackIds were confirmed (possibly []).
     console.error('AI playlist generation failed:', err)
     return c.json({ error: "Couldn't generate right now — try again." }, 502)
   }

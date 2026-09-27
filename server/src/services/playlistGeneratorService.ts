@@ -13,7 +13,12 @@ export interface GeneratePlaylistResult {
   trackIds: number[]
 }
 
-export async function generatePlaylist(prompt: string, size: number, c: Context): Promise<GeneratePlaylistResult> {
+export async function generatePlaylist(
+  prompt: string,
+  size: number,
+  c: Context,
+  timeoutMs: number = OVERALL_TIMEOUT_MS,
+): Promise<GeneratePlaylistResult> {
   const client = new Anthropic()
   // Every id search_library actually returned during this run — the only
   // ids finalize_playlist is allowed to include. Never trust the model's
@@ -23,33 +28,36 @@ export async function generatePlaylist(prompt: string, size: number, c: Context)
 
   const searchLibrary = betaTool({
     name: 'search_library',
-    description: 'Search the P·Share library for tracks matching a free-text query (song title and/or artist name). Returns up to 8 real matches with id, title, and artist. Only track ids returned by this tool may be used in finalize_playlist.',
+    description: 'Search the P·Share library for tracks by title, optionally narrowed by artist. Returns up to 8 real matches with id, title, and artist. Only track ids returned by this tool may be used in finalize_playlist.',
     inputSchema: {
       type: 'object',
-      properties: { query: { type: 'string', description: 'Free text to search for, e.g. a song title or "artist - title"' } },
-      required: ['query'],
+      properties: {
+        title: { type: 'string', description: 'Song title to search for' },
+        artist: { type: 'string', description: 'Artist name to narrow the search (optional, but recommended when known)' },
+      },
+      required: ['title'],
       additionalProperties: false,
     },
     run: async (input) => {
-      const { query } = input as { query: string }
-      const likeParam = `%${query}%`
-      // searchService.findTrackIds only matches tracks.title, but this
-      // tool's description promises artist matches too (and the model is
-      // steered toward "artist - title" queries) — so match against the
-      // track's effective artist name here as well: the track's own
-      // artist_id if set, else its album's artist_id (tracks can have a
-      // different artist than their album, e.g. a compilation).
-      const rows = await db
+      const { title, artist } = input as { title: string; artist?: string }
+      // Title and artist are separate fields (ANDed) rather than one free-
+      // text query: a combined "artist - title" string can never match
+      // either column on its own. The artist filter matches the track's
+      // effective artist — its own artist_id if set, else its album's
+      // artist_id (tracks can have a different artist than their album,
+      // e.g. a compilation).
+      let query = db
         .selectFrom('tracks as t')
         .innerJoin('albums as al', 'al.id', 't.album_id')
         .innerJoin('artists as aa', 'aa.id', 'al.artist_id')
         .leftJoin('artists as ta', 'ta.id', 't.artist_id')
         .select(['t.id'])
         .where('t.approved', '=', true)
-        .where(sql<boolean>`(
-          f_unaccent(lower(t.title)) ILIKE f_unaccent(lower(${likeParam}))
-          OR f_unaccent(lower(coalesce(ta.name, aa.name))) ILIKE f_unaccent(lower(${likeParam}))
-        )`)
+        .where(sql<boolean>`f_unaccent(lower(t.title)) ILIKE f_unaccent(lower(${`%${title}%`}))`)
+      if (artist) {
+        query = query.where(sql<boolean>`f_unaccent(lower(coalesce(ta.name, aa.name))) ILIKE f_unaccent(lower(${`%${artist}%`}))`)
+      }
+      const rows = await query
         .orderBy('t.id')
         .limit(8)
         .execute()
@@ -146,16 +154,18 @@ export async function generatePlaylist(prompt: string, size: number, c: Context)
 
   const systemPrompt = `You are a music playlist curator for a personal music library called P·Share. A listener will give you a free-text prompt describing what they want to hear. Your job: propose real tracks that match the prompt, using your own music knowledge, but you may ONLY include a track if you have verified it exists in THIS library by calling search_library and seeing it in the results. Do not guess at track ids. Aim for ${size} confirmed tracks, but if you cannot find that many good matches, it is fine to finalize with fewer — never include a track you have not verified via search_library. When you are done, call finalize_playlist exactly once with your final ordered list.`
 
-  // max_iterations bounds cost (the dominant driver); this wall-clock race is
-  // a secondary safety net so a slow/stuck run still returns to the caller
+  // max_iterations bounds cost (the dominant driver); this wall-clock abort
+  // is a secondary safety net so a slow/stuck run still returns to the caller
   // promptly — see docs/superpowers/specs/2026-09-27-ai-playlist-generator-design.md.
-  // It does not cancel the in-flight HTTP request itself, only how long the
-  // caller waits for it. The timer is always cleared once the race settles so
-  // a fast/normal run doesn't leave a 45s handle keeping the process alive.
-  let timeoutHandle: ReturnType<typeof setTimeout>
+  // Aborting cancels the in-flight Anthropic request (no further billed turns
+  // run with nothing waiting for them), and per the spec a timeout returns
+  // whatever finalize_playlist already confirmed (possibly empty) rather than
+  // erroring. Any non-timeout failure still rejects.
+  const controller = new AbortController()
+  const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    await Promise.race([
-      client.beta.messages.toolRunner({
+    await client.beta.messages.toolRunner(
+      {
         model: 'claude-sonnet-5',
         max_tokens: 4096,
         max_iterations: MAX_TOOL_ITERATIONS,
@@ -163,13 +173,16 @@ export async function generatePlaylist(prompt: string, size: number, c: Context)
         output_config: { effort: 'medium' },
         tools: [searchLibrary, getSimilarArtists, getTags, finalizePlaylist],
         messages: [{ role: 'user', content: `${prompt}\n\nTarget track count: ${size}.` }],
-      }),
-      new Promise((_, reject) => {
-        timeoutHandle = setTimeout(() => reject(new Error('AI playlist generation timed out')), OVERALL_TIMEOUT_MS)
-      }),
-    ])
+      },
+      { signal: controller.signal },
+    )
+  } catch (err) {
+    if (controller.signal.aborted) {
+      return { trackIds: finalTrackIds }
+    }
+    throw err
   } finally {
-    clearTimeout(timeoutHandle!)
+    clearTimeout(timeoutHandle)
   }
 
   return { trackIds: finalTrackIds }

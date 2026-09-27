@@ -63,7 +63,7 @@ test('finalize_playlist track ids confirmed via search_library are returned', as
       call += 1
       if (call === 1) {
         return anthropicMessage(
-          [{ type: 'tool_use', id: 'toolu_1', name: 'search_library', input: { query: 'AI Mix Fixture' } }],
+          [{ type: 'tool_use', id: 'toolu_1', name: 'search_library', input: { title: 'AI Mix Fixture', artist: 'AI Mix Fixture Artist' } }],
           'tool_use',
         )
       }
@@ -103,7 +103,7 @@ test('a track id in finalize_playlist never returned by search_library is droppe
       call += 1
       if (call === 1) {
         return anthropicMessage(
-          [{ type: 'tool_use', id: 'toolu_1', name: 'search_library', input: { query: 'AI Mix Fixture' } }],
+          [{ type: 'tool_use', id: 'toolu_1', name: 'search_library', input: { title: 'AI Mix Fixture', artist: 'AI Mix Fixture Artist' } }],
           'tool_use',
         )
       }
@@ -136,4 +136,81 @@ test('an Anthropic API failure rejects rather than resolving with a fake result'
   )
 
   await assert.rejects(() => generatePlaylist('anything', 1, fakeContext), Anthropic.APIError)
+})
+
+test('search_library narrows by artist when both title and artist are given', async (t) => {
+  // Same title, two different artists: a { title, artist } search must
+  // confirm only the matching artist's track, so finalize_playlist (which
+  // offers both ids) keeps only that one.
+  const wanted = await makeFixtureTrack({
+    artistName: 'Narrow Test Wanted Artist', albumTitle: 'Narrow Test Album A', trackTitle: 'Narrow Test Shared Title',
+  })
+  const other = await makeFixtureTrack({
+    artistName: 'Narrow Test Other Artist', albumTitle: 'Narrow Test Album B', trackTitle: 'Narrow Test Shared Title',
+  })
+  try {
+    let call = 0
+    t.mock.method(globalThis, 'fetch', async () => {
+      call += 1
+      if (call === 1) {
+        return anthropicMessage(
+          [{
+            type: 'tool_use', id: 'toolu_1', name: 'search_library',
+            input: { title: 'Narrow Test Shared Title', artist: 'Narrow Test Wanted Artist' },
+          }],
+          'tool_use',
+        )
+      }
+      if (call === 2) {
+        return anthropicMessage(
+          [{ type: 'tool_use', id: 'toolu_2', name: 'finalize_playlist', input: { track_ids: [wanted.trackId, other.trackId] } }],
+          'tool_use',
+        )
+      }
+      return anthropicMessage([{ type: 'text', text: 'Done.' }], 'end_turn')
+    })
+
+    const result = await generatePlaylist('Narrow Test', 2, fakeContext)
+    assert.deepEqual(result.trackIds, [wanted.trackId])
+  } finally {
+    await cleanupFixtureTrack(wanted)
+    await cleanupFixtureTrack(other)
+  }
+})
+
+test('hitting the overall timeout resolves with the already-finalized tracks instead of rejecting', async (t) => {
+  const fixture = await makeFixtureTrack()
+  try {
+    let call = 0
+    let abortedFetch = false
+    t.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
+      call += 1
+      if (call === 1) {
+        return anthropicMessage(
+          [{ type: 'tool_use', id: 'toolu_1', name: 'search_library', input: { title: 'AI Mix Fixture', artist: 'AI Mix Fixture Artist' } }],
+          'tool_use',
+        )
+      }
+      if (call === 2) {
+        return anthropicMessage(
+          [{ type: 'tool_use', id: 'toolu_2', name: 'finalize_playlist', input: { track_ids: [fixture.trackId] } }],
+          'tool_use',
+        )
+      }
+      // Third turn hangs until the abort signal fires — simulating a slow
+      // Anthropic response arriving after finalize_playlist already ran.
+      return new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          abortedFetch = true
+          reject(new DOMException('aborted', 'AbortError'))
+        })
+      })
+    })
+
+    const result = await generatePlaylist('AI Mix Fixture', 1, fakeContext, 50)
+    assert.deepEqual(result.trackIds, [fixture.trackId])
+    assert.equal(abortedFetch, true, 'the in-flight request should be cancelled, not left running')
+  } finally {
+    await cleanupFixtureTrack(fixture)
+  }
 })
