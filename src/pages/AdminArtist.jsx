@@ -32,6 +32,7 @@ const AdminArtist = () => {
   const [wikipedia, setWikipedia] = useState('');
   const [musicbrainzId, setMusicbrainzId] = useState('');
   const [mbidStatus, setMbidStatus] = useState('');
+  const [mbTags, setMbTags] = useState([]);
 
   // Track if form has unsaved changes
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -56,6 +57,9 @@ const AdminArtist = () => {
         setWikipedia(artist.wikipedia || '');
         setMusicbrainzId(artist.musicbrainz_id || '');
         setMbidStatus(artist.mbid_status || '');
+        apiService.getArtistMbTags(id)
+          .then((res) => setMbTags(res.data.tags || []))
+          .catch(() => setMbTags([]));
       } catch (error) {
         console.error('Error fetching artist data:', error);
         setError('Failed to load artist');
@@ -233,6 +237,30 @@ const AdminArtist = () => {
             onChange={setMusicbrainzId}
           />
         </div>
+
+        {mbTags.length > 0 && (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+              MusicBrainz Tags
+            </label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              {mbTags.map((t) => (
+                <span
+                  key={t.name}
+                  style={{
+                    padding: '0.25rem 0.625rem',
+                    backgroundColor: 'var(--color-bg-surface)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: '999px',
+                    fontSize: '0.875rem',
+                  }}
+                >
+                  {t.name} <span style={{ opacity: 0.6 }}>({t.count})</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         <AdminFormActions saving={saving} onCancel={handleCancel} onDelete={handleDelete} deleteLabel="Delete Artist" />
       </form>

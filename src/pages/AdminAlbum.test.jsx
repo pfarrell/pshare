@@ -10,6 +10,7 @@ vi.mock('../services/api', () => ({
   apiService: {
     getAlbum: vi.fn(),
     getAlbumSecondaryArtists: vi.fn(),
+    getAlbumMbTags: vi.fn(),
     updateAlbum: vi.fn(),
     updateTrack: vi.fn(),
     searchAdminArtists: vi.fn(),
@@ -55,6 +56,7 @@ beforeEach(() => {
   apiService.getAlbum.mockResolvedValue({ data: albumPayload });
   apiService.entityImages.album.list.mockResolvedValue({ data: [] });
   apiService.getAlbumSecondaryArtists.mockResolvedValue({ data: [] });
+  apiService.getAlbumMbTags.mockResolvedValue({ data: { tags: [] } });
 });
 
 describe('AdminAlbum — compilation checkbox', () => {
@@ -119,6 +121,28 @@ describe('AdminAlbum — compilation checkbox', () => {
         })
       )
     );
+  });
+});
+
+describe('AdminAlbum — MusicBrainz tags', () => {
+  test('renders a chip list when tags are captured', async () => {
+    apiService.getAlbumMbTags.mockResolvedValue({
+      data: { tags: [{ name: 'rock', count: 9 }, { name: 'psychedelic', count: 3 }] },
+    });
+    renderAdminAlbum();
+
+    expect(await screen.findByText('MusicBrainz Tags')).toBeInTheDocument();
+    expect(screen.getByText('rock')).toBeInTheDocument();
+    expect(screen.getByText('(9)')).toBeInTheDocument();
+    expect(screen.getByText('psychedelic')).toBeInTheDocument();
+  });
+
+  test('renders nothing when there are no captured tags', async () => {
+    apiService.getAlbumMbTags.mockResolvedValue({ data: { tags: [] } });
+    renderAdminAlbum();
+
+    await screen.findByDisplayValue('Easy Rider');
+    expect(screen.queryByText('MusicBrainz Tags')).not.toBeInTheDocument();
   });
 });
 

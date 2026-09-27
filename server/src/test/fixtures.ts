@@ -106,6 +106,9 @@ export async function cleanupFixtures(): Promise<void> {
   const tagIds = (await db.selectFrom('tags').select('id').where('name', 'like', like).execute()).map((r) => r.id)
   if (tagIds.length > 0) await db.deleteFrom('tags').where('id', 'in', tagIds).execute()
 
+  const mbTagIds = (await db.selectFrom('mb_tags').select('id').where('name', 'like', like).execute()).map((r) => r.id)
+  if (mbTagIds.length > 0) await db.deleteFrom('mb_tags').where('id', 'in', mbTagIds).execute()
+
   const profileIds = (await db.selectFrom('profiles').select('id').where('name', 'like', like).execute()).map((r) => r.id)
   if (profileIds.length > 0) await db.deleteFrom('profiles').where('id', 'in', profileIds).execute()
 

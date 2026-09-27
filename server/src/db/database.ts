@@ -314,6 +314,29 @@ interface TrackTagTable {
   updated_at: ColumnType<Date, string | undefined, string | Date>
 }
 
+interface MbTagTable {
+  id: Generated<number>
+  name: string
+}
+
+interface ArtistMbTagTable {
+  id: Generated<number>
+  artist_id: number
+  source_mbid: string
+  tag_id: number
+  tag_count: number
+  captured_at: ColumnType<Date, string | Date | undefined, never>
+}
+
+interface AlbumMbTagTable {
+  id: Generated<number>
+  album_id: number
+  source_mbid: string
+  tag_id: number
+  tag_count: number
+  captured_at: ColumnType<Date, string | Date | undefined, never>
+}
+
 interface UserRecallTokenTable {
   user_id: number
   recall_token: string
@@ -398,6 +421,9 @@ export interface Database {
   albums_tags: AlbumTagTable
   artists_tags: ArtistTagTable
   tags_tracks: TrackTagTable
+  mb_tags: MbTagTable
+  artist_mb_tags: ArtistMbTagTable
+  album_mb_tags: AlbumMbTagTable
   profiles: ProfileTable
   profile_tags: ProfileTagTable
   discovery_sources: DiscoverySourceTable

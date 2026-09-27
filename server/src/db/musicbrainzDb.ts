@@ -84,6 +84,23 @@ interface MBTrackTable {
   length: number | null
 }
 
+interface MBTagTable {
+  id: number
+  name: string
+}
+
+interface MBArtistTagTable {
+  artist: number
+  tag: number
+  count: number
+}
+
+interface MBReleaseGroupTagTable {
+  release_group: number
+  tag: number
+  count: number
+}
+
 interface MusicbrainzMirrorDatabase {
   artist: MBArtistTable
   artist_credit: MBArtistCreditTable
@@ -94,6 +111,9 @@ interface MusicbrainzMirrorDatabase {
   medium: MBMediumTable
   recording: MBRecordingTable
   track: MBTrackTable
+  tag: MBTagTable
+  artist_tag: MBArtistTagTable
+  release_group_tag: MBReleaseGroupTagTable
 }
 
 // ---- DB instance ----

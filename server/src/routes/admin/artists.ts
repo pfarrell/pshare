@@ -5,6 +5,8 @@ import { mergeArtistInto } from '../../services/artistMergeService.js'
 import { lookupArtistMBID } from '../../services/musicbrainz.js'
 import { fetchArtistImageFromFanart } from '../../services/fanart.js'
 import { fetchSimilarArtists } from '../../services/lastfmSimilar.js'
+import { captureArtistTags } from '../../services/musicbrainzTags.js'
+import { errorLogService } from '../../services/errorLogService.js'
 import { imagesDir } from '../../config/paths.js'
 
 export const MBID_RETRYABLE = ['unmatched', 'not_found', 'low_confidence']
@@ -87,6 +89,18 @@ router.put('/artist/:id', async (c) => {
       fetchSimilarArtists(id, name).catch(err =>
         console.warn(`Manual MBID similar-artist fetch failed for artist ${id}:`, err.message)
       )
+      captureArtistTags(id, mbid).catch(err => {
+        console.warn(`Manual MBID tag capture failed for artist ${id}:`, err.message)
+        errorLogService.record({ source: 'musicbrainz', message: err.message, context: `manual MBID tag capture for artist ${id}` })
+      })
+    }
+
+    // Manually-cleared MBID: the artist no longer has any MBID, so its
+    // previously-captured tags no longer correspond to anything — remove them.
+    // (Awaited, not fire-and-forget: this is a local delete with no external
+    // dependency, unlike tag capture above.)
+    if (mbidUpdate && mbidUpdate.musicbrainz_id === null) {
+      await db.deleteFrom('artist_mb_tags').where('artist_id', '=', id).execute()
     }
 
     return c.json(updated)
@@ -228,6 +242,20 @@ router.get('/artist/:id/merge-stubs', async (c) => {
     console.error('Error previewing stubs:', error)
     return c.json({ error: 'Failed to preview stubs' }, 500)
   }
+})
+
+// GET /admin/artist/:id/mb-tags — read-only display of captured MusicBrainz tags
+router.get('/artist/:id/mb-tags', async (c) => {
+  const id = parseInt(c.req.param('id'))
+  const rows = await db
+    .selectFrom('artist_mb_tags')
+    .innerJoin('mb_tags', 'mb_tags.id', 'artist_mb_tags.tag_id')
+    .select(['mb_tags.name', 'artist_mb_tags.tag_count as count'])
+    .where('artist_mb_tags.artist_id', '=', id)
+    .orderBy('artist_mb_tags.tag_count', 'desc')
+    .execute()
+
+  return c.json({ tags: rows })
 })
 
 // POST /admin/artist/:id/merge — merge one or more other artists into this one.

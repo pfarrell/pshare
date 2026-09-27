@@ -36,6 +36,7 @@ const AdminAlbum = () => {
   const [wikipedia, setWikipedia] = useState('');
   const [musicbrainzId, setMusicbrainzId] = useState('');
   const [mbidStatus, setMbidStatus] = useState('');
+  const [mbTags, setMbTags] = useState([]);
   const [isCompilation, setIsCompilation] = useState(false);
 
   // Same rationale as AdminUpload's lock: a compilation album must always
@@ -69,6 +70,9 @@ const AdminAlbum = () => {
       setWikipedia(album.wikipedia || '');
       setMusicbrainzId(album.musicbrainz_id || '');
       setMbidStatus(album.mbid_status || '');
+      apiService.getAlbumMbTags(id)
+        .then((res) => setMbTags(res.data.tags || []))
+        .catch(() => setMbTags([]));
       setIsCompilation(!!album.is_compilation);
       setTracks(tracks || []);
     } catch (error) {
@@ -307,6 +311,30 @@ const AdminAlbum = () => {
             onChange={setMusicbrainzId}
           />
         </div>
+
+        {mbTags.length > 0 && (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+              MusicBrainz Tags
+            </label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              {mbTags.map((t) => (
+                <span
+                  key={t.name}
+                  style={{
+                    padding: '0.25rem 0.625rem',
+                    backgroundColor: 'var(--color-bg-surface)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: '999px',
+                    fontSize: '0.875rem',
+                  }}
+                >
+                  {t.name} <span style={{ opacity: 0.6 }}>({t.count})</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         <AdminFormActions saving={saving} onCancel={handleCancel} onDelete={handleDelete} deleteLabel="Delete Album" />
       </form>
