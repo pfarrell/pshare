@@ -28,11 +28,11 @@ test('mb_tags/artist_mb_tags/album_mb_tags are queryable and enforce uniqueness 
 
   // ON DELETE CASCADE removes rows when the artist/album is deleted
   await db.deleteFrom('artists').where('id', '=', artist.id).execute()
-  let remaining = await db.selectFrom('artist_mb_tags').selectAll().where('tag_id', '=', tag.id).execute()
-  assert.equal(remaining.length, 0)
+  const remainingArtistTags = await db.selectFrom('artist_mb_tags').selectAll().where('tag_id', '=', tag.id).execute()
+  assert.equal(remainingArtistTags.length, 0)
 
   // ON DELETE CASCADE also removes album_mb_tags when album is deleted
   await db.deleteFrom('albums').where('id', '=', album.id).execute()
-  remaining = await db.selectFrom('album_mb_tags').selectAll().where('tag_id', '=', tag.id).execute()
-  assert.equal(remaining.length, 0)
+  const remainingAlbumTags = await db.selectFrom('album_mb_tags').selectAll().where('tag_id', '=', tag.id).execute()
+  assert.equal(remainingAlbumTags.length, 0)
 })

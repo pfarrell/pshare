@@ -6,6 +6,7 @@ import { imagesDir } from '../../config/paths.js'
 import { parseFile } from 'music-metadata'
 import fs from 'fs'
 import { mergeAlbumInto } from '../../services/albumMergeService.js'
+import { captureAlbumTags } from '../../services/musicbrainzTags.js'
 
 const router = new Hono()
 
@@ -125,6 +126,14 @@ router.put('/album/:id', async (c) => {
       )
     }
 
+    // Manually-set MBID: capture tags, same as a fresh auto-match would
+    if (mbidUpdate?.mbid_status === 'manual' && mbidUpdate.musicbrainz_id) {
+      const mbid = mbidUpdate.musicbrainz_id
+      captureAlbumTags(id, mbid).catch(err =>
+        console.warn(`Manual MBID tag capture failed for album ${id}:`, err.message)
+      )
+    }
+
     return c.json(updated)
   } catch (error) {
     console.error('Error updating album:', error)
@@ -203,6 +212,20 @@ router.get('/album/:idA/compare/:idB', async (c) => {
   })
 
   return c.json({ a: shape(albumA), b: shape(albumB) })
+})
+
+// GET /admin/album/:id/mb-tags — read-only display of captured MusicBrainz tags
+router.get('/album/:id/mb-tags', async (c) => {
+  const id = parseInt(c.req.param('id'))
+  const rows = await db
+    .selectFrom('album_mb_tags')
+    .innerJoin('mb_tags', 'mb_tags.id', 'album_mb_tags.tag_id')
+    .select(['mb_tags.name', 'album_mb_tags.tag_count as count'])
+    .where('album_mb_tags.album_id', '=', id)
+    .orderBy('album_mb_tags.tag_count', 'desc')
+    .execute()
+
+  return c.json({ tags: rows })
 })
 
 // POST /admin/album — create a new album stub
