@@ -75,10 +75,17 @@ const JukeboxApp = () => {
   // JukeboxKeyboard.jsx — but typing into a Search box it's editing counts
   // as drawer activity just the same). Touches on Now Playing or the footer
   // strip don't count — those already have their own explicit close
-  // behavior (toggleBrowse above).
+  // behavior (toggleBrowse above). Also suspended while an AI Mix generation
+  // is in flight (up to 45s with nobody touching anything — closing would
+  // unmount JukeboxAiMixTab and discard the already-billed result); when it
+  // settles, this effect re-runs and arms a fresh full-length timer.
+  const [aiMixGenerating, setAiMixGenerating] = useState(false);
   const idleTimerRef = useRef(null);
   useEffect(() => {
-    if (activeDestination === null) return undefined;
+    if (activeDestination === null || aiMixGenerating) {
+      clearTimeout(idleTimerRef.current);
+      return undefined;
+    }
     const armTimer = () => {
       clearTimeout(idleTimerRef.current);
       idleTimerRef.current = setTimeout(closeAll, IDLE_CLOSE_MS);
@@ -94,7 +101,7 @@ const JukeboxApp = () => {
       clearTimeout(idleTimerRef.current);
       document.removeEventListener('pointerdown', handlePointerDown);
     };
-  }, [activeDestination]);
+  }, [activeDestination, aiMixGenerating]);
 
   // Wrapped in .jukebox-app too: the login screen is the first thing a fresh
   // kiosk shows, and it needs the shell's dark ground and kiosk-scale sizing
@@ -119,6 +126,7 @@ const JukeboxApp = () => {
         pendingArtist={pendingArtist}
         onJumpToArtist={jumpToArtist}
         onPendingArtistConsumed={() => setPendingArtist(null)}
+        onGeneratingChange={setAiMixGenerating}
       />
       <JukeboxFooterStrip onTap={toggleBrowse} />
       {/* MusicPlayerWrapper owns both <audio> elements and usePlayerEngine

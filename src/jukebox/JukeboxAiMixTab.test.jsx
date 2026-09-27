@@ -99,6 +99,57 @@ test('shows an error with retry on failure', async () => {
   expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
 });
 
+test('a 429 shows the server rate-limit message with no Retry button', async () => {
+  apiService.generatePlaylist.mockRejectedValue({
+    response: { status: 429, data: { error: 'Limit of 10 generations per hour reached — try again later.' } },
+  });
+  renderTab();
+
+  fireEvent.change(screen.getByPlaceholderText(/describe what you want to hear/i), { target: { value: 'upbeat cleaning music' } });
+  fireEvent.click(screen.getByRole('button', { name: /generate/i }));
+
+  await waitFor(() => {
+    expect(screen.getByText('Limit of 10 generations per hour reached — try again later.')).toBeInTheDocument();
+  });
+  expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument();
+  expect(screen.queryByText("Couldn't generate right now.")).not.toBeInTheDocument();
+});
+
+test('reports generation in flight via onGeneratingChange (success)', async () => {
+  let resolve;
+  apiService.generatePlaylist.mockReturnValue(new Promise((r) => { resolve = r; }));
+  const onGeneratingChange = vi.fn();
+  renderTab({ onGeneratingChange });
+
+  fireEvent.change(screen.getByPlaceholderText(/describe what you want to hear/i), { target: { value: 'upbeat cleaning music' } });
+  fireEvent.click(screen.getByRole('button', { name: /generate/i }));
+
+  expect(onGeneratingChange).toHaveBeenCalledTimes(1);
+  expect(onGeneratingChange).toHaveBeenLastCalledWith(true);
+
+  resolve(generateResponse(someTracks));
+
+  await waitFor(() => {
+    expect(onGeneratingChange).toHaveBeenLastCalledWith(false);
+  });
+  expect(onGeneratingChange).toHaveBeenCalledTimes(2);
+});
+
+test('reports generation in flight via onGeneratingChange (failure)', async () => {
+  apiService.generatePlaylist.mockRejectedValue(new Error('network'));
+  const onGeneratingChange = vi.fn();
+  renderTab({ onGeneratingChange });
+
+  fireEvent.change(screen.getByPlaceholderText(/describe what you want to hear/i), { target: { value: 'upbeat cleaning music' } });
+  fireEvent.click(screen.getByRole('button', { name: /generate/i }));
+
+  expect(onGeneratingChange).toHaveBeenLastCalledWith(true);
+  await waitFor(() => {
+    expect(onGeneratingChange).toHaveBeenLastCalledWith(false);
+  });
+  expect(onGeneratingChange.mock.calls).toEqual([[true], [false]]);
+});
+
 test('Play mix and Add to queue drive the result through the shared queue hook, then onEnqueue', async () => {
   apiService.generatePlaylist.mockResolvedValue(generateResponse(someTracks));
   const onEnqueue = vi.fn();

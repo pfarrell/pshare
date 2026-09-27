@@ -32,7 +32,7 @@ vi.mock('./JukeboxNowPlaying', () => ({
 vi.mock('../components/player/MusicPlayerWrapper', () => ({ default: () => <div data-testid="player-engine" /> }));
 vi.mock('./JukeboxProgressLine', () => ({ default: () => <div data-testid="progress-line" /> }));
 vi.mock('./JukeboxBrowsePanel', () => ({
-  default: ({ activeDestination, onSelectDestination, onEnqueue, pendingArtist, onJumpToArtist, onPendingArtistConsumed }) => (
+  default: ({ activeDestination, onSelectDestination, onEnqueue, pendingArtist, onJumpToArtist, onPendingArtistConsumed, onGeneratingChange }) => (
     <div
       className="jukebox-browse-panel"
       data-testid="jukebox-browse-panel"
@@ -44,6 +44,8 @@ vi.mock('./JukeboxBrowsePanel', () => ({
       <button onClick={onEnqueue}>trigger-enqueue</button>
       <button onClick={() => onJumpToArtist({ id: 42, name: 'Jumped Artist' })}>trigger-jump-to-artist</button>
       <button onClick={onPendingArtistConsumed}>trigger-pending-artist-consumed</button>
+      <button onClick={() => onGeneratingChange(true)}>trigger-generating-start</button>
+      <button onClick={() => onGeneratingChange(false)}>trigger-generating-end</button>
     </div>
   ),
 }));
@@ -309,5 +311,26 @@ describe('drawer inactivity auto-close', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(20000); });
 
     expect(activeDestination()).toBe('none'); // never opened; nothing to assert beyond "did not throw"
+  });
+
+  test('does not close while an AI Mix generation is in flight, then re-arms a full timer once it settles', async () => {
+    vi.useFakeTimers();
+    renderApp();
+    fireEvent.click(nowPlayingTap());
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+    fireEvent.click(screen.getByText('trigger-generating-start'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(45000); }); // well past 15s, nobody touching anything
+
+    expect(activeDestination()).toBe('browse');
+
+    fireEvent.click(screen.getByText('trigger-generating-end'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(14000); });
+
+    expect(activeDestination()).toBe('browse'); // fresh 15s, not the leftover 5s
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+
+    expect(activeDestination()).toBe('none');
   });
 });

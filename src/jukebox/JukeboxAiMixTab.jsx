@@ -11,21 +11,40 @@ const DEFAULT_SIZE = 20;
 // same lifecycle as JukeboxNextUpTab/JukeboxSettingsTab (unmounts on switch
 // away; unlike Search there's no query worth preserving hidden-but-mounted).
 // See docs/superpowers/specs/2026-09-27-ai-playlist-generator-design.md.
-const JukeboxAiMixTab = ({ onEnqueue }) => {
+// onGeneratingChange(bool) reports an in-flight generation up to JukeboxApp,
+// whose drawer idle-close timer must not fire mid-generation (a real run can
+// take up to 45s with nobody touching the screen, and closing the drawer
+// unmounts this tab and discards the already-billed result).
+const JukeboxAiMixTab = ({ onEnqueue, onGeneratingChange }) => {
   const [prompt, setPrompt] = useState('');
   const [data, setData] = useState(null);
   const [error, setError] = useState(false);
+  // Set instead of `error` on a 429: retrying within the same rate-limit
+  // window is guaranteed to fail again, so this state shows the server's
+  // message with no Retry button.
+  const [rateLimitMessage, setRateLimitMessage] = useState(null);
   const [generating, setGenerating] = useState(false);
   const bodyRef = useTouchScroll({ axis: 'y' });
 
   const generate = () => {
     if (!prompt.trim() || generating) return;
     setError(false);
+    setRateLimitMessage(null);
     setGenerating(true);
+    onGeneratingChange?.(true);
     apiService.generatePlaylist(prompt.trim(), DEFAULT_SIZE)
       .then((response) => setData(response.data))
-      .catch(() => setError(true))
-      .finally(() => setGenerating(false));
+      .catch((err) => {
+        if (err?.response?.status === 429) {
+          setRateLimitMessage(err.response?.data?.error ?? 'Limit reached — try again later.');
+        } else {
+          setError(true);
+        }
+      })
+      .finally(() => {
+        setGenerating(false);
+        onGeneratingChange?.(false);
+      });
   };
 
   const queue = useQueueActions(data?.tracks ?? [], {
@@ -57,11 +76,17 @@ const JukeboxAiMixTab = ({ onEnqueue }) => {
         </div>
       )}
 
-      {!error && data !== null && data.tracks.length === 0 && (
+      {rateLimitMessage && (
+        <div className="jukebox-panel-error">
+          <p>{rateLimitMessage}</p>
+        </div>
+      )}
+
+      {!error && !rateLimitMessage && data !== null && data.tracks.length === 0 && (
         <p className="jukebox-ai-mix-empty">Couldn't find anything matching that — try rephrasing.</p>
       )}
 
-      {!error && ready && (
+      {!error && !rateLimitMessage && ready && (
         <>
           <div className="jukebox-tracks-panel-actions">
             <button type="button" onClick={() => { queue.play(); onEnqueue?.(); }}>Play mix</button>
