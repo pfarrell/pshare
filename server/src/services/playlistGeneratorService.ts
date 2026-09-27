@@ -33,8 +33,28 @@ export async function generatePlaylist(prompt: string, size: number, c: Context)
     run: async (input) => {
       const { query } = input as { query: string }
       const likeParam = `%${query}%`
-      const ids = await searchService.findTrackIds(likeParam, null)
-      const tracks = await searchService.fetchTracksByIds(ids.slice(0, 8), c)
+      // searchService.findTrackIds only matches tracks.title, but this
+      // tool's description promises artist matches too (and the model is
+      // steered toward "artist - title" queries) — so match against the
+      // track's effective artist name here as well: the track's own
+      // artist_id if set, else its album's artist_id (tracks can have a
+      // different artist than their album, e.g. a compilation).
+      const rows = await db
+        .selectFrom('tracks as t')
+        .innerJoin('albums as al', 'al.id', 't.album_id')
+        .innerJoin('artists as aa', 'aa.id', 'al.artist_id')
+        .leftJoin('artists as ta', 'ta.id', 't.artist_id')
+        .select(['t.id'])
+        .where('t.approved', '=', true)
+        .where(sql<boolean>`(
+          f_unaccent(lower(t.title)) ILIKE f_unaccent(lower(${likeParam}))
+          OR f_unaccent(lower(coalesce(ta.name, aa.name))) ILIKE f_unaccent(lower(${likeParam}))
+        )`)
+        .orderBy('t.id')
+        .limit(8)
+        .execute()
+      const ids = rows.map((r) => r.id)
+      const tracks = await searchService.fetchTracksByIds(ids, c)
       for (const t of tracks) confirmedTrackIds.add(t.id)
       return JSON.stringify(tracks.map((t) => ({ id: t.id, title: t.title, artist: t.artist })))
     },

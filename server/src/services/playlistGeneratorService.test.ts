@@ -7,16 +7,19 @@ import Anthropic from '@anthropic-ai/sdk'
 import { db } from '../db/database.js'
 import { generatePlaylist } from './playlistGeneratorService.js'
 
-async function makeFixtureTrack() {
+async function makeFixtureTrack(names?: { artistName: string; albumTitle: string; trackTitle: string }) {
+  const { artistName, albumTitle, trackTitle } = names ?? {
+    artistName: 'AI Mix Fixture Artist', albumTitle: 'AI Mix Fixture Album', trackTitle: 'AI Mix Fixture Track',
+  }
   const artist = await db
     .insertInto('artists')
-    .values({ name: 'AI Mix Fixture Artist', image_path: null, wikipedia: null, musicbrainz_id: null, mbid_confidence: null, mbid_status: null })
+    .values({ name: artistName, image_path: null, wikipedia: null, musicbrainz_id: null, mbid_confidence: null, mbid_status: null })
     .returning('id')
     .executeTakeFirstOrThrow()
   const album = await db
     .insertInto('albums')
     .values({
-      title: 'AI Mix Fixture Album', artist_id: artist.id, release_year: null, disc_number: null,
+      title: albumTitle, artist_id: artist.id, release_year: null, disc_number: null,
       genre_id: null, image_path: null, wikipedia: null, musicbrainz_id: null,
       release_group_musicbrainz_id: null, mbid_confidence: null, mbid_status: null, is_compilation: false,
     })
@@ -25,7 +28,7 @@ async function makeFixtureTrack() {
   const track = await db
     .insertInto('tracks')
     .values({
-      title: 'AI Mix Fixture Track', track_number: null, release_year: null, album_id: album.id,
+      title: trackTitle, track_number: null, release_year: null, album_id: album.id,
       artist_id: artist.id, media_file_id: null, wikipedia: null, duration_sec: null, approved: true,
     })
     .returning('id')
@@ -81,22 +84,47 @@ test('finalize_playlist track ids confirmed via search_library are returned', as
 })
 
 test('a track id in finalize_playlist never returned by search_library is dropped', async (t) => {
-  let call = 0
-  t.mock.method(globalThis, 'fetch', async () => {
-    call += 1
-    if (call === 1) {
-      // Model never calls search_library at all, jumps straight to finalize
-      // with a made-up id.
-      return anthropicMessage(
-        [{ type: 'tool_use', id: 'toolu_1', name: 'finalize_playlist', input: { track_ids: [999999999] } }],
-        'tool_use',
-      )
-    }
-    return anthropicMessage([{ type: 'text', text: 'Done.' }], 'end_turn')
+  // Two real, DB-backed tracks: one gets confirmed via a mocked
+  // search_library call, the other is real but never searched for in this
+  // run (and, deliberately, named so it wouldn't even match the query the
+  // model uses below — otherwise the live search_library DB query would
+  // confirm it too, defeating the point). Plus a third, outright
+  // nonexistent id. This distinguishes the guard's real property — "was
+  // this id returned by search_library during THIS run" — from a weaker,
+  // insufficient check like "does this id exist in the DB at all," which
+  // the never-searched real fixture would incorrectly pass.
+  const confirmed = await makeFixtureTrack()
+  const neverSearched = await makeFixtureTrack({
+    artistName: 'Guard Test Untouched Artist', albumTitle: 'Guard Test Untouched Album', trackTitle: 'Guard Test Untouched Track',
   })
+  try {
+    let call = 0
+    t.mock.method(globalThis, 'fetch', async () => {
+      call += 1
+      if (call === 1) {
+        return anthropicMessage(
+          [{ type: 'tool_use', id: 'toolu_1', name: 'search_library', input: { query: 'AI Mix Fixture' } }],
+          'tool_use',
+        )
+      }
+      if (call === 2) {
+        return anthropicMessage(
+          [{
+            type: 'tool_use', id: 'toolu_2', name: 'finalize_playlist',
+            input: { track_ids: [confirmed.trackId, neverSearched.trackId, 999999999] },
+          }],
+          'tool_use',
+        )
+      }
+      return anthropicMessage([{ type: 'text', text: 'Done.' }], 'end_turn')
+    })
 
-  const result = await generatePlaylist('anything', 1, fakeContext)
-  assert.deepEqual(result.trackIds, [])
+    const result = await generatePlaylist('AI Mix Fixture', 1, fakeContext)
+    assert.deepEqual(result.trackIds, [confirmed.trackId])
+  } finally {
+    await cleanupFixtureTrack(confirmed)
+    await cleanupFixtureTrack(neverSearched)
+  }
 })
 
 test('an Anthropic API failure rejects rather than resolving with a fake result', async (t) => {
