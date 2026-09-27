@@ -3308,6 +3308,43 @@ body:has(.jukebox-app) {
   cursor: pointer;
 }
 
+/* Swipe-to-delete queue row (JukeboxQueueRow.jsx / useSwipeToReveal.js) — the
+   delete button sits behind the row, absolutely positioned against this
+   wrapper, and is only ever visible once .jukebox-queue-row-content slides
+   left to expose it. There is no persistent/always-visible delete icon,
+   unlike the desktop PlaylistDrawer's — see useSwipeToReveal.js. */
+.jukebox-app .jukebox-queue-row {
+  position: relative;
+  overflow: hidden;
+}
+.jukebox-app .jukebox-queue-row-content {
+  position: relative;
+  z-index: 1;
+  /* Must fully cover the delete button while closed (offset 0) — same
+     background as the drawer/panel behind it, not transparent. */
+  background: #2a3540;
+}
+.jukebox-app .jukebox-queue-row-delete {
+  position: absolute;
+  top: 50%;
+  right: 0.75rem;
+  transform: translateY(-50%);
+  width: 2.75rem;
+  height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: #ef4444;
+  color: white;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+.jukebox-app .jukebox-queue-row-delete:active {
+  background: #dc2626;
+}
+
 /* Album tracks panel: sits immediately left of .jukebox-browse-panel (which is
    min(420px, 90vw) wide, right-anchored above the footer). A sibling of it, not
    a child — see JukeboxBrowsePanel.jsx. z-index just under the browse panel's

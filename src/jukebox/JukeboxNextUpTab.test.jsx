@@ -72,6 +72,67 @@ test('does not show a "Show previous" control when nothing is hidden', () => {
   expect(screen.queryByRole('button', { name: /show previous/i })).not.toBeInTheDocument();
 });
 
+describe('swipe-to-delete', () => {
+  const setup = () => {
+    const removeTrackFromPlaylist = vi.fn();
+    usePlayerStore.mockImplementation((selector) => selector({
+      playlist: [
+        { id: 1, title: 'Current Track', url: '/stream/1', artist: {} },
+        { id: 2, title: 'Next Track', url: '/stream/2', artist: {} },
+        { id: 3, title: 'Later Track', url: '/stream/3', artist: {} },
+      ],
+      currentTrackIndex: 0,
+      removeTrackFromPlaylist,
+    }));
+    renderTab();
+    return { removeTrackFromPlaylist };
+  };
+
+  const deleteButtonFor = (title) => screen.getByRole('button', { name: new RegExp(`remove.*${title}`, 'i') });
+
+  test('does not show a delete button for the currently-playing row', () => {
+    setup();
+    expect(screen.queryByRole('button', { name: /remove.*current track/i })).not.toBeInTheDocument();
+  });
+
+  test('shows a delete button for upcoming rows', () => {
+    setup();
+    expect(deleteButtonFor('Next Track')).toBeInTheDocument();
+    expect(deleteButtonFor('Later Track')).toBeInTheDocument();
+  });
+
+  test('tapping a row\'s delete button removes that track by its absolute playlist index', () => {
+    const { removeTrackFromPlaylist } = setup();
+
+    fireEvent.click(deleteButtonFor('Later Track'));
+
+    expect(removeTrackFromPlaylist).toHaveBeenCalledWith(2);
+  });
+
+  test('opening a row (swiped open) closes any other open row', () => {
+    setup();
+    const rows = document.querySelectorAll('.jukebox-queue-row');
+    const nextRow = [...rows].find((el) => el.textContent.includes('Next Track'));
+    const laterRow = [...rows].find((el) => el.textContent.includes('Later Track'));
+
+    // Simulate a completed swipe-open by driving the row past the reveal
+    // threshold — a full horizontal drag-and-release, same as a real swipe.
+    const drag = (row, dx) => {
+      const content = row.querySelector('.jukebox-queue-row-content');
+      fireEvent.touchStart(content, { touches: [{ clientX: 100, clientY: 100 }] });
+      fireEvent.touchMove(content, { touches: [{ clientX: 100 - dx, clientY: 100 }] });
+      fireEvent.touchEnd(content, { changedTouches: [{ clientX: 100 - dx, clientY: 100 }] });
+    };
+
+    drag(nextRow, 60);
+    expect(nextRow.querySelector('.jukebox-queue-row-content').style.transform).toBe('translateX(-72px)');
+
+    drag(laterRow, 60);
+    expect(laterRow.querySelector('.jukebox-queue-row-content').style.transform).toBe('translateX(-72px)');
+    expect(nextRow.querySelector('.jukebox-queue-row-content').style.transform).toBe('translateX(0px)');
+  });
+});
+
 test('each tap of "Show previous" reveals one more earlier track', () => {
   usePlayerStore.mockImplementation((selector) => selector({
     playlist: [
