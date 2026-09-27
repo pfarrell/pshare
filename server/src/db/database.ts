@@ -364,6 +364,13 @@ interface SignupLogTable {
   seen_at: ColumnType<Date, string | Date | null, string | Date | null> | null
 }
 
+interface AiPlaylistGenerationsTable {
+  id: Generated<number>
+  user_id: number | null
+  jukebox_device_id: number | null
+  created_at: ColumnType<Date, string | Date | undefined, never>
+}
+
 export interface Database {
   artists: ArtistTable
   albums: AlbumTable
@@ -400,6 +407,7 @@ export interface Database {
   oauth_identities: OAuthIdentityTable
   error_log: ErrorLogTable
   signup_log: SignupLogTable
+  ai_playlist_generations: AiPlaylistGenerationsTable
 }
 
 // ---- DB instance ----
