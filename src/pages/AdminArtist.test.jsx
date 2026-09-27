@@ -11,6 +11,7 @@ vi.mock('../services/api', () => ({
     getArtist: vi.fn(),
     getArtistSecondaryAlbums: vi.fn(),
     getRelatedArtists: vi.fn(),
+    getArtistMbTags: vi.fn(),
     search: vi.fn(),
     searchAdminArtists: vi.fn(),
     previewArtistStubs: vi.fn(),
@@ -51,6 +52,7 @@ beforeEach(() => {
   apiService.entityImages.artist.list.mockResolvedValue({ data: [] });
   apiService.getArtistSecondaryAlbums.mockResolvedValue({ data: [] });
   apiService.getRelatedArtists.mockResolvedValue({ data: [] });
+  apiService.getArtistMbTags.mockResolvedValue({ data: { tags: [] } });
   vi.spyOn(window, 'confirm').mockReturnValue(true);
 });
 
@@ -238,6 +240,28 @@ describe('AdminArtist — count pluralization', () => {
     await user.type(input, 'Other');
     await user.click(within(input.closest('form')).getByRole('button', { name: 'Search' }));
     expect(await screen.findByText('1 album · ID 999')).toBeInTheDocument();
+  });
+});
+
+describe('AdminArtist — MusicBrainz tags', () => {
+  test('renders a chip list when tags are captured', async () => {
+    apiService.getArtistMbTags.mockResolvedValue({
+      data: { tags: [{ name: 'soul', count: 12 }, { name: 'funk', count: 5 }] },
+    });
+    renderAdminArtist();
+
+    expect(await screen.findByText('MusicBrainz Tags')).toBeInTheDocument();
+    expect(screen.getByText('soul')).toBeInTheDocument();
+    expect(screen.getByText('(12)')).toBeInTheDocument();
+    expect(screen.getByText('funk')).toBeInTheDocument();
+  });
+
+  test('renders nothing when there are no captured tags', async () => {
+    apiService.getArtistMbTags.mockResolvedValue({ data: { tags: [] } });
+    renderAdminArtist();
+
+    await screen.findByDisplayValue('EWF');
+    expect(screen.queryByText('MusicBrainz Tags')).not.toBeInTheDocument();
   });
 });
 
