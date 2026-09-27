@@ -128,7 +128,7 @@ const JukeboxApp = () => {
         onPendingArtistConsumed={() => setPendingArtist(null)}
         onGeneratingChange={setAiMixGenerating}
       />
-      <JukeboxFooterStrip onTap={toggleBrowse} />
+      <JukeboxFooterStrip onOpenQueue={() => setActiveDestination('nextup')} />
       {/* MusicPlayerWrapper owns both <audio> elements and usePlayerEngine
           (gapless prefetch, Media Session, play logging), so it must stay
           mounted — but its own controls are replaced by the footer strip and

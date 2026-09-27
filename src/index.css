@@ -2610,27 +2610,45 @@ body:has(.jukebox-app) {
   -webkit-user-select: text;
   user-select: text;
 }
-/* Footer strip (JukeboxFooterStrip.jsx): replaces the old bottom tab bar —
-   Next Up, Browse and the settings gear all moved into the drawer's own
-   JukeboxDrawerMenu (see below), so this is just a slim, tappable playback
-   progress indicator. Same height variable as the footer it replaces, so the
-   drawer, tracks panel and keyboard — all anchored to --jukebox-footer-height
-   — don't move. Tapping it opens/closes the drawer, same as tapping Now
-   Playing (see JukeboxApp.jsx's toggleBrowse). */
+/* Footer strip (JukeboxFooterStrip.jsx): a compact, always-visible
+   transport (previous/play-pause/next/open-queue), styled like
+   .jukebox-transport-buttons below. Same height variable as the old bottom
+   tab bar this replaced, so the drawer, tracks panel and keyboard — all
+   anchored to --jukebox-footer-height — don't move. Tapping the Now Playing
+   screen above is still how you open/close the drawer to Browse (see
+   JukeboxApp.jsx's toggleBrowse) — this strip no longer doubles as that tap
+   target now that it holds real controls. */
 .jukebox-app .jukebox-footer-strip {
   position: relative;
   flex-shrink: 0;
   width: 100%;
   height: var(--jukebox-footer-height);
   box-sizing: border-box;
-  display: block;
+  display: flex;
+  align-items: center;
+  padding: 0 0.5rem;
   background-color: #1a252f;
   border-top: 1px solid #2c3e50;
-  border-left: 0;
-  border-right: 0;
-  border-bottom: 0;
-  padding: 0;
+}
+.jukebox-app .jukebox-footer-controls {
+  display: flex;
+  width: 100%;
+  gap: 0.5rem;
+}
+.jukebox-app .jukebox-footer-controls button {
+  flex: 1;
+  min-width: 3.5rem;
+  min-height: 3.5rem;
+  font-size: 1.6rem;
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 0.5rem;
   cursor: pointer;
+}
+.jukebox-app .jukebox-footer-controls button.jukebox-footer-play {
+  background: #2f6fd6;
+  border-color: #2f6fd6;
 }
 /* Display-only progress along the bar's top edge — see JukeboxProgressLine.jsx. */
 .jukebox-app .jukebox-progress-line {

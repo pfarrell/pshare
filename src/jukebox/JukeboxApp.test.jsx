@@ -31,6 +31,13 @@ vi.mock('./JukeboxNowPlaying', () => ({
 }));
 vi.mock('../components/player/MusicPlayerWrapper', () => ({ default: () => <div data-testid="player-engine" /> }));
 vi.mock('./JukeboxProgressLine', () => ({ default: () => <div data-testid="progress-line" /> }));
+vi.mock('./JukeboxFooterStrip', () => ({
+  default: ({ onOpenQueue }) => (
+    <div data-testid="jukebox-footer-strip">
+      <button onClick={onOpenQueue}>trigger-open-queue</button>
+    </div>
+  ),
+}));
 vi.mock('./JukeboxBrowsePanel', () => ({
   default: ({ activeDestination, onSelectDestination, onEnqueue, pendingArtist, onJumpToArtist, onPendingArtistConsumed, onGeneratingChange }) => (
     <div
@@ -61,7 +68,6 @@ const renderApp = () => render(<MemoryRouter><JukeboxApp /></MemoryRouter>);
 const activeDestination = () => screen.getByTestId('jukebox-browse-panel').getAttribute('data-active-destination');
 const pendingArtistName = () => screen.getByTestId('jukebox-browse-panel').getAttribute('data-pending-artist');
 const nowPlayingTap = () => screen.getByText('trigger-now-playing-tap');
-const footerStrip = () => screen.getByRole('button', { name: 'Browse' });
 
 // jsdom has no native EventSource, and useJukeboxQueueEvents (run
 // unconditionally by JukeboxApp) opens one as soon as it sees a
@@ -103,7 +109,7 @@ test('renders the on-screen keyboard, authenticated, when an input is focused', 
 test('shows the now-playing view, the footer strip and the drawer when authenticated', () => {
   renderApp();
   expect(screen.getByTestId('jukebox-now-playing')).toBeInTheDocument();
-  expect(footerStrip()).toBeInTheDocument();
+  expect(screen.getByTestId('jukebox-footer-strip')).toBeInTheDocument();
   expect(screen.getByTestId('jukebox-browse-panel')).toBeInTheDocument();
 });
 
@@ -132,13 +138,20 @@ test('tapping the now-playing screen again closes the drawer', () => {
   expect(activeDestination()).toBe('none');
 });
 
-test('tapping the footer strip opens the drawer to Browse when closed, and closes it when tapped again', () => {
+test('tapping the footer\'s queue button jumps straight to Next Up', () => {
   renderApp();
-  fireEvent.click(footerStrip());
+  fireEvent.click(screen.getByText('trigger-open-queue'));
+  expect(activeDestination()).toBe('nextup');
+});
+
+test('tapping the footer\'s queue button switches to Next Up even when another destination is already open', () => {
+  renderApp();
+  fireEvent.click(nowPlayingTap());
   expect(activeDestination()).toBe('browse');
 
-  fireEvent.click(footerStrip());
-  expect(activeDestination()).toBe('none');
+  fireEvent.click(screen.getByText('trigger-open-queue'));
+
+  expect(activeDestination()).toBe('nextup');
 });
 
 test('selecting a destination from the drawer menu switches to it without closing', () => {

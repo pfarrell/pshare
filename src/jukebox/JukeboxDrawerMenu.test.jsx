@@ -7,30 +7,42 @@ const renderMenu = (props = {}) =>
 
 test('starts closed, opens on tapping the menu icon', () => {
   renderMenu();
-  expect(screen.queryByRole('button', { name: 'Next Up' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', { name: /drawer menu/i }));
 
-  expect(screen.getByRole('button', { name: 'Next Up' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
 });
 
 test('lists only the destinations that are not currently active', () => {
   renderMenu({ activeDestination: 'browse' });
   fireEvent.click(screen.getByRole('button', { name: /drawer menu/i }));
 
-  expect(screen.getByRole('button', { name: 'Next Up' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'AI Mix' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Browse' })).not.toBeInTheDocument();
 });
 
-test('shows the other three destinations when Next Up is active', () => {
-  renderMenu({ activeDestination: 'nextup' });
+test('shows the other destinations when Settings is active', () => {
+  renderMenu({ activeDestination: 'settings' });
   fireEvent.click(screen.getByRole('button', { name: /drawer menu/i }));
 
   expect(screen.getByRole('button', { name: 'Browse' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'AI Mix' })).toBeInTheDocument();
+});
+
+test('Settings renders as a gear glyph, not text, while keeping its accessible name', () => {
+  renderMenu({ activeDestination: 'browse' });
+  fireEvent.click(screen.getByRole('button', { name: /drawer menu/i }));
+
+  expect(screen.getByRole('button', { name: 'Settings' })).toHaveTextContent('⚙');
+});
+
+test('Next Up is not offered here — it is reached from the footer instead', () => {
+  renderMenu({ activeDestination: 'browse' });
+  fireEvent.click(screen.getByRole('button', { name: /drawer menu/i }));
+
+  expect(screen.queryByRole('button', { name: 'Next Up' })).not.toBeInTheDocument();
 });
 
 test('selecting a destination reports it and closes the menu', () => {
@@ -38,21 +50,21 @@ test('selecting a destination reports it and closes the menu', () => {
   renderMenu({ activeDestination: 'browse', onSelectDestination });
   fireEvent.click(screen.getByRole('button', { name: /drawer menu/i }));
 
-  fireEvent.click(screen.getByRole('button', { name: 'Next Up' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
 
-  expect(onSelectDestination).toHaveBeenCalledWith('nextup');
-  expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
+  expect(onSelectDestination).toHaveBeenCalledWith('settings');
+  expect(screen.queryByRole('button', { name: 'AI Mix' })).not.toBeInTheDocument();
 });
 
 test('tapping the icon again while open closes the menu', () => {
   renderMenu();
   const icon = screen.getByRole('button', { name: /drawer menu/i });
   fireEvent.click(icon);
-  expect(screen.getByRole('button', { name: 'Next Up' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
 
   fireEvent.click(icon);
 
-  expect(screen.queryByRole('button', { name: 'Next Up' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
 });
 
 test('a pointerdown anywhere outside the menu closes it', () => {
@@ -63,9 +75,9 @@ test('a pointerdown anywhere outside the menu closes it', () => {
     </div>
   );
   fireEvent.click(screen.getByRole('button', { name: /drawer menu/i }));
-  expect(screen.getByRole('button', { name: 'Next Up' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
 
   fireEvent.pointerDown(screen.getByTestId('outside'));
 
-  expect(screen.queryByRole('button', { name: 'Next Up' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
 });

@@ -1,13 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 
-const LABELS = { browse: 'Browse', nextup: 'Next Up', settings: 'Settings', aimix: 'AI Mix' };
-const ALL_DESTINATIONS = ['browse', 'nextup', 'settings', 'aimix'];
+const LABELS = { browse: 'Browse', settings: 'Settings', aimix: 'AI Mix' };
+// Settings renders as a gear glyph rather than its text label, matching the
+// rest of the app's icon-as-button-content convention (⋯, ✕, ▲, transport
+// glyphs) — its accessible name stays "Settings" either way, via the
+// explicit aria-label below.
+const ICONS = { settings: '⚙' };
+const ALL_DESTINATIONS = ['browse', 'settings', 'aimix'];
 
-// Small round icon, fixed in a corner of the drawer (see JukeboxBrowsePanel),
-// that replaces the old bottom tab bar's Next Up/Browse tabs and settings
-// gear. Its popover only ever lists the destinations you're not currently
-// on, so there's no separate "back to Browse" control to design — the same
-// menu takes you anywhere, including back.
+// Small round icon, fixed in a corner of the drawer (see JukeboxBrowsePanel).
+// Next Up no longer lists here — it's reached directly from the footer's own
+// queue button (see JukeboxFooterStrip) — so this popover only ever offers
+// Browse/Settings/AI Mix. Its popover only ever lists the destinations you're
+// not currently on, so there's no separate "back to Browse" control to
+// design — the same menu takes you anywhere, including back.
 const JukeboxDrawerMenu = ({ activeDestination, onSelectDestination }) => {
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
@@ -34,8 +40,8 @@ const JukeboxDrawerMenu = ({ activeDestination, onSelectDestination }) => {
       {open && (
         <div className="jukebox-drawer-menu-popover">
           {otherDestinations.map((dest) => (
-            <button key={dest} type="button" onClick={() => handleSelect(dest)}>
-              {LABELS[dest]}
+            <button key={dest} type="button" aria-label={LABELS[dest]} onClick={() => handleSelect(dest)}>
+              {ICONS[dest] ?? LABELS[dest]}
             </button>
           ))}
         </div>
