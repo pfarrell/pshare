@@ -47,7 +47,9 @@ vi.mock('./JukeboxBrowsePanel', () => ({
     </div>
   ),
 }));
-vi.mock('./JukeboxKeyboard', () => ({ default: ({ targetElement }) => (targetElement ? <div data-testid="jukebox-keyboard" /> : null) }));
+vi.mock('./JukeboxKeyboard', () => ({
+  default: ({ targetElement }) => (targetElement ? <div className="jukebox-keyboard" data-testid="jukebox-keyboard" /> : null),
+}));
 vi.mock('./useJukeboxKeyboardFocus', () => ({ useJukeboxKeyboardFocus: vi.fn() }));
 
 import { useAuthStore } from '../stores/authStore';
@@ -219,6 +221,23 @@ describe('drawer inactivity auto-close', () => {
 
     await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
     fireEvent.pointerDown(screen.getByTestId('jukebox-browse-panel'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(10000); }); // 20s total, but only 10s since the reset
+
+    expect(activeDestination()).toBe('browse');
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); }); // 15s since the reset
+
+    expect(activeDestination()).toBe('none');
+  });
+
+  test('typing on the on-screen keyboard resets the idle timer', async () => {
+    vi.useFakeTimers();
+    useJukeboxKeyboardFocus.mockReturnValue(document.createElement('input'));
+    renderApp();
+    fireEvent.click(nowPlayingTap());
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+    fireEvent.pointerDown(screen.getByTestId('jukebox-keyboard'));
     await act(async () => { await vi.advanceTimersByTimeAsync(10000); }); // 20s total, but only 10s since the reset
 
     expect(activeDestination()).toBe('browse');

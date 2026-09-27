@@ -52,9 +52,12 @@ const JukeboxApp = () => {
   // Auto-close on inactivity: armed only while the drawer is open, reset by
   // any pointerdown inside it (Search, Next Up, Settings, drill-downs, or
   // the tracks/playlist side panels — which render as siblings of
-  // .jukebox-browse-panel, not children, see JukeboxBrowsePanel.jsx).
-  // Touches on Now Playing or the footer strip don't count — those already
-  // have their own explicit close behavior (toggleBrowse above).
+  // .jukebox-browse-panel, not children, see JukeboxBrowsePanel.jsx) or on
+  // the on-screen keyboard (also a sibling, not a descendant — see
+  // JukeboxKeyboard.jsx — but typing into a Search box it's editing counts
+  // as drawer activity just the same). Touches on Now Playing or the footer
+  // strip don't count — those already have their own explicit close
+  // behavior (toggleBrowse above).
   const idleTimerRef = useRef(null);
   useEffect(() => {
     if (activeDestination === null) return undefined;
@@ -63,7 +66,7 @@ const JukeboxApp = () => {
       idleTimerRef.current = setTimeout(closeAll, IDLE_CLOSE_MS);
     };
     const handlePointerDown = (e) => {
-      if (e.target.closest('.jukebox-browse-panel, .jukebox-tracks-panel, .jukebox-playlist-panel')) {
+      if (e.target.closest('.jukebox-browse-panel, .jukebox-tracks-panel, .jukebox-playlist-panel, .jukebox-keyboard')) {
         armTimer();
       }
     };
