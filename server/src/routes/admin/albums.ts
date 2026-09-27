@@ -7,6 +7,7 @@ import { parseFile } from 'music-metadata'
 import fs from 'fs'
 import { mergeAlbumInto } from '../../services/albumMergeService.js'
 import { captureAlbumTags } from '../../services/musicbrainzTags.js'
+import { errorLogService } from '../../services/errorLogService.js'
 
 const router = new Hono()
 
@@ -129,9 +130,18 @@ router.put('/album/:id', async (c) => {
     // Manually-set MBID: capture tags, same as a fresh auto-match would
     if (mbidUpdate?.mbid_status === 'manual' && mbidUpdate.musicbrainz_id) {
       const mbid = mbidUpdate.musicbrainz_id
-      captureAlbumTags(id, mbid).catch(err =>
+      captureAlbumTags(id, mbid).catch(err => {
         console.warn(`Manual MBID tag capture failed for album ${id}:`, err.message)
-      )
+        errorLogService.record({ source: 'musicbrainz', message: err.message, context: `manual MBID tag capture for album ${id}` })
+      })
+    }
+
+    // Manually-cleared MBID: the album no longer has any MBID, so its
+    // previously-captured tags no longer correspond to anything — remove them.
+    // (Awaited, not fire-and-forget: this is a local delete with no external
+    // dependency, unlike tag capture above.)
+    if (mbidUpdate && mbidUpdate.musicbrainz_id === null) {
+      await db.deleteFrom('album_mb_tags').where('album_id', '=', id).execute()
     }
 
     return c.json(updated)

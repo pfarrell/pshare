@@ -25,6 +25,10 @@ export async function fetchArtistTagsFromMirror(mbid: string): Promise<MbTagRow[
     .innerJoin('tag', 'tag.id', 'artist_tag.tag')
     .select(['tag.name', 'artist_tag.count'])
     .where('artist.gid', '=', mbid)
+    // MusicBrainz aggregates community up/downvotes into this count, and it
+    // can be zero or negative after net downvotes — the MusicBrainz website
+    // itself filters these out, so we do too.
+    .where('artist_tag.count', '>', 0)
     .execute()
 
   return rows.map(r => ({ name: r.name, count: r.count }))
@@ -37,6 +41,8 @@ export async function fetchAlbumTagsFromMirror(releaseMbid: string): Promise<MbT
     .innerJoin('tag', 'tag.id', 'release_group_tag.tag')
     .select(['tag.name', 'release_group_tag.count'])
     .where('release.gid', '=', releaseMbid)
+    // See fetchArtistTagsFromMirror above — same net-downvote filtering.
+    .where('release_group_tag.count', '>', 0)
     .execute()
 
   return rows.map(r => ({ name: r.name, count: r.count }))
@@ -53,22 +59,27 @@ async function upsertMbTagId(trx: Transaction<Database>, name: string): Promise<
 }
 
 export async function applyArtistTags(artistId: number, mbid: string, tagRows: MbTagRow[]): Promise<void> {
+  // Sort by tag name before acquiring any row locks: upsertMbTagId's
+  // ON CONFLICT DO UPDATE takes a row lock on the mb_tags row that's held
+  // until the transaction commits. Two concurrent captures whose tag sets
+  // overlap, processed in different orders, could otherwise deadlock —
+  // sorting guarantees every transaction acquires those locks in the same
+  // order.
+  const sortedTagRows = tagRows.slice().sort((a, b) => a.name.localeCompare(b.name))
+
   await db.transaction().execute(async trx => {
-    // Delete rows from superseded mbids
+    // Every capture re-derives the complete, current set of tags from the
+    // mirror, so the simplest correct approach is delete-then-reinsert
+    // rather than a differential update against whatever was there before —
+    // this also means a mirror result of zero tags (or an mbid change)
+    // correctly clears out previously-captured rows rather than leaving them
+    // stranded under a stale source_mbid.
     await trx
       .deleteFrom('artist_mb_tags')
       .where('artist_id', '=', artistId)
-      .where('source_mbid', '!=', mbid)
       .execute()
 
-    // Delete rows from the current mbid (we'll re-insert only what's in tagRows)
-    await trx
-      .deleteFrom('artist_mb_tags')
-      .where('artist_id', '=', artistId)
-      .where('source_mbid', '=', mbid)
-      .execute()
-
-    for (const row of tagRows) {
+    for (const row of sortedTagRows) {
       const tagId = await upsertMbTagId(trx, row.name)
       await trx
         .insertInto('artist_mb_tags')
@@ -79,22 +90,17 @@ export async function applyArtistTags(artistId: number, mbid: string, tagRows: M
 }
 
 export async function applyAlbumTags(albumId: number, mbid: string, tagRows: MbTagRow[]): Promise<void> {
+  // See applyArtistTags above — same lock-ordering rationale.
+  const sortedTagRows = tagRows.slice().sort((a, b) => a.name.localeCompare(b.name))
+
   await db.transaction().execute(async trx => {
-    // Delete rows from superseded mbids
+    // Same delete-then-reinsert rationale as applyArtistTags above.
     await trx
       .deleteFrom('album_mb_tags')
       .where('album_id', '=', albumId)
-      .where('source_mbid', '!=', mbid)
       .execute()
 
-    // Delete rows from the current mbid (we'll re-insert only what's in tagRows)
-    await trx
-      .deleteFrom('album_mb_tags')
-      .where('album_id', '=', albumId)
-      .where('source_mbid', '=', mbid)
-      .execute()
-
-    for (const row of tagRows) {
+    for (const row of sortedTagRows) {
       const tagId = await upsertMbTagId(trx, row.name)
       await trx
         .insertInto('album_mb_tags')

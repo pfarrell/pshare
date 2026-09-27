@@ -6,6 +6,7 @@ import { lookupArtistMBID } from '../../services/musicbrainz.js'
 import { fetchArtistImageFromFanart } from '../../services/fanart.js'
 import { fetchSimilarArtists } from '../../services/lastfmSimilar.js'
 import { captureArtistTags } from '../../services/musicbrainzTags.js'
+import { errorLogService } from '../../services/errorLogService.js'
 import { imagesDir } from '../../config/paths.js'
 
 export const MBID_RETRYABLE = ['unmatched', 'not_found', 'low_confidence']
@@ -88,9 +89,18 @@ router.put('/artist/:id', async (c) => {
       fetchSimilarArtists(id, name).catch(err =>
         console.warn(`Manual MBID similar-artist fetch failed for artist ${id}:`, err.message)
       )
-      captureArtistTags(id, mbid).catch(err =>
+      captureArtistTags(id, mbid).catch(err => {
         console.warn(`Manual MBID tag capture failed for artist ${id}:`, err.message)
-      )
+        errorLogService.record({ source: 'musicbrainz', message: err.message, context: `manual MBID tag capture for artist ${id}` })
+      })
+    }
+
+    // Manually-cleared MBID: the artist no longer has any MBID, so its
+    // previously-captured tags no longer correspond to anything — remove them.
+    // (Awaited, not fire-and-forget: this is a local delete with no external
+    // dependency, unlike tag capture above.)
+    if (mbidUpdate && mbidUpdate.musicbrainz_id === null) {
+      await db.deleteFrom('artist_mb_tags').where('artist_id', '=', id).execute()
     }
 
     return c.json(updated)
