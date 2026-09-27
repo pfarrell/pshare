@@ -3496,6 +3496,41 @@ body:has(.jukebox-app) {
   user-drag: none;
 }
 
+/* AI Mix tab (JukeboxAiMixTab.jsx) — first pass, not a final visual design;
+   verify on the actual kiosk hardware and adjust spacing/sizing there. */
+.jukebox-ai-mix-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.jukebox-ai-mix-prompt-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.jukebox-ai-mix-prompt {
+  min-height: 3.5rem;
+  padding: 0.5rem;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+
+.jukebox-ai-mix-prompt-row button {
+  min-height: 44px;
+}
+
+.jukebox-ai-mix-empty,
+.jukebox-ai-mix-partial {
+  opacity: 0.7;
+}
+
+.jukebox-ai-mix-body {
+  overflow-y: auto;
+}
+
 /* Transport (JukeboxTransport.jsx), pinned at the top of the Next Up tab. The
    drawer has 1rem of padding and sticky offsets are measured inside it, so
    top:-1rem plus the -1rem margins pin it flush to the drawer's top and side
