@@ -10,9 +10,9 @@ let cachedProfilesPromise = null;
 // Consumers that hold their own React-state copy of the profile list (rather
 // than re-reading getProfilesCached() on every render) need to know when the
 // cache is invalidated, since resetting the module-scope promise alone can't
-// reach into their already-populated state. JukeboxProfilePicker is the
-// motivating case: it never unmounts on a kiosk, so it needs a push rather
-// than relying on a future remount to pick up fresh data.
+// reach into their already-populated state. SearchTab is the motivating
+// case: it never unmounts on a kiosk, so it needs a push rather than relying
+// on a future remount to pick up fresh data.
 const invalidationListeners = new Set();
 
 export const getProfilesCached = () => {

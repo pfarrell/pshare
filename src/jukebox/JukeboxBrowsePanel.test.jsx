@@ -58,9 +58,19 @@ vi.mock('./JukeboxPlaylistPanel', () => ({
   ),
 }));
 vi.mock('./JukeboxNextUpTab', () => ({ default: () => <div data-testid="jukebox-next-up-tab" /> }));
+vi.mock('./JukeboxSettingsTab', () => ({ default: () => <div data-testid="jukebox-settings-tab" /> }));
+vi.mock('./JukeboxDrawerMenu', () => ({
+  default: ({ activeDestination, onSelectDestination }) => (
+    <div data-testid="jukebox-drawer-menu" data-active-destination={activeDestination}>
+      <button onClick={() => onSelectDestination('nextup')}>menu-select-nextup</button>
+      <button onClick={() => onSelectDestination('settings')}>menu-select-settings</button>
+      <button onClick={() => onSelectDestination('browse')}>menu-select-browse</button>
+    </div>
+  ),
+}));
 
-const renderPanel = (activeTab = 'browse', extraProps = {}) =>
-  render(<JukeboxBrowsePanel activeTab={activeTab} {...extraProps} />);
+const renderPanel = (activeDestination = 'browse', extraProps = {}) =>
+  render(<JukeboxBrowsePanel activeDestination={activeDestination} {...extraProps} />);
 const drawer = (container) => container.querySelector('.jukebox-browse-panel');
 
 test('shows Browse (Search) when that tab is active', () => {
@@ -74,12 +84,32 @@ test('shows Next Up when that tab is active', () => {
   expect(screen.getByTestId('search-tab')).not.toBeVisible();
 });
 
+test('shows Settings when that destination is active', () => {
+  renderPanel('settings');
+  expect(screen.getByTestId('jukebox-settings-tab')).toBeInTheDocument();
+  expect(screen.getByTestId('search-tab')).not.toBeVisible();
+});
+
 test('the drawer is visible when a tab is active', () => {
   const { container } = renderPanel('browse');
   expect(drawer(container)).toBeVisible();
 });
 
-test('the drawer is hidden — but still mounted — when closed (activeTab null)', () => {
+test('always renders the drawer menu, reflecting the active destination', () => {
+  renderPanel('nextup');
+  expect(screen.getByTestId('jukebox-drawer-menu')).toHaveAttribute('data-active-destination', 'nextup');
+});
+
+test('selecting a destination from the drawer menu is reported to the parent via onSelectDestination', () => {
+  const onSelectDestination = vi.fn();
+  renderPanel('browse', { onSelectDestination });
+
+  fireEvent.click(screen.getByText('menu-select-settings'));
+
+  expect(onSelectDestination).toHaveBeenCalledWith('settings');
+});
+
+test('the drawer is hidden — but still mounted — when closed (activeDestination null)', () => {
   const { container } = renderPanel(null);
   expect(drawer(container)).toBeInTheDocument();
   expect(drawer(container)).not.toBeVisible();
@@ -143,8 +173,8 @@ test('closing the tracks panel removes it without closing the drawer', () => {
 test('selecting a different album swaps the tracks panel contents', () => {
   const { rerender } = renderPanel('browse');
   fireEvent.click(screen.getByText('select-search-album'));
-  rerender(<JukeboxBrowsePanel activeTab="nextup" />);
-  rerender(<JukeboxBrowsePanel activeTab="browse" />);
+  rerender(<JukeboxBrowsePanel activeDestination="nextup" />);
+  rerender(<JukeboxBrowsePanel activeDestination="browse" />);
   fireEvent.click(screen.getByText('select-search-album'));
 
   expect(screen.getAllByTestId('jukebox-tracks-panel')).toHaveLength(1);
@@ -155,7 +185,7 @@ test('switching tabs leaves the tracks panel open', () => {
   const { rerender } = renderPanel('browse');
   fireEvent.click(screen.getByText('select-search-album'));
 
-  rerender(<JukeboxBrowsePanel activeTab="nextup" />);
+  rerender(<JukeboxBrowsePanel activeDestination="nextup" />);
 
   expect(screen.getByTestId('jukebox-tracks-panel')).toBeInTheDocument();
 });
@@ -165,10 +195,10 @@ test('closing the drawer closes the tracks panel too, and it does not reappear o
   fireEvent.click(screen.getByText('select-search-album'));
   expect(screen.getByTestId('jukebox-tracks-panel')).toBeInTheDocument();
 
-  rerender(<JukeboxBrowsePanel activeTab={null} />);
+  rerender(<JukeboxBrowsePanel activeDestination={null} />);
   expect(screen.queryByTestId('jukebox-tracks-panel')).not.toBeInTheDocument();
 
-  rerender(<JukeboxBrowsePanel activeTab="browse" />);
+  rerender(<JukeboxBrowsePanel activeDestination="browse" />);
   expect(screen.queryByTestId('jukebox-tracks-panel')).not.toBeInTheDocument();
 });
 
@@ -190,12 +220,12 @@ test('switching to another tab and back, or closing and reopening, keeps the sea
   const { rerender } = renderPanel('browse');
   fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'monk' } });
 
-  rerender(<JukeboxBrowsePanel activeTab="nextup" />);
-  rerender(<JukeboxBrowsePanel activeTab="browse" />);
+  rerender(<JukeboxBrowsePanel activeDestination="nextup" />);
+  rerender(<JukeboxBrowsePanel activeDestination="browse" />);
   expect(screen.getByTestId('search-input')).toHaveValue('monk');
 
-  rerender(<JukeboxBrowsePanel activeTab={null} />);
-  rerender(<JukeboxBrowsePanel activeTab="browse" />);
+  rerender(<JukeboxBrowsePanel activeDestination={null} />);
+  rerender(<JukeboxBrowsePanel activeDestination="browse" />);
   expect(screen.getByTestId('search-input')).toHaveValue('monk');
 });
 
@@ -204,8 +234,8 @@ test('switching to a different tab dismisses an open artist view', () => {
   fireEvent.click(screen.getByText('select-search-artist'));
   expect(screen.getByTestId('jukebox-artist-view')).toBeInTheDocument();
 
-  rerender(<JukeboxBrowsePanel activeTab="nextup" />);
-  rerender(<JukeboxBrowsePanel activeTab="browse" />);
+  rerender(<JukeboxBrowsePanel activeDestination="nextup" />);
+  rerender(<JukeboxBrowsePanel activeDestination="browse" />);
 
   expect(screen.queryByTestId('jukebox-artist-view')).not.toBeInTheDocument();
   expect(screen.getByTestId('search-tab')).toBeVisible();
@@ -215,8 +245,8 @@ test('closing and reopening the SAME tab keeps an open artist view', () => {
   const { rerender } = renderPanel('browse');
   fireEvent.click(screen.getByText('select-search-artist'));
 
-  rerender(<JukeboxBrowsePanel activeTab={null} />);
-  rerender(<JukeboxBrowsePanel activeTab="browse" />);
+  rerender(<JukeboxBrowsePanel activeDestination={null} />);
+  rerender(<JukeboxBrowsePanel activeDestination="browse" />);
 
   expect(screen.getByTestId('jukebox-artist-view')).toBeInTheDocument();
 });
@@ -286,10 +316,10 @@ test('closing the drawer closes the playlist panel too, and it does not reappear
   fireEvent.click(screen.getByText('select-search-playlist'));
   expect(screen.getByTestId('jukebox-playlist-panel')).toBeInTheDocument();
 
-  rerender(<JukeboxBrowsePanel activeTab={null} />);
+  rerender(<JukeboxBrowsePanel activeDestination={null} />);
   expect(screen.queryByTestId('jukebox-playlist-panel')).not.toBeInTheDocument();
 
-  rerender(<JukeboxBrowsePanel activeTab="browse" />);
+  rerender(<JukeboxBrowsePanel activeDestination="browse" />);
   expect(screen.queryByTestId('jukebox-playlist-panel')).not.toBeInTheDocument();
 });
 
@@ -343,7 +373,7 @@ test('a pending artist is pushed as the drill-down view once the parent hands it
 
   rerender(
     <JukeboxBrowsePanel
-      activeTab="browse"
+      activeDestination="browse"
       pendingArtist={{ id: 8, name: 'Album Artist' }}
       onPendingArtistConsumed={onPendingArtistConsumed}
     />
@@ -360,7 +390,7 @@ test('a pending artist replaces whatever was on the drill-down stack, not stacke
 
   rerender(
     <JukeboxBrowsePanel
-      activeTab="browse"
+      activeDestination="browse"
       pendingArtist={{ id: 8, name: 'Album Artist' }}
       onPendingArtistConsumed={vi.fn()}
     />
@@ -375,8 +405,8 @@ test('switching to a different tab dismisses an open collection view, same as an
   fireEvent.click(screen.getByText('select-search-collection'));
   expect(screen.getByTestId('jukebox-collection-view')).toBeInTheDocument();
 
-  rerender(<JukeboxBrowsePanel activeTab="nextup" />);
-  rerender(<JukeboxBrowsePanel activeTab="browse" />);
+  rerender(<JukeboxBrowsePanel activeDestination="nextup" />);
+  rerender(<JukeboxBrowsePanel activeDestination="browse" />);
 
   expect(screen.queryByTestId('jukebox-collection-view')).not.toBeInTheDocument();
 });

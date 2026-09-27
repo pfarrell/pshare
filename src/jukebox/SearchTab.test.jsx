@@ -106,6 +106,28 @@ test('clearing the search box brings back the Quick Hit grid, even after a previ
   await waitFor(() => expect(screen.getByText('Quick Hit Album')).toBeInTheDocument());
 });
 
+test('shows no clear button while the search box is empty', () => {
+  renderTab();
+  expect(screen.queryByRole('button', { name: /clear search/i })).not.toBeInTheDocument();
+});
+
+test('shows a clear button once text is typed, and it empties the box', async () => {
+  apiService.getRecentAlbums.mockResolvedValue({
+    data: [{ id: 1, title: 'Quick Hit Album', image_path: 'a.jpg', artist: { id: 1, name: 'Quick Hit Artist' }, track_count: 10 }],
+  });
+  apiService.search.mockResolvedValue({ data: smallResponse });
+  renderTab();
+  await waitFor(() => expect(screen.getByText('Quick Hit Album')).toBeInTheDocument());
+  await runSearch('test query');
+  await waitFor(() => expect(screen.getByText('Found Album')).toBeInTheDocument());
+
+  fireEvent.click(screen.getByRole('button', { name: /clear search/i }));
+
+  expect(screen.getByPlaceholderText('Search')).toHaveValue('');
+  expect(screen.queryByText('Found Album')).not.toBeInTheDocument();
+  await waitFor(() => expect(screen.getByText('Quick Hit Album')).toBeInTheDocument());
+});
+
 test('tapping a Quick Hit album calls onSelectAlbum, same as a search result album', async () => {
   apiService.getRecentAlbums.mockResolvedValue({
     data: [{ id: 1, title: 'Quick Hit Album', image_path: 'a.jpg', artist: { id: 1, name: 'Quick Hit Artist' }, track_count: 10 }],
@@ -120,10 +142,10 @@ test('tapping a Quick Hit album calls onSelectAlbum, same as a search result alb
 });
 
 // --- Profile filtering ------------------------------------------------
-// The settings gear itself now lives in JukeboxTabBar, not here — see
-// JukeboxTabBar.test.jsx. SearchTab still owns filtering its own results by
-// activeProfileId and resolving/self-healing the active profile's name for
-// display, regardless of where the gear control is rendered.
+// The settings/profile-picking UI itself lives in JukeboxSettingsTab, not
+// here — see JukeboxSettingsTab.test.jsx. SearchTab still owns filtering its
+// own results by activeProfileId and resolving/self-healing the active
+// profile's name for display, regardless of where the picker is rendered.
 
 test('shows the active profile name under the search bar when one is set', async () => {
   useProfileFilterStore.setState({ activeProfileId: 1 });

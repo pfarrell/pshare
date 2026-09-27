@@ -1,44 +1,50 @@
 import { useState, useEffect, useRef } from 'react';
 import SearchTab from './SearchTab';
 import JukeboxNextUpTab from './JukeboxNextUpTab';
+import JukeboxSettingsTab from './JukeboxSettingsTab';
+import JukeboxDrawerMenu from './JukeboxDrawerMenu';
 import JukeboxArtistView from './JukeboxArtistView';
 import JukeboxCollectionView from './JukeboxCollectionView';
 import JukeboxTracksPanel from './JukeboxTracksPanel';
 import JukeboxPlaylistPanel from './JukeboxPlaylistPanel';
 import { useTouchScroll } from './useTouchScroll';
 
-// The drawer body. Which tab is showing — and whether the drawer is open at all
-// (activeTab === null) — is decided by JukeboxApp from the bottom tab bar; this
-// component has no tab row or close button of its own.
+// The drawer body. Which destination is showing — and whether the drawer is
+// open at all (activeDestination === null) — is decided by JukeboxApp; this
+// component has no close button of its own, but does own the small
+// JukeboxDrawerMenu that switches between destinations (replacing the old
+// bottom tab bar's Next Up/Browse tabs and settings gear).
 //
 // It is mounted even while closed and hidden with the `hidden` attribute,
-// because tapping the active tab to close is now a frequent action and
-// unmounting would throw away the Search query/results/filter every time.
+// because switching destinations (or closing and reopening) is now a
+// frequent action and unmounting would throw away the Search query/results/
+// filter every time.
 //
 // Owns two pieces of navigation state: the drill-down stack (Search can push
-// an artist or a collection, whose albums show in place of the tab — see
-// JukeboxArtistView/JukeboxCollectionView), and which album/playlist is
+// an artist or a collection, whose albums show in place of the destination —
+// see JukeboxArtistView/JukeboxCollectionView), and which album/playlist is
 // selected. Neither replaces anything in this panel: selecting one opens a
 // tracks-style panel to this one's left, so the list you tapped from stays
 // put. An album and a playlist panel are mutually exclusive — selecting one
-// closes the other, since they render in the same slot. Any tab can select
-// an album; only Search can select a playlist so far. Both panels close with
-// the drawer.
+// closes the other, since they render in the same slot. Any destination can
+// select an album; only Search can select a playlist so far. Both panels
+// close with the drawer.
 //
-// There are only two tabs now: 'browse' (Search, with Quick Hit as its
-// empty-box state — see SearchTab.jsx) and 'nextup'. A standalone 'quickhit'
-// tab used to exist here too; it was folded into 'browse' rather than kept
-// as a second way to reach the same view.
-const JukeboxBrowsePanel = ({ activeTab, onEnqueue, pendingArtist, onJumpToArtist, onPendingArtistConsumed }) => {
+// There are three destinations: 'browse' (Search, with Quick Hit as its
+// empty-box state — see SearchTab.jsx), 'nextup', and 'settings' (profile
+// filter + QR code, formerly the standalone JukeboxProfilePicker gear).
+// Settings and Next Up both unmount when switched away from, same as before —
+// only Search's query/results are worth preserving hidden-but-mounted.
+const JukeboxBrowsePanel = ({ activeDestination, onSelectDestination, onEnqueue, pendingArtist, onJumpToArtist, onPendingArtistConsumed }) => {
   const [viewStack, setViewStack] = useState([]);
   const [selectedAlbum, setSelectedAlbum] = useState(null);
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
-  const lastShownTabRef = useRef(activeTab);
+  const lastShownDestinationRef = useRef(activeDestination);
   const panelRef = useTouchScroll({ axis: 'y' });
-  const open = activeTab !== null;
+  const open = activeDestination !== null;
 
   useEffect(() => {
-    if (activeTab === null) {
+    if (activeDestination === null) {
       // drawer closed: don't leave an orphaned tracks/playlist panel
       setSelectedAlbum(null);
       setSelectedPlaylist(null);
@@ -46,23 +52,24 @@ const JukeboxBrowsePanel = ({ activeTab, onEnqueue, pendingArtist, onJumpToArtis
     }
     // A jump-to-artist request (from the tracks panel's artist link) replaces
     // whatever's on the drill-down stack with that artist, rather than being
-    // stacked on top of it or cleared by the tab-switch rule below — it fires
-    // together with (or after) the parent switching activeTab to 'browse',
-    // so this branch must win over the "different tab" clear on the same pass.
+    // stacked on top of it or cleared by the destination-switch rule below —
+    // it fires together with (or after) the parent switching activeDestination
+    // to 'browse', so this branch must win over the "different destination"
+    // clear on the same pass.
     if (pendingArtist) {
       setViewStack([{ type: 'artist', data: pendingArtist }]);
       onPendingArtistConsumed?.();
-      lastShownTabRef.current = activeTab;
+      lastShownDestinationRef.current = activeDestination;
       return;
     }
-    // A drill-down view only makes sense over the Search tab it was pushed
-    // from, so a switch to a *different* tab dismisses it. Reopening the
-    // same tab keeps it.
-    if (lastShownTabRef.current !== null && lastShownTabRef.current !== activeTab) {
+    // A drill-down view only makes sense over the Search destination it was
+    // pushed from, so a switch to a *different* destination dismisses it.
+    // Reopening the same destination keeps it.
+    if (lastShownDestinationRef.current !== null && lastShownDestinationRef.current !== activeDestination) {
       setViewStack([]);
     }
-    lastShownTabRef.current = activeTab;
-  }, [activeTab, pendingArtist, onPendingArtistConsumed]);
+    lastShownDestinationRef.current = activeDestination;
+  }, [activeDestination, pendingArtist, onPendingArtistConsumed]);
 
   const pushView = (view) => setViewStack((stack) => [...stack, view]);
   const popView = () => setViewStack((stack) => stack.slice(0, -1));
@@ -76,9 +83,9 @@ const JukeboxBrowsePanel = ({ activeTab, onEnqueue, pendingArtist, onJumpToArtis
     onJumpToArtist?.(artist);
   };
 
-  // Derived (not just from state) so a tab switch never flashes the old
-  // drill-down view for a frame before the effect above clears the stack.
-  const currentView = activeTab === 'browse' ? viewStack[viewStack.length - 1] : undefined;
+  // Derived (not just from state) so a destination switch never flashes the
+  // old drill-down view for a frame before the effect above clears the stack.
+  const currentView = activeDestination === 'browse' ? viewStack[viewStack.length - 1] : undefined;
 
   // The tracks/playlist panel is a sibling, not a child, of the scrolling
   // drawer: as a child, drags inside it would also bubble to this drawer's
@@ -86,6 +93,7 @@ const JukeboxBrowsePanel = ({ activeTab, onEnqueue, pendingArtist, onJumpToArtis
   return (
     <>
       <div className="jukebox-browse-panel" ref={panelRef} hidden={!open}>
+        <JukeboxDrawerMenu activeDestination={activeDestination} onSelectDestination={onSelectDestination} />
         {currentView?.type === 'artist' && (
           <JukeboxArtistView
             artist={currentView.data}
@@ -104,8 +112,8 @@ const JukeboxBrowsePanel = ({ activeTab, onEnqueue, pendingArtist, onJumpToArtis
         )}
         {/* Hidden, never unmounted: SearchTab owns the query, results and type
             filter, and unmounting it whenever a drill-down view or another
-            tab is showing threw all of that away. */}
-        <div hidden={activeTab !== 'browse' || !!currentView}>
+            destination is showing threw all of that away. */}
+        <div hidden={activeDestination !== 'browse' || !!currentView}>
           <SearchTab
             onSelectArtist={(artist) => pushView({ type: 'artist', data: artist })}
             onSelectAlbum={selectAlbum}
@@ -114,7 +122,8 @@ const JukeboxBrowsePanel = ({ activeTab, onEnqueue, pendingArtist, onJumpToArtis
             onEnqueue={onEnqueue}
           />
         </div>
-        {!currentView && activeTab === 'nextup' && <JukeboxNextUpTab />}
+        {!currentView && activeDestination === 'nextup' && <JukeboxNextUpTab />}
+        {!currentView && activeDestination === 'settings' && <JukeboxSettingsTab />}
       </div>
       {open && selectedAlbum && (
         <JukeboxTracksPanel

@@ -5,7 +5,7 @@ import { apiService } from '../services/api';
 // Renders the enqueue URL as a scannable QR code, plus a rotate action —
 // see docs/superpowers/specs/2026-09-25-jukebox-server-queue-design.md.
 // Regenerating invalidates the old token immediately server-side; the
-// parent (JukeboxProfilePicker) is responsible for rebuilding `url` from
+// parent (JukeboxSettingsTab) is responsible for rebuilding `url` from
 // the new token via onRotated.
 const JukeboxQrCode = ({ url, deviceId, onRotated }) => {
   const [dataUrl, setDataUrl] = useState(null);

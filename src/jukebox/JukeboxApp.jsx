@@ -1,23 +1,29 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import JukeboxLogin from './JukeboxLogin';
 import JukeboxNowPlaying from './JukeboxNowPlaying';
 import JukeboxBrowsePanel from './JukeboxBrowsePanel';
-import JukeboxTabBar from './JukeboxTabBar';
+import JukeboxFooterStrip from './JukeboxFooterStrip';
 import JukeboxKeyboard from './JukeboxKeyboard';
 import { useJukeboxKeyboardFocus } from './useJukeboxKeyboardFocus';
 import { useJukeboxQueueEvents } from './useJukeboxQueueEvents';
 import MusicPlayerWrapper from '../components/player/MusicPlayerWrapper';
 
+// How long the drawer can sit open with no touch inside it before it closes
+// itself back to Now Playing.
+const IDLE_CLOSE_MS = 15000;
+
 const JukeboxApp = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const jukeboxDeviceId = useAuthStore((s) => s.jukeboxDeviceId ?? null);
-  // Which drawer tab is showing; null = drawer closed. Tapping the active tab
-  // closes the drawer, tapping another switches, tapping any while closed opens.
-  const [activeTab, setActiveTab] = useState(null);
+  // Which drawer destination is showing; null = drawer closed. Tapping Now
+  // Playing or the footer strip toggles between null and 'browse'; the
+  // drawer's own JukeboxDrawerMenu can switch directly to any destination
+  // via onSelectDestination without closing.
+  const [activeDestination, setActiveDestination] = useState(null);
   // Set when the tracks panel's artist link is tapped: the target artist to
-  // show in Search's drill-down view, carried across a tab switch to Search
-  // if one is needed. JukeboxBrowsePanel consumes it (pushes it as the
+  // show in Search's drill-down view, carried across a destination switch to
+  // Search if one is needed. JukeboxBrowsePanel consumes it (pushes it as the
   // artist view) and reports back via onPendingArtistConsumed.
   const [pendingArtist, setPendingArtist] = useState(null);
   // The platform's own on-screen keyboard (squeekboard + labwc) proved
@@ -30,18 +36,44 @@ const JukeboxApp = () => {
   // useJukeboxKeyboardFocus above, since it's a hook.
   useJukeboxQueueEvents(jukeboxDeviceId);
 
-  const handleTabPress = (tab) => setActiveTab((current) => (current === tab ? null : tab));
   // Enqueueing something (a track, an album, an artist/collection shuffle)
   // from Browse closes everything, so the kiosk lands back on Now Playing
   // instead of leaving the drawer open over it.
-  const closeAll = () => setActiveTab(null);
+  const closeAll = () => setActiveDestination(null);
+  const toggleBrowse = () => setActiveDestination((current) => (current === null ? 'browse' : null));
   // "Close the album page and show this artist's albums as if we'd
   // searched" — switches to Browse (a no-op if already there) and hands the
   // artist to the drawer.
   const jumpToArtist = (artist) => {
-    setActiveTab('browse');
+    setActiveDestination('browse');
     setPendingArtist(artist);
   };
+
+  // Auto-close on inactivity: armed only while the drawer is open, reset by
+  // any pointerdown inside it (Search, Next Up, Settings, drill-downs, or
+  // the tracks/playlist side panels — which render as siblings of
+  // .jukebox-browse-panel, not children, see JukeboxBrowsePanel.jsx).
+  // Touches on Now Playing or the footer strip don't count — those already
+  // have their own explicit close behavior (toggleBrowse above).
+  const idleTimerRef = useRef(null);
+  useEffect(() => {
+    if (activeDestination === null) return undefined;
+    const armTimer = () => {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = setTimeout(closeAll, IDLE_CLOSE_MS);
+    };
+    const handlePointerDown = (e) => {
+      if (e.target.closest('.jukebox-browse-panel, .jukebox-tracks-panel, .jukebox-playlist-panel')) {
+        armTimer();
+      }
+    };
+    armTimer();
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => {
+      clearTimeout(idleTimerRef.current);
+      document.removeEventListener('pointerdown', handlePointerDown);
+    };
+  }, [activeDestination]);
 
   // Wrapped in .jukebox-app too: the login screen is the first thing a fresh
   // kiosk shows, and it needs the shell's dark ground and kiosk-scale sizing
@@ -57,20 +89,21 @@ const JukeboxApp = () => {
 
   return (
     <div className="jukebox-app">
-      <JukeboxNowPlaying onDismiss={closeAll} />
+      <JukeboxNowPlaying onTap={toggleBrowse} />
       <JukeboxBrowsePanel
-        activeTab={activeTab}
+        activeDestination={activeDestination}
+        onSelectDestination={setActiveDestination}
         onEnqueue={closeAll}
         pendingArtist={pendingArtist}
         onJumpToArtist={jumpToArtist}
         onPendingArtistConsumed={() => setPendingArtist(null)}
       />
-      <JukeboxTabBar activeTab={activeTab} onTabPress={handleTabPress} />
+      <JukeboxFooterStrip onTap={toggleBrowse} />
       {/* MusicPlayerWrapper owns both <audio> elements and usePlayerEngine
           (gapless prefetch, Media Session, play logging), so it must stay
-          mounted — but its own controls are replaced by the tab bar and the
-          Next Up transport, so it's hidden. Its <audio> elements were already
-          display:none, so playback is unaffected. */}
+          mounted — but its own controls are replaced by the footer strip and
+          the Next Up transport, so it's hidden. Its <audio> elements were
+          already display:none, so playback is unaffected. */}
       <div className="jukebox-engine" hidden>
         <MusicPlayerWrapper />
       </div>

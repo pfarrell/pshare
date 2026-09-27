@@ -1,15 +1,16 @@
 import { usePlayerStore } from '../stores/playerStore';
 import { apiService } from '../services/api';
 
-// onDismiss fires on any tap here — the main screen behind the drawer/panels
-// — so JukeboxApp can close whatever's open, mirroring the settings gear's
-// own outside-click dismiss (see JukeboxProfilePicker.jsx).
-const JukeboxNowPlaying = ({ onDismiss }) => {
+// onTap fires on any tap here — the main screen behind the drawer/panels —
+// so JukeboxApp can open the drawer when it's closed, or close it when it's
+// already open (the drawer is a right-edge panel, not full-screen, so this
+// area stays visible and tappable either way).
+const JukeboxNowPlaying = ({ onTap }) => {
   const currentTrack = usePlayerStore((s) => s.currentTrack);
 
   if (!currentTrack) {
     return (
-      <div className="jukebox-now-playing jukebox-now-playing-empty" onClick={onDismiss}>
+      <div className="jukebox-now-playing jukebox-now-playing-empty" onClick={onTap}>
         <p>Nothing playing — tap Browse to pick something</p>
       </div>
     );
@@ -23,7 +24,7 @@ const JukeboxNowPlaying = ({ onDismiss }) => {
     : null;
 
   return (
-    <div className="jukebox-now-playing" onClick={onDismiss}>
+    <div className="jukebox-now-playing" onClick={onTap}>
       {albumArtUrl ? (
         <img
           className="jukebox-now-playing-art"

@@ -27,26 +27,26 @@ test('shows the current track\'s art, title, and artist', () => {
   expect(screen.getByRole('img')).toHaveAttribute('src', '/img/big/x.jpg');
 });
 
-test('tapping the screen calls onDismiss, with a track playing', () => {
+test('tapping the screen calls onTap, with a track playing', () => {
   usePlayerStore.mockReturnValue({
     title: 'Test Track',
     artist: { name: 'Test Artist' },
     image_path: 'x.jpg',
   });
-  const onDismiss = vi.fn();
-  render(<JukeboxNowPlaying onDismiss={onDismiss} />);
+  const onTap = vi.fn();
+  render(<JukeboxNowPlaying onTap={onTap} />);
 
   fireEvent.click(screen.getByText('Test Track'));
 
-  expect(onDismiss).toHaveBeenCalledTimes(1);
+  expect(onTap).toHaveBeenCalledTimes(1);
 });
 
-test('tapping the screen calls onDismiss, in the empty state', () => {
+test('tapping the screen calls onTap, in the empty state', () => {
   usePlayerStore.mockReturnValue(null);
-  const onDismiss = vi.fn();
-  render(<JukeboxNowPlaying onDismiss={onDismiss} />);
+  const onTap = vi.fn();
+  render(<JukeboxNowPlaying onTap={onTap} />);
 
   fireEvent.click(screen.getByText('Nothing playing — tap Browse to pick something'));
 
-  expect(onDismiss).toHaveBeenCalledTimes(1);
+  expect(onTap).toHaveBeenCalledTimes(1);
 });

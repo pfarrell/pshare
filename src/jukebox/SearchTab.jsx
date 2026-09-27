@@ -54,9 +54,10 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
   const { activeProfileId } = useProfileFilterStore();
   const [activeProfileName, setActiveProfileName] = useState(null);
 
-  // SearchTab is never unmounted on a kiosk (same as JukeboxProfilePicker),
-  // so a profile rename/delete elsewhere only reaches this always-visible
-  // label if something pushes it. An incrementing counter, not a
+  // SearchTab is never unmounted on a kiosk (unlike JukeboxSettingsTab, which
+  // unmounts each time the drawer switches away from Settings), so a profile
+  // rename/delete elsewhere only reaches this always-visible label if
+  // something pushes it. An incrementing counter, not a
   // null-reset, because the picker's own reset-to-null approach has a known
   // (accepted, spec-acknowledged) race where a same-value setState(null)
   // while already null doesn't trigger a re-render — a counter always
@@ -257,6 +258,16 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+          {query !== '' && (
+            <button
+              type="button"
+              className="jukebox-search-clear"
+              aria-label="Clear search"
+              onClick={() => setQuery('')}
+            >
+              ✕
+            </button>
+          )}
           <button type="submit">Search</button>
         </form>
 

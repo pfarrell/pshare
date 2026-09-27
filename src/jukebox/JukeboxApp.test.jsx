@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import JukeboxApp from './JukeboxApp';
@@ -11,8 +11,8 @@ vi.mock('../stores/authStore', () => ({ useAuthStore: vi.fn() }));
 // null. That's enough to make the hook believe a device is known and try to
 // open a real EventSource/fetch pending queue on every render, so its
 // dependencies are stubbed here with defensive defaults rather than exercised
-// for real — this file is about the tab/drawer shell, not the SSE hook
-// (covered by useJukeboxQueueEvents.test.js).
+// for real — this file is about the app shell and drawer state, not the SSE
+// hook (covered by useJukeboxQueueEvents.test.js).
 vi.mock('../services/api', () => ({
   apiService: {
     getJukeboxPendingQueue: vi.fn(() => Promise.resolve({ data: [] })),
@@ -23,17 +23,24 @@ vi.mock('../services/api', () => ({
 }));
 vi.mock('./JukeboxLogin', () => ({ default: () => <div data-testid="jukebox-login" /> }));
 vi.mock('./JukeboxNowPlaying', () => ({
-  default: ({ onDismiss }) => (
+  default: ({ onTap }) => (
     <div data-testid="jukebox-now-playing">
-      <button onClick={onDismiss}>trigger-dismiss</button>
+      <button onClick={onTap}>trigger-now-playing-tap</button>
     </div>
   ),
 }));
 vi.mock('../components/player/MusicPlayerWrapper', () => ({ default: () => <div data-testid="player-engine" /> }));
 vi.mock('./JukeboxProgressLine', () => ({ default: () => <div data-testid="progress-line" /> }));
 vi.mock('./JukeboxBrowsePanel', () => ({
-  default: ({ activeTab, onEnqueue, pendingArtist, onJumpToArtist, onPendingArtistConsumed }) => (
-    <div data-testid="jukebox-browse-panel" data-active-tab={activeTab ?? 'none'} data-pending-artist={pendingArtist?.name ?? 'none'}>
+  default: ({ activeDestination, onSelectDestination, onEnqueue, pendingArtist, onJumpToArtist, onPendingArtistConsumed }) => (
+    <div
+      className="jukebox-browse-panel"
+      data-testid="jukebox-browse-panel"
+      data-active-destination={activeDestination ?? 'none'}
+      data-pending-artist={pendingArtist?.name ?? 'none'}
+    >
+      <button onClick={() => onSelectDestination('nextup')}>trigger-select-nextup</button>
+      <button onClick={() => onSelectDestination('settings')}>trigger-select-settings</button>
       <button onClick={onEnqueue}>trigger-enqueue</button>
       <button onClick={() => onJumpToArtist({ id: 42, name: 'Jumped Artist' })}>trigger-jump-to-artist</button>
       <button onClick={onPendingArtistConsumed}>trigger-pending-artist-consumed</button>
@@ -47,9 +54,10 @@ import { useAuthStore } from '../stores/authStore';
 import { useJukeboxKeyboardFocus } from './useJukeboxKeyboardFocus';
 
 const renderApp = () => render(<MemoryRouter><JukeboxApp /></MemoryRouter>);
-const activeTab = () => screen.getByTestId('jukebox-browse-panel').getAttribute('data-active-tab');
+const activeDestination = () => screen.getByTestId('jukebox-browse-panel').getAttribute('data-active-destination');
 const pendingArtistName = () => screen.getByTestId('jukebox-browse-panel').getAttribute('data-pending-artist');
-const tab = (name) => screen.getByRole('button', { name });
+const nowPlayingTap = () => screen.getByText('trigger-now-playing-tap');
+const footerStrip = () => screen.getByRole('button', { name: 'Browse' });
 
 // jsdom has no native EventSource, and useJukeboxQueueEvents (run
 // unconditionally by JukeboxApp) opens one as soon as it sees a
@@ -63,6 +71,10 @@ beforeEach(() => {
   useJukeboxKeyboardFocus.mockReturnValue(null);
   useAuthStore.mockReturnValue(true);
   global.EventSource = NoOpEventSource;
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 test('shows JukeboxLogin when not authenticated', () => {
@@ -84,10 +96,10 @@ test('renders the on-screen keyboard, authenticated, when an input is focused', 
   expect(screen.getByTestId('jukebox-keyboard')).toBeInTheDocument();
 });
 
-test('shows the now-playing view, the tab bar and the drawer when authenticated', () => {
+test('shows the now-playing view, the footer strip and the drawer when authenticated', () => {
   renderApp();
   expect(screen.getByTestId('jukebox-now-playing')).toBeInTheDocument();
-  expect(screen.getByRole('navigation', { name: 'Browse' })).toBeInTheDocument();
+  expect(footerStrip()).toBeInTheDocument();
   expect(screen.getByTestId('jukebox-browse-panel')).toBeInTheDocument();
 });
 
@@ -100,81 +112,69 @@ test('keeps the audio engine mounted but hidden', () => {
 
 test('the drawer starts closed', () => {
   renderApp();
-  expect(activeTab()).toBe('none');
+  expect(activeDestination()).toBe('none');
 });
 
-test('tapping a tab while the drawer is closed opens it on that tab', () => {
+test('tapping the now-playing screen opens the drawer to Browse when closed', () => {
   renderApp();
-  fireEvent.click(tab('Browse'));
-  expect(activeTab()).toBe('browse');
-  expect(tab('Browse')).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(nowPlayingTap());
+  expect(activeDestination()).toBe('browse');
 });
 
-test('tapping the active tab closes the drawer', () => {
+test('tapping the now-playing screen again closes the drawer', () => {
   renderApp();
-  fireEvent.click(tab('Browse'));
-  fireEvent.click(tab('Browse'));
-  expect(activeTab()).toBe('none');
-  expect(tab('Browse')).toHaveAttribute('aria-pressed', 'false');
+  fireEvent.click(nowPlayingTap());
+  fireEvent.click(nowPlayingTap());
+  expect(activeDestination()).toBe('none');
 });
 
-test('tapping a different tab switches to it', () => {
+test('tapping the footer strip opens the drawer to Browse when closed, and closes it when tapped again', () => {
   renderApp();
-  fireEvent.click(tab('Browse'));
-  fireEvent.click(tab('Next Up'));
-  expect(activeTab()).toBe('nextup');
-  expect(tab('Browse')).toHaveAttribute('aria-pressed', 'false');
-  expect(tab('Next Up')).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(footerStrip());
+  expect(activeDestination()).toBe('browse');
+
+  fireEvent.click(footerStrip());
+  expect(activeDestination()).toBe('none');
 });
 
-test('reopening after a close starts on whichever tab was tapped', () => {
+test('selecting a destination from the drawer menu switches to it without closing', () => {
   renderApp();
-  fireEvent.click(tab('Browse'));
-  fireEvent.click(tab('Browse'));
-  fireEvent.click(tab('Next Up'));
-  expect(activeTab()).toBe('nextup');
+  fireEvent.click(nowPlayingTap());
+  expect(activeDestination()).toBe('browse');
+
+  fireEvent.click(screen.getByText('trigger-select-nextup'));
+
+  expect(activeDestination()).toBe('nextup');
 });
 
 test('passes the drawer an onEnqueue callback that closes the drawer when called', () => {
   renderApp();
-  fireEvent.click(tab('Browse'));
-  expect(activeTab()).toBe('browse');
+  fireEvent.click(nowPlayingTap());
+  expect(activeDestination()).toBe('browse');
 
   fireEvent.click(screen.getByText('trigger-enqueue'));
 
-  expect(activeTab()).toBe('none');
-  expect(tab('Browse')).toHaveAttribute('aria-pressed', 'false');
+  expect(activeDestination()).toBe('none');
 });
 
-test('tapping the now-playing screen closes the drawer', () => {
+test('jumping to an artist from a different destination switches to Browse and carries the artist along', () => {
   renderApp();
-  fireEvent.click(tab('Browse'));
-  expect(activeTab()).toBe('browse');
-
-  fireEvent.click(screen.getByText('trigger-dismiss'));
-
-  expect(activeTab()).toBe('none');
-  expect(tab('Browse')).toHaveAttribute('aria-pressed', 'false');
-});
-
-test('jumping to an artist from a different tab switches to Browse and carries the artist along', () => {
-  renderApp();
-  fireEvent.click(tab('Next Up'));
+  fireEvent.click(nowPlayingTap());
+  fireEvent.click(screen.getByText('trigger-select-nextup'));
 
   fireEvent.click(screen.getByText('trigger-jump-to-artist'));
 
-  expect(activeTab()).toBe('browse');
-  expect(tab('Browse')).toHaveAttribute('aria-pressed', 'true');
+  expect(activeDestination()).toBe('browse');
   expect(pendingArtistName()).toBe('Jumped Artist');
 });
 
 test('jumping to an artist while already on Browse still carries the artist along', () => {
   renderApp();
-  fireEvent.click(tab('Browse'));
+  fireEvent.click(nowPlayingTap());
 
   fireEvent.click(screen.getByText('trigger-jump-to-artist'));
 
-  expect(activeTab()).toBe('browse');
+  expect(activeDestination()).toBe('browse');
   expect(pendingArtistName()).toBe('Jumped Artist');
 });
 
@@ -186,4 +186,66 @@ test('clears the pending artist once the drawer reports it consumed', () => {
   fireEvent.click(screen.getByText('trigger-pending-artist-consumed'));
 
   expect(pendingArtistName()).toBe('none');
+});
+
+// --- Drawer auto-close on inactivity ---------------------------------------
+
+describe('drawer inactivity auto-close', () => {
+  test('closes the drawer after 15s with no activity inside it', async () => {
+    vi.useFakeTimers();
+    renderApp();
+    fireEvent.click(nowPlayingTap());
+    expect(activeDestination()).toBe('browse');
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
+
+    expect(activeDestination()).toBe('none');
+  });
+
+  test('does not close before 15s have passed', async () => {
+    vi.useFakeTimers();
+    renderApp();
+    fireEvent.click(nowPlayingTap());
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(14000); });
+
+    expect(activeDestination()).toBe('browse');
+  });
+
+  test('activity inside the drawer resets the idle timer', async () => {
+    vi.useFakeTimers();
+    renderApp();
+    fireEvent.click(nowPlayingTap());
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+    fireEvent.pointerDown(screen.getByTestId('jukebox-browse-panel'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(10000); }); // 20s total, but only 10s since the reset
+
+    expect(activeDestination()).toBe('browse');
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); }); // 15s since the reset
+
+    expect(activeDestination()).toBe('none');
+  });
+
+  test('activity outside the drawer does not reset the idle timer', async () => {
+    vi.useFakeTimers();
+    renderApp();
+    fireEvent.click(nowPlayingTap());
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+    fireEvent.pointerDown(document.body);
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); }); // 15s total since opening
+
+    expect(activeDestination()).toBe('none');
+  });
+
+  test('does not arm the timer while the drawer is closed', async () => {
+    vi.useFakeTimers();
+    renderApp();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(20000); });
+
+    expect(activeDestination()).toBe('none'); // never opened; nothing to assert beyond "did not throw"
+  });
 });
