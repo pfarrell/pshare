@@ -11,7 +11,7 @@ const JukeboxNowPlaying = ({ onTap }) => {
   if (!currentTrack) {
     return (
       <div className="jukebox-now-playing jukebox-now-playing-empty" onClick={onTap}>
-        <p>Nothing playing — tap Browse to pick something</p>
+        <p>Tap to play something</p>
       </div>
     );
   }
