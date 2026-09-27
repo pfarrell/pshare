@@ -3,6 +3,7 @@
 import { db } from '../db/database.js'
 import { fetchAlbumArtFromCAA, hasCoverArt } from './coverArtArchive.js'
 import { errorLogService } from './errorLogService.js'
+import { captureArtistTags, captureAlbumTags } from './musicbrainzTags.js'
 
 import { imagesDir } from '../config/paths.js'
 
@@ -122,6 +123,12 @@ export async function lookupAlbumMBID(
     errorLogService.record({ source: 'musicbrainz', message: err.message, context: `CAA fetch for album ${albumId}` })
   })
 
+  // Async MusicBrainz tag capture — non-blocking, never blocks or fails the MBID write
+  captureAlbumTags(albumId, top.id).catch(err => {
+    console.warn(`  ⚠️  Tag capture failed post-MBID for album ${albumId}:`, err.message)
+    errorLogService.record({ source: 'musicbrainz', message: err.message, context: `tag capture for album ${albumId}` })
+  })
+
   return { mbid: top.id, confidence, status }
 }
 
@@ -183,6 +190,13 @@ export async function lookupArtistMBID(
   }
 
   await updateArtistMBID(artistId, top.id, confidence, status)
+
+  // Async MusicBrainz tag capture — non-blocking, never blocks or fails the MBID write
+  captureArtistTags(artistId, top.id).catch(err => {
+    console.warn(`  ⚠️  Tag capture failed post-MBID for artist ${artistId}:`, err.message)
+    errorLogService.record({ source: 'musicbrainz', message: err.message, context: `tag capture for artist ${artistId}` })
+  })
+
   return { mbid: top.id, confidence, status }
 }
 
