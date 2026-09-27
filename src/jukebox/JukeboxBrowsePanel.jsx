@@ -37,7 +37,7 @@ import { useTouchScroll } from './useTouchScroll';
 // 'aimix' (prompt-driven playlist generation — see JukeboxAiMixTab.jsx).
 // Settings, Next Up, and AI Mix all unmount when switched away from, same as
 // before — only Search's query/results are worth preserving hidden-but-mounted.
-const JukeboxBrowsePanel = ({ activeDestination, onSelectDestination, onEnqueue, pendingArtist, onJumpToArtist, onPendingArtistConsumed, onGeneratingChange }) => {
+const JukeboxBrowsePanel = ({ activeDestination, onSelectDestination, onEnqueue, pendingArtist, onJumpToArtist, onPendingArtistConsumed, onGeneratingChange, onPlaylistSaved }) => {
   const [viewStack, setViewStack] = useState([]);
   const [selectedAlbum, setSelectedAlbum] = useState(null);
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
@@ -124,7 +124,7 @@ const JukeboxBrowsePanel = ({ activeDestination, onSelectDestination, onEnqueue,
             onEnqueue={onEnqueue}
           />
         </div>
-        {!currentView && activeDestination === 'nextup' && <JukeboxNextUpTab />}
+        {!currentView && activeDestination === 'nextup' && <JukeboxNextUpTab onSaved={onPlaylistSaved} />}
         {!currentView && activeDestination === 'settings' && <JukeboxSettingsTab />}
         {!currentView && activeDestination === 'aimix' && <JukeboxAiMixTab onEnqueue={onEnqueue} onGeneratingChange={onGeneratingChange} />}
       </div>

@@ -9,6 +9,7 @@ import { requireAuth } from '../middleware/auth.js'
 import { loadOwned } from '../utils/http.js'
 import { downloadToDisk, ImageStorageError } from '../services/imageStorage.js'
 import { generatePlaylist } from '../services/playlistGeneratorService.js'
+import { suggestPlaylistName } from '../services/playlistNameSuggesterService.js'
 import { checkAndRecordGeneration, MAX_GENERATIONS_PER_WINDOW } from '../services/playlistGenerationRateLimiter.js'
 
 const playlists = new Hono<{ Variables: Variables }>()
@@ -30,6 +31,16 @@ export function resolveGenerateSize(raw: unknown): number {
   const requested = Number(raw)
   if (!Number.isFinite(requested) || requested <= 0) return DEFAULT_GENERATE_SIZE
   return Math.min(Math.floor(requested), MAX_GENERATE_SIZE)
+}
+
+// Caps how many tracks feed the name-suggestion prompt — cost containment,
+// same reasoning as MAX_PROMPT_LENGTH above (a longer list only helps the
+// model up to a point, but always costs more input tokens).
+export const MAX_SUGGEST_NAME_TRACKS = 50
+
+export function resolveTrackIdsForSuggestion(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return []
+  return raw.filter((id): id is number => Number.isInteger(id)).slice(0, MAX_SUGGEST_NAME_TRACKS)
 }
 
 interface OtherAlbum {
@@ -342,6 +353,40 @@ playlists.post('/generate', requireAuth, async (c) => {
     // both resolve with whatever trackIds were confirmed (possibly []).
     console.error('AI playlist generation failed:', err)
     return c.json({ error: "Couldn't generate right now — try again." }, 502)
+  }
+})
+
+// POST /playlists/suggest-name — AI-suggested playlist name from a list of
+// track ids (jukebox kiosk's "Save Queue as Playlist" flow; plus admins).
+// Same cost-containment posture as /playlists/generate: kiosk/admin gated,
+// sharing its rate limiter, since both spend real AI credits.
+playlists.post('/suggest-name', requireAuth, async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const trackIds = resolveTrackIdsForSuggestion((body as Record<string, unknown>).track_ids)
+  if (trackIds.length === 0) {
+    return c.json({ error: 'track_ids is required' }, 400)
+  }
+
+  const user = c.get('user')!
+  const jukeboxDeviceId = c.get('jukeboxDeviceId') ?? null
+
+  if (jukeboxDeviceId == null && !user.admin) {
+    return c.json({ error: 'Playlist name suggestions are currently available from the jukebox kiosk only.' }, 403)
+  }
+
+  const { allowed } = await checkAndRecordGeneration({ userId: user.id, jukeboxDeviceId })
+  if (!allowed) {
+    return c.json({ error: `Limit of ${MAX_GENERATIONS_PER_WINDOW} generations per hour reached — try again later.` }, 429)
+  }
+
+  try {
+    const tracks = await fetchTracksForIds(trackIds, c)
+    const descriptions = tracks.map((t) => `${t.artist?.name ?? 'Unknown Artist'} - ${t.title}`)
+    const name = await suggestPlaylistName(descriptions)
+    return c.json({ name })
+  } catch (err) {
+    console.error('Playlist name suggestion failed:', err)
+    return c.json({ error: "Couldn't suggest a name right now — try again." }, 502)
   }
 })
 

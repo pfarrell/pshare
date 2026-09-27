@@ -6,6 +6,15 @@ import JukeboxNextUpTab from './JukeboxNextUpTab';
 
 vi.mock('../stores/playerStore', () => ({ usePlayerStore: vi.fn() }));
 vi.mock('./JukeboxTransport', () => ({ default: () => <div data-testid="jukebox-transport" /> }));
+vi.mock('./JukeboxSavePlaylistModal', () => ({
+  default: ({ trackIds, onClose, onSaved }) => (
+    <div data-testid="jukebox-save-playlist-modal">
+      <span data-testid="save-modal-track-ids">{JSON.stringify(trackIds)}</span>
+      <button onClick={onClose}>close-save-modal</button>
+      <button onClick={() => onSaved('Saved Name')}>trigger-saved</button>
+    </div>
+  ),
+}));
 
 import { usePlayerStore } from '../stores/playerStore';
 
@@ -130,6 +139,68 @@ describe('swipe-to-delete', () => {
     drag(laterRow, 60);
     expect(laterRow.querySelector('.jukebox-queue-row-content').style.transform).toBe('translateX(-72px)');
     expect(nextRow.querySelector('.jukebox-queue-row-content').style.transform).toBe('translateX(0px)');
+  });
+});
+
+describe('save as playlist', () => {
+  test('does not show a Save button when the queue is empty', () => {
+    usePlayerStore.mockImplementation((selector) => selector({ playlist: [], currentTrackIndex: -1 }));
+    renderTab();
+    expect(screen.queryByRole('button', { name: /save as playlist/i })).not.toBeInTheDocument();
+  });
+
+  test('shows a Save button once something is queued', () => {
+    usePlayerStore.mockImplementation((selector) => selector({
+      playlist: [{ id: 1, title: 'Track One', url: '/stream/1', artist: {} }],
+      currentTrackIndex: 0,
+    }));
+    renderTab();
+    expect(screen.getByRole('button', { name: /save as playlist/i })).toBeInTheDocument();
+  });
+
+  test('tapping Save opens the modal with tracks from the current position onward, not already-played ones', () => {
+    usePlayerStore.mockImplementation((selector) => selector({
+      playlist: [
+        { id: 1, title: 'Played Track', url: '/stream/1', artist: {} },
+        { id: 2, title: 'Current Track', url: '/stream/2', artist: {} },
+        { id: 3, title: 'Next Track', url: '/stream/3', artist: {} },
+      ],
+      currentTrackIndex: 1,
+    }));
+    renderTab();
+
+    fireEvent.click(screen.getByRole('button', { name: /save as playlist/i }));
+
+    expect(screen.getByTestId('jukebox-save-playlist-modal')).toBeInTheDocument();
+    expect(screen.getByTestId('save-modal-track-ids')).toHaveTextContent(JSON.stringify([2, 3]));
+  });
+
+  test('closing the modal removes it', () => {
+    usePlayerStore.mockImplementation((selector) => selector({
+      playlist: [{ id: 1, title: 'Track One', url: '/stream/1', artist: {} }],
+      currentTrackIndex: 0,
+    }));
+    renderTab();
+    fireEvent.click(screen.getByRole('button', { name: /save as playlist/i }));
+
+    fireEvent.click(screen.getByText('close-save-modal'));
+
+    expect(screen.queryByTestId('jukebox-save-playlist-modal')).not.toBeInTheDocument();
+  });
+
+  test('a successful save closes the modal and reports the name up via onSaved', () => {
+    usePlayerStore.mockImplementation((selector) => selector({
+      playlist: [{ id: 1, title: 'Track One', url: '/stream/1', artist: {} }],
+      currentTrackIndex: 0,
+    }));
+    const onSaved = vi.fn();
+    render(<MemoryRouter><JukeboxNextUpTab onSaved={onSaved} /></MemoryRouter>);
+    fireEvent.click(screen.getByRole('button', { name: /save as playlist/i }));
+
+    fireEvent.click(screen.getByText('trigger-saved'));
+
+    expect(onSaved).toHaveBeenCalledWith('Saved Name');
+    expect(screen.queryByTestId('jukebox-save-playlist-modal')).not.toBeInTheDocument();
   });
 });
 

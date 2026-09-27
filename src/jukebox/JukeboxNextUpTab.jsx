@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { usePlayerStore } from '../stores/playerStore';
 import JukeboxQueueRow from './JukeboxQueueRow';
 import JukeboxTransport from './JukeboxTransport';
+import JukeboxSavePlaylistModal from './JukeboxSavePlaylistModal';
 
 // The transport controls are pinned at the top (see JukeboxTransport), with
 // the queue below. The queue only needs the core "see what's queued, tap one to
@@ -17,7 +18,11 @@ import JukeboxTransport from './JukeboxTransport';
 // the same way as playback naturally advances while this tab stays open.
 // Since this tab unmounts whenever the drawer switches away from it (see
 // JukeboxBrowsePanel.jsx), reopening it always starts back at 0.
-const JukeboxNextUpTab = () => {
+// Save Queue as Playlist saves from the current track onward, never the
+// already-played history above it — matching what this tab already shows by
+// default (see the "hidden by default" note above). Someone who wants an
+// earlier track included can rewind with the transport before saving.
+const JukeboxNextUpTab = ({ onSaved }) => {
   const playlist = usePlayerStore((s) => s.playlist);
   const currentTrackIndex = usePlayerStore((s) => s.currentTrackIndex);
   const removeTrackFromPlaylist = usePlayerStore((s) => s.removeTrackFromPlaylist);
@@ -26,10 +31,12 @@ const JukeboxNextUpTab = () => {
   // only one at a time, which is why this lives here rather than in each
   // row's own JukeboxQueueRow/useSwipeToReveal instance.
   const [openRowKey, setOpenRowKey] = useState(null);
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
 
   const revealFrom = Math.max(0, currentTrackIndex - backOffset);
   const visible = playlist.slice(revealFrom);
   const hasEarlierTracks = revealFrom > 0;
+  const savableTrackIds = currentTrackIndex >= 0 ? playlist.slice(currentTrackIndex).map((t) => t.id) : [];
 
   // Closes whatever's swiped open on any interaction outside that row —
   // tapping a different row, the transport, "Show previous", or scrolling
@@ -53,6 +60,22 @@ const JukeboxNextUpTab = () => {
   return (
     <>
       <JukeboxTransport />
+      {savableTrackIds.length > 0 && (
+        <button
+          type="button"
+          className="jukebox-next-up-save"
+          onClick={() => setSaveModalOpen(true)}
+        >
+          💾 Save as Playlist
+        </button>
+      )}
+      {saveModalOpen && (
+        <JukeboxSavePlaylistModal
+          trackIds={savableTrackIds}
+          onClose={() => setSaveModalOpen(false)}
+          onSaved={(name) => { setSaveModalOpen(false); onSaved?.(name); }}
+        />
+      )}
       {playlist.length === 0 ? (
         <p className="jukebox-panel-empty">Nothing queued yet — try Browse</p>
       ) : (

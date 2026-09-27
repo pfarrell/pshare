@@ -45,20 +45,27 @@ const JukeboxApp = () => {
   const closeAll = () => setActiveDestination(null);
   const toggleBrowse = () => setActiveDestination((current) => (current === null ? 'browse' : null));
 
-  // A brief, generic confirmation that an enqueue actually did something —
-  // otherwise closing the drawer is the only feedback, which looks
-  // identical to a no-op tap. Deliberately separate from closeAll: closeAll
-  // is also called by the idle-close timer below, which must never claim
-  // something was added to the queue.
+  // A brief, generic confirmation that something actually happened —
+  // otherwise closing the drawer (enqueue) or nothing at all (save) is the
+  // only feedback, which looks identical to a no-op tap. Shared by both
+  // handlers below, each of which decides for itself whether to closeAll —
+  // showToast never does, since the idle-close timer also calls closeAll
+  // and must never look like it's claiming something happened.
   const [toastMessage, setToastMessage] = useState(null);
   const toastTimerRef = useRef(null);
   useEffect(() => () => clearTimeout(toastTimerRef.current), []);
-  const handleEnqueue = () => {
-    closeAll();
-    setToastMessage('Added to queue');
+  const showToast = (message) => {
+    setToastMessage(message);
     clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => setToastMessage(null), TOAST_DURATION_MS);
   };
+  const handleEnqueue = () => {
+    closeAll();
+    showToast('Added to queue');
+  };
+  // Saving doesn't close the drawer or interrupt playback — Next Up stays
+  // open and the queue keeps playing, unlike enqueue above.
+  const handlePlaylistSaved = (name) => showToast(`Saved as "${name}"`);
   // "Close the album page and show this artist's albums as if we'd
   // searched" — switches to Browse (a no-op if already there) and hands the
   // artist to the drawer.
@@ -127,6 +134,7 @@ const JukeboxApp = () => {
         onJumpToArtist={jumpToArtist}
         onPendingArtistConsumed={() => setPendingArtist(null)}
         onGeneratingChange={setAiMixGenerating}
+        onPlaylistSaved={handlePlaylistSaved}
       />
       <JukeboxFooterStrip onOpenQueue={() => setActiveDestination('nextup')} />
       {/* MusicPlayerWrapper owns both <audio> elements and usePlayerEngine

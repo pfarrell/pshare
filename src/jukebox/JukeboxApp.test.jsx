@@ -39,7 +39,7 @@ vi.mock('./JukeboxFooterStrip', () => ({
   ),
 }));
 vi.mock('./JukeboxBrowsePanel', () => ({
-  default: ({ activeDestination, onSelectDestination, onEnqueue, pendingArtist, onJumpToArtist, onPendingArtistConsumed, onGeneratingChange }) => (
+  default: ({ activeDestination, onSelectDestination, onEnqueue, pendingArtist, onJumpToArtist, onPendingArtistConsumed, onGeneratingChange, onPlaylistSaved }) => (
     <div
       className="jukebox-browse-panel"
       data-testid="jukebox-browse-panel"
@@ -53,6 +53,7 @@ vi.mock('./JukeboxBrowsePanel', () => ({
       <button onClick={onPendingArtistConsumed}>trigger-pending-artist-consumed</button>
       <button onClick={() => onGeneratingChange(true)}>trigger-generating-start</button>
       <button onClick={() => onGeneratingChange(false)}>trigger-generating-end</button>
+      <button onClick={() => onPlaylistSaved('Road Trip')}>trigger-playlist-saved</button>
     </div>
   ),
 }));
@@ -213,6 +214,39 @@ describe('enqueue toast', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
 
     expect(activeDestination()).toBe('none');
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+});
+
+describe('playlist saved toast', () => {
+  test('shows a confirmation toast naming the saved playlist', () => {
+    renderApp();
+    fireEvent.click(nowPlayingTap());
+
+    fireEvent.click(screen.getByText('trigger-playlist-saved'));
+
+    expect(screen.getByRole('status')).toHaveTextContent('Saved as "Road Trip"');
+  });
+
+  test('does not close the drawer (unlike enqueue) so playback/browsing continues uninterrupted', () => {
+    renderApp();
+    fireEvent.click(nowPlayingTap());
+    fireEvent.click(screen.getByText('trigger-select-nextup'));
+
+    fireEvent.click(screen.getByText('trigger-playlist-saved'));
+
+    expect(activeDestination()).toBe('nextup');
+  });
+
+  test('the toast auto-dismisses', async () => {
+    vi.useFakeTimers();
+    renderApp();
+    fireEvent.click(nowPlayingTap());
+    fireEvent.click(screen.getByText('trigger-playlist-saved'));
+    expect(screen.getByRole('status')).toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });

@@ -57,7 +57,13 @@ vi.mock('./JukeboxPlaylistPanel', () => ({
     </div>
   ),
 }));
-vi.mock('./JukeboxNextUpTab', () => ({ default: () => <div data-testid="jukebox-next-up-tab" /> }));
+vi.mock('./JukeboxNextUpTab', () => ({
+  default: ({ onSaved }) => (
+    <div data-testid="jukebox-next-up-tab">
+      <button onClick={() => onSaved('Saved Name')}>next-up-saved</button>
+    </div>
+  ),
+}));
 vi.mock('./JukeboxSettingsTab', () => ({ default: () => <div data-testid="jukebox-settings-tab" /> }));
 vi.mock('./JukeboxDrawerMenu', () => ({
   default: ({ activeDestination, onSelectDestination }) => (
@@ -398,6 +404,15 @@ test('a pending artist replaces whatever was on the drill-down stack, not stacke
 
   expect(screen.getByText('artist-view: Album Artist')).toBeInTheDocument();
   expect(screen.queryByText('artist-view: Search Artist')).not.toBeInTheDocument();
+});
+
+test('onPlaylistSaved is passed through to Next Up', () => {
+  const onPlaylistSaved = vi.fn();
+  renderPanel('nextup', { onPlaylistSaved });
+
+  fireEvent.click(screen.getByText('next-up-saved'));
+
+  expect(onPlaylistSaved).toHaveBeenCalledWith('Saved Name');
 });
 
 test('switching to a different tab dismisses an open collection view, same as an artist view', () => {
