@@ -10,11 +10,17 @@ const FUZZY_SIMILARITY_THRESHOLD = 0.24
 export const RESULT_LIMIT = 30
 
 function buildSearchClauses(exactOnly: boolean, tagParamIndex: number | null): { exactClauses: string; fuzzyClauses: string } {
-  // Album/Artist branches optionally join to their own tag rows (own-tags
-  // only, no artist→album inheritance — see spec's Non-goals). Playlist and
-  // Collection branches never get this join; they have no tag concept.
-  const albumTagJoin = tagParamIndex
-    ? `INNER JOIN albums_tags stag ON stag.album_id = a.id AND stag.tag_id = ANY($${tagParamIndex})`
+  // Artist branches join to the artist's own tag rows. Album branches match
+  // via EXISTS instead of a join: an album qualifies if it carries the tag
+  // itself OR its own artist (albums.artist_id) does — so tagging an artist
+  // surfaces all of that artist's albums, not just ones tagged directly.
+  // Playlist and Collection branches never get any tag filter; they have no
+  // tag concept.
+  const albumTagFilter = tagParamIndex
+    ? `AND (
+        EXISTS (SELECT 1 FROM albums_tags atag WHERE atag.album_id = a.id AND atag.tag_id = ANY($${tagParamIndex}))
+        OR EXISTS (SELECT 1 FROM artists_tags atag2 WHERE atag2.artist_id = a.artist_id AND atag2.tag_id = ANY($${tagParamIndex}))
+      )`
     : ''
   const artistTagJoin = tagParamIndex
     ? `INNER JOIN artists_tags stag ON stag.artist_id = a.id AND stag.tag_id = ANY($${tagParamIndex})`
@@ -24,9 +30,9 @@ function buildSearchClauses(exactOnly: boolean, tagParamIndex: number | null): {
     (SELECT DISTINCT ON (a.id) 'Album' AS model_type, a.id, ${EXACT_MATCH_SCORE} AS similarity_score
       FROM albums a
       INNER JOIN tracks t ON t.album_id = a.id AND t.approved = true
-      ${albumTagJoin}
       WHERE f_unaccent(lower(a.title)) ILIKE f_unaccent(lower($1))
         AND a.title != '_Singles'
+        ${albumTagFilter}
       ORDER BY a.id)
     UNION ALL
     (SELECT DISTINCT ON (a.id) 'Artist' AS model_type, a.id, ${EXACT_MATCH_SCORE} AS similarity_score
@@ -65,9 +71,9 @@ function buildSearchClauses(exactOnly: boolean, tagParamIndex: number | null): {
         ROW_NUMBER() OVER(PARTITION BY a.id ORDER BY similarity(f_unaccent(lower(a.title)), f_unaccent(lower($2))) DESC) AS rn
       FROM albums a
       INNER JOIN tracks t ON t.album_id = a.id AND t.approved = true
-      ${albumTagJoin}
       WHERE f_unaccent(lower(a.title)) % f_unaccent(lower($2))
         AND a.title != '_Singles'
+        ${albumTagFilter}
     ) ranked WHERE rn = 1)
     UNION ALL
     (SELECT model_type, id, similarity_score FROM (
@@ -224,12 +230,20 @@ export function createSearchService(db: Kysely<Database>) {
       // to accidentally wipe out.
       if (tagIds && tagIds.length === 0) return []
 
-      const tagJoin = tagIds ? 'INNER JOIN tags_tracks tt ON tt.track_id = tracks.id AND tt.tag_id = ANY($2)' : ''
+      // Mirrors the album EXISTS filter above: a track qualifies if it
+      // carries the tag itself OR its own artist (tracks.artist_id) does.
+      const tagFilter = tagIds
+        ? `AND (
+            EXISTS (SELECT 1 FROM tags_tracks tt WHERE tt.track_id = tracks.id AND tt.tag_id = ANY($2))
+            OR EXISTS (SELECT 1 FROM artists_tags at WHERE at.artist_id = tracks.artist_id AND at.tag_id = ANY($2))
+          )`
+        : ''
       const params: unknown[] = tagIds ? [likeParam, tagIds] : [likeParam]
 
       const { rows } = await pool.query<{ id: number }>(
-        `SELECT DISTINCT tracks.id FROM tracks ${tagJoin}
-         WHERE f_unaccent(lower(tracks.title)) ILIKE f_unaccent(lower($1)) AND tracks.approved = true`,
+        `SELECT DISTINCT tracks.id FROM tracks
+         WHERE f_unaccent(lower(tracks.title)) ILIKE f_unaccent(lower($1)) AND tracks.approved = true
+         ${tagFilter}`,
         params
       )
       return rows.map((r) => r.id)

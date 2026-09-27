@@ -129,6 +129,51 @@ test('runUnionSearch filters by tagIds when exactOnly=true (exercises the $2 tag
   assert.equal(albumIds.includes(nonMatchingAlbum.id), false)
 })
 
+test('runUnionSearch matches an album via its artist\'s tag, even when the album has no tag of its own', async () => {
+  const taggedArtist = await createArtist('search-inherit-tagged-artist')
+  const untaggedArtist = await createArtist('search-inherit-untagged-artist')
+  const inheritedAlbum = await createAlbum('search-inherit-album-zzzinherit', taggedArtist.id)
+  const unrelatedAlbum = await createAlbum('search-inherit-unrelated-album-zzzinherit', untaggedArtist.id)
+  await createTrack('search-inherit-inherited-track', inheritedAlbum.id, taggedArtist.id)
+  await createTrack('search-inherit-unrelated-track', unrelatedAlbum.id, untaggedArtist.id)
+  const tag = await createTag('search-inherit-tag')
+  await tagArtist(taggedArtist.id, tag.id)
+
+  const rows = await searchService.runUnionSearch('%zzzinherit%', 'zzzinherit', false, 30, 0, [tag.id])
+  const albumIds = rows.filter((r: any) => r.model_type === 'Album').map((r: any) => r.id)
+
+  assert.ok(albumIds.includes(inheritedAlbum.id));
+  assert.equal(albumIds.includes(unrelatedAlbum.id), false)
+})
+
+test('runUnionSearch still matches an album via its own tag when its artist has no tag', async () => {
+  const artist = await createArtist('search-inherit-ownonly-artist')
+  const ownTagAlbum = await createAlbum('search-inherit-ownonly-album-zzzinheritown', artist.id)
+  await createTrack('search-inherit-ownonly-track', ownTagAlbum.id, artist.id)
+  const tag = await createTag('search-inherit-ownonly-tag')
+  await tagAlbum(ownTagAlbum.id, tag.id)
+
+  const rows = await searchService.runUnionSearch('%zzzinheritown%', 'zzzinheritown', false, 30, 0, [tag.id])
+  const albumIds = rows.filter((r: any) => r.model_type === 'Album').map((r: any) => r.id)
+
+  assert.ok(albumIds.includes(ownTagAlbum.id))
+})
+
+test('findTrackIds matches a track via its artist\'s tag, even when the track has no tag of its own', async () => {
+  const taggedArtist = await createArtist('search-inherit-track-tagged-artist')
+  const untaggedArtist = await createArtist('search-inherit-track-untagged-artist')
+  const album = await createAlbum('search-inherit-track-album', taggedArtist.id)
+  const inheritedTrack = await createTrack('search-inherit-track-inherited-zzzinherittrack', album.id, taggedArtist.id)
+  const unrelatedTrack = await createTrack('search-inherit-track-unrelated-zzzinherittrack', album.id, untaggedArtist.id)
+  const tag = await createTag('search-inherit-track-tag')
+  await tagArtist(taggedArtist.id, tag.id)
+
+  const ids = await searchService.findTrackIds('%zzzinherittrack%', [tag.id])
+
+  assert.ok(ids.includes(inheritedTrack.id))
+  assert.equal(ids.includes(unrelatedTrack.id), false)
+})
+
 test('countRankedResults with tagIds excludes non-matching albums/artists from the count', async () => {
   // Uses its own substring (zzzcounttagids, not zzzunique) so this test's
   // count isn't polluted by the albums the runUnionSearch tests above create
