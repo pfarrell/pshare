@@ -159,6 +159,49 @@ test('passes the drawer an onEnqueue callback that closes the drawer when called
   expect(activeDestination()).toBe('none');
 });
 
+describe('enqueue toast', () => {
+  test('shows a confirmation toast when something is enqueued', () => {
+    renderApp();
+    fireEvent.click(nowPlayingTap());
+
+    fireEvent.click(screen.getByText('trigger-enqueue'));
+
+    expect(screen.getByRole('status')).toHaveTextContent('Added to queue');
+  });
+
+  test('the toast auto-dismisses', async () => {
+    vi.useFakeTimers();
+    renderApp();
+    fireEvent.click(nowPlayingTap());
+    fireEvent.click(screen.getByText('trigger-enqueue'));
+    expect(screen.getByRole('status')).toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  test('tapping the now-playing screen to close the drawer does not show a toast', () => {
+    renderApp();
+    fireEvent.click(nowPlayingTap());
+
+    fireEvent.click(nowPlayingTap());
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  test('the drawer auto-closing from inactivity does not show a toast', async () => {
+    vi.useFakeTimers();
+    renderApp();
+    fireEvent.click(nowPlayingTap());
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
+
+    expect(activeDestination()).toBe('none');
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+});
+
 test('jumping to an artist from a different destination switches to Browse and carries the artist along', () => {
   renderApp();
   fireEvent.click(nowPlayingTap());

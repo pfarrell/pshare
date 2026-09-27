@@ -2696,6 +2696,25 @@ body:has(.jukebox-app) {
   color: rgba(255, 255, 255, 0.75);
 }
 
+/* Enqueue confirmation toast (JukeboxToast.jsx) — floats over Now Playing,
+   never blocks a tap (the drawer is always already closed by the time this
+   shows, but pointer-events:none keeps it out of the way regardless). */
+.jukebox-app .jukebox-toast {
+  position: fixed;
+  top: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  padding: 0.75rem 1.5rem;
+  background: rgba(20, 26, 32, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  color: white;
+  font-size: 1.1rem;
+  font-weight: 600;
+  pointer-events: none;
+}
+
 /* Login: the first (and normally only) screen a fresh kiosk shows. */
 .jukebox-app .jukebox-login {
   flex: 1;

@@ -4,6 +4,7 @@ import JukeboxLogin from './JukeboxLogin';
 import JukeboxNowPlaying from './JukeboxNowPlaying';
 import JukeboxBrowsePanel from './JukeboxBrowsePanel';
 import JukeboxFooterStrip from './JukeboxFooterStrip';
+import JukeboxToast from './JukeboxToast';
 import JukeboxKeyboard from './JukeboxKeyboard';
 import { useJukeboxKeyboardFocus } from './useJukeboxKeyboardFocus';
 import { useJukeboxQueueEvents } from './useJukeboxQueueEvents';
@@ -12,6 +13,8 @@ import MusicPlayerWrapper from '../components/player/MusicPlayerWrapper';
 // How long the drawer can sit open with no touch inside it before it closes
 // itself back to Now Playing.
 const IDLE_CLOSE_MS = 15000;
+// How long the enqueue confirmation toast stays visible.
+const TOAST_DURATION_MS = 2500;
 
 const JukeboxApp = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -41,6 +44,21 @@ const JukeboxApp = () => {
   // instead of leaving the drawer open over it.
   const closeAll = () => setActiveDestination(null);
   const toggleBrowse = () => setActiveDestination((current) => (current === null ? 'browse' : null));
+
+  // A brief, generic confirmation that an enqueue actually did something —
+  // otherwise closing the drawer is the only feedback, which looks
+  // identical to a no-op tap. Deliberately separate from closeAll: closeAll
+  // is also called by the idle-close timer below, which must never claim
+  // something was added to the queue.
+  const [toastMessage, setToastMessage] = useState(null);
+  const toastTimerRef = useRef(null);
+  useEffect(() => () => clearTimeout(toastTimerRef.current), []);
+  const handleEnqueue = () => {
+    closeAll();
+    setToastMessage('Added to queue');
+    clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), TOAST_DURATION_MS);
+  };
   // "Close the album page and show this artist's albums as if we'd
   // searched" — switches to Browse (a no-op if already there) and hands the
   // artist to the drawer.
@@ -93,10 +111,11 @@ const JukeboxApp = () => {
   return (
     <div className="jukebox-app">
       <JukeboxNowPlaying onTap={toggleBrowse} />
+      <JukeboxToast message={toastMessage} />
       <JukeboxBrowsePanel
         activeDestination={activeDestination}
         onSelectDestination={setActiveDestination}
-        onEnqueue={closeAll}
+        onEnqueue={handleEnqueue}
         pendingArtist={pendingArtist}
         onJumpToArtist={jumpToArtist}
         onPendingArtistConsumed={() => setPendingArtist(null)}
