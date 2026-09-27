@@ -8,8 +8,25 @@ import { countsService } from '../services/countsService.js'
 import { requireAuth } from '../middleware/auth.js'
 import { loadOwned } from '../utils/http.js'
 import { downloadToDisk, ImageStorageError } from '../services/imageStorage.js'
+import { generatePlaylist } from '../services/playlistGeneratorService.js'
+import { checkAndRecordGeneration, MAX_GENERATIONS_PER_WINDOW } from '../services/playlistGenerationRateLimiter.js'
 
 const playlists = new Hono<{ Variables: Variables }>()
+
+export const DEFAULT_GENERATE_SIZE = 20
+export const MAX_GENERATE_SIZE = 30
+
+export function resolvePrompt(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const trimmed = raw.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+export function resolveGenerateSize(raw: unknown): number {
+  const requested = Number(raw)
+  if (!Number.isFinite(requested) || requested <= 0) return DEFAULT_GENERATE_SIZE
+  return Math.min(Math.floor(requested), MAX_GENERATE_SIZE)
+}
 
 interface OtherAlbum {
   id: number
@@ -278,6 +295,42 @@ playlists.get('/surprise', requireAuth, async (c) => {
     playlist: { name: 'Surprise!', image_path: null },
     tracks,
   })
+})
+
+// POST /playlists/generate — AI-generated ephemeral playlist from a free-text
+// prompt (jukebox kiosk today; see docs/superpowers/specs/2026-09-27-ai-playlist-generator-design.md).
+// Every returned track is grounded in this library — never a guess.
+playlists.post('/generate', requireAuth, async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const prompt = resolvePrompt((body as Record<string, unknown>).prompt)
+  if (!prompt) {
+    return c.json({ error: 'prompt is required' }, 400)
+  }
+  const size = resolveGenerateSize((body as Record<string, unknown>).size)
+
+  const user = c.get('user')!
+  const jukeboxDeviceId = c.get('jukeboxDeviceId') ?? null
+
+  const { allowed } = await checkAndRecordGeneration({ userId: user.id, jukeboxDeviceId })
+  if (!allowed) {
+    return c.json({ error: `Limit of ${MAX_GENERATIONS_PER_WINDOW} generations per hour reached — try again later.` }, 429)
+  }
+
+  try {
+    const { trackIds } = await generatePlaylist(prompt, size, c)
+    const tracks = await fetchTracksForIds(trackIds, c)
+    return c.json({
+      playlist: { name: prompt.slice(0, 60), image_path: null },
+      tracks,
+    })
+  } catch (err) {
+    // Catches both typed Anthropic API errors and the service's own overall-
+    // timeout Error (see playlistGeneratorService.ts) — either way, the
+    // caller gets the same generic message; a normal "model found nothing"
+    // result never reaches this branch, since that resolves with trackIds: [].
+    console.error('AI playlist generation failed:', err)
+    return c.json({ error: "Couldn't generate right now — try again." }, 502)
+  }
 })
 
 // POST /playlist/:id/tracks - Add a track to playlist
