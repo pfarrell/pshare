@@ -60,10 +60,22 @@ vi.mock('./JukeboxBrowsePanel', () => ({
 vi.mock('./JukeboxKeyboard', () => ({
   default: ({ targetElement }) => (targetElement ? <div className="jukebox-keyboard" data-testid="jukebox-keyboard" /> : null),
 }));
+vi.mock('../stores/playerStore', () => ({ usePlayerStore: vi.fn() }));
+vi.mock('../stores/jukeboxScreensaverStore', () => ({ useJukeboxScreensaverStore: vi.fn() }));
+vi.mock('./JukeboxScreensaver', () => ({
+  default: ({ onDismiss, onView }) => (
+    <div data-testid="jukebox-screensaver">
+      <button onClick={onDismiss}>trigger-screensaver-dismiss</button>
+      <button onClick={() => onView({ type: 'artist', data: { id: 99, name: 'Screensaver Artist' } })}>trigger-screensaver-view</button>
+    </div>
+  ),
+}));
 vi.mock('./useJukeboxKeyboardFocus', () => ({ useJukeboxKeyboardFocus: vi.fn() }));
 
 import { useAuthStore } from '../stores/authStore';
 import { useJukeboxKeyboardFocus } from './useJukeboxKeyboardFocus';
+import { usePlayerStore } from '../stores/playerStore';
+import { useJukeboxScreensaverStore } from '../stores/jukeboxScreensaverStore';
 
 const renderApp = () => render(<MemoryRouter><JukeboxApp /></MemoryRouter>);
 const activeDestination = () => screen.getByTestId('jukebox-browse-panel').getAttribute('data-active-destination');
@@ -81,6 +93,8 @@ class NoOpEventSource {
 beforeEach(() => {
   useJukeboxKeyboardFocus.mockReturnValue(null);
   useAuthStore.mockReturnValue(true);
+  usePlayerStore.mockReturnValue(false);
+  useJukeboxScreensaverStore.mockReturnValue(true);
   global.EventSource = NoOpEventSource;
 });
 
@@ -379,5 +393,129 @@ describe('drawer inactivity auto-close', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
 
     expect(activeDestination()).toBe('none');
+  });
+});
+
+describe('idle screensaver', () => {
+  const SCREENSAVER_IDLE_MS = 5 * 60 * 1000;
+
+  test('activates after 5 minutes idle with the drawer closed and nothing playing', async () => {
+    vi.useFakeTimers();
+    renderApp();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
+
+    expect(screen.getByTestId('jukebox-screensaver')).toBeInTheDocument();
+  });
+
+  test('does not activate before 5 minutes have passed', async () => {
+    vi.useFakeTimers();
+    renderApp();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS - 1000); });
+
+    expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+  });
+
+  test('any activity anywhere resets the idle timer', async () => {
+    vi.useFakeTimers();
+    renderApp();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(4 * 60 * 1000); });
+    fireEvent.pointerDown(document.body);
+    await act(async () => { await vi.advanceTimersByTimeAsync(4 * 60 * 1000); }); // 8 min total, 4 min since the reset
+
+    expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(60 * 1000); }); // 5 min since the reset
+
+    expect(screen.getByTestId('jukebox-screensaver')).toBeInTheDocument();
+  });
+
+  test('does not arm while the drawer is open', async () => {
+    vi.useFakeTimers();
+    renderApp();
+    fireEvent.click(nowPlayingTap());
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
+
+    expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+  });
+
+  test('does not arm while something is playing', async () => {
+    vi.useFakeTimers();
+    usePlayerStore.mockReturnValue(true);
+    renderApp();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
+
+    expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+  });
+
+  test('does not arm when disabled in Settings', async () => {
+    vi.useFakeTimers();
+    useJukeboxScreensaverStore.mockReturnValue(false);
+    renderApp();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
+
+    expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+  });
+
+  test('turning it off in Settings while active hides it immediately', async () => {
+    vi.useFakeTimers();
+    const { rerender } = renderApp();
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
+    expect(screen.getByTestId('jukebox-screensaver')).toBeInTheDocument();
+
+    useJukeboxScreensaverStore.mockReturnValue(false);
+    rerender(<MemoryRouter><JukeboxApp /></MemoryRouter>);
+
+    expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+  });
+
+  test('dismissing the screensaver hides it and re-arms a fresh timer', async () => {
+    vi.useFakeTimers();
+    renderApp();
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
+    expect(screen.getByTestId('jukebox-screensaver')).toBeInTheDocument();
+
+    // A real tap fires pointerdown before click (same gesture) — the
+    // document-level pointerdown listener is what re-arms the idle timer,
+    // so the dismiss tap is simulated as both, matching how a real screen
+    // tap behaves (see the drawer-idle-close tests above for the same
+    // pattern with fireEvent.pointerDown).
+    fireEvent.pointerDown(screen.getByText('trigger-screensaver-dismiss'));
+    fireEvent.click(screen.getByText('trigger-screensaver-dismiss'));
+
+    expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
+
+    expect(screen.getByTestId('jukebox-screensaver')).toBeInTheDocument();
+  });
+
+  test('playback starting while the screensaver is active dismisses it automatically', async () => {
+    vi.useFakeTimers();
+    const { rerender } = renderApp();
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
+    expect(screen.getByTestId('jukebox-screensaver')).toBeInTheDocument();
+
+    usePlayerStore.mockReturnValue(true);
+    rerender(<MemoryRouter><JukeboxApp /></MemoryRouter>);
+
+    expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+  });
+
+  test('choosing View from the screensaver closes it, opens Browse, and carries the item along', async () => {
+    vi.useFakeTimers();
+    renderApp();
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
+
+    fireEvent.click(screen.getByText('trigger-screensaver-view'));
+
+    expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+    expect(activeDestination()).toBe('browse');
+    expect(pendingItemLabel()).toBe('artist:Screensaver Artist');
   });
 });

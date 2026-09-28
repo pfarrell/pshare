@@ -9,12 +9,18 @@ import JukeboxKeyboard from './JukeboxKeyboard';
 import { useJukeboxKeyboardFocus } from './useJukeboxKeyboardFocus';
 import { useJukeboxQueueEvents } from './useJukeboxQueueEvents';
 import MusicPlayerWrapper from '../components/player/MusicPlayerWrapper';
+import { usePlayerStore } from '../stores/playerStore';
+import { useJukeboxScreensaverStore } from '../stores/jukeboxScreensaverStore';
+import JukeboxScreensaver from './JukeboxScreensaver';
 
 // How long the drawer can sit open with no touch inside it before it closes
 // itself back to Now Playing.
 const IDLE_CLOSE_MS = 15000;
 // How long the enqueue confirmation toast stays visible.
 const TOAST_DURATION_MS = 2500;
+// How long the kiosk must sit idle (drawer closed, nothing playing) before
+// the screensaver takes over.
+const SCREENSAVER_IDLE_MS = 5 * 60 * 1000;
 
 const JukeboxApp = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -42,6 +48,8 @@ const JukeboxApp = () => {
   // until jukeboxDeviceId is known (pre-login). Called unconditionally, like
   // useJukeboxKeyboardFocus above, since it's a hook.
   useJukeboxQueueEvents(jukeboxDeviceId);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const screensaverEnabled = useJukeboxScreensaverStore((s) => s.enabled);
 
   // Enqueueing something (a track, an album, an artist/collection shuffle)
   // from Browse closes everything, so the kiosk lands back on Now Playing
@@ -116,6 +124,40 @@ const JukeboxApp = () => {
     };
   }, [activeDestination, aiMixGenerating]);
 
+  // Idle screensaver: armed only from the closed-drawer Now Playing screen
+  // with nothing playing (never while a drawer destination is open — see
+  // the drawer's own idle-close effect above, which returns here first).
+  // Any pointerdown anywhere resets the timer; playback starting, the
+  // drawer opening, or the feature being turned off in Settings all force
+  // it off immediately, not just block future activations.
+  const [screensaverActive, setScreensaverActive] = useState(false);
+  const screensaverTimerRef = useRef(null);
+  useEffect(() => {
+    if (activeDestination !== null || isPlaying || !screensaverEnabled) {
+      clearTimeout(screensaverTimerRef.current);
+      setScreensaverActive(false);
+      return undefined;
+    }
+    const arm = () => {
+      clearTimeout(screensaverTimerRef.current);
+      screensaverTimerRef.current = setTimeout(() => setScreensaverActive(true), SCREENSAVER_IDLE_MS);
+    };
+    arm();
+    document.addEventListener('pointerdown', arm);
+    return () => {
+      clearTimeout(screensaverTimerRef.current);
+      document.removeEventListener('pointerdown', arm);
+    };
+  }, [activeDestination, isPlaying, screensaverEnabled]);
+
+  // Explicit alongside the effect's own teardown above (which fires once
+  // activeDestination changes) so the dismissal is immediate rather than
+  // waiting a render cycle.
+  const handleScreensaverView = (item) => {
+    setScreensaverActive(false);
+    jumpToItem(item);
+  };
+
   // Wrapped in .jukebox-app too: the login screen is the first thing a fresh
   // kiosk shows, and it needs the shell's dark ground and kiosk-scale sizing
   // just as much as the authenticated view does.
@@ -132,6 +174,12 @@ const JukeboxApp = () => {
     <div className="jukebox-app">
       <JukeboxNowPlaying onTap={toggleBrowse} />
       <JukeboxToast message={toastMessage} />
+      {screensaverActive && (
+        <JukeboxScreensaver
+          onDismiss={() => setScreensaverActive(false)}
+          onView={handleScreensaverView}
+        />
+      )}
       <JukeboxBrowsePanel
         activeDestination={activeDestination}
         onSelectDestination={setActiveDestination}
