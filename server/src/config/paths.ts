@@ -9,7 +9,7 @@ export const projectRoot = process.env.NODE_ENV === 'production'
   ? '/var/www/bemused-node/current'
   : path.resolve(__dirname, '../../..')
 
-export function imagesDir(subdir?: 'albums' | 'artists'): string {
+export function imagesDir(subdir?: 'albums' | 'artists' | 'photos'): string {
   return subdir
     ? path.join(projectRoot, 'public', 'images', subdir)
     : path.join(projectRoot, 'public', 'images')
