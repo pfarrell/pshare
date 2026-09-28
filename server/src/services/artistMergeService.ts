@@ -53,5 +53,83 @@ export async function mergeArtistInto(targetId: number, loserId: number, trx: Ky
   ).execute()
   await trx.updateTable('track_artists').set({ artist_id: targetId }).where('artist_id', '=', loserId).execute()
 
+  // images: dedupe against both partial unique indexes BEFORE transferring — mirrors
+  // albumMergeService's identical images handling (idx_images_artist_not_found,
+  // idx_images_artist_primary). Without this, images.artist_id's ON DELETE CASCADE
+  // silently destroyed the loser's images when this function only deleted the loser row.
+  await trx
+    .deleteFrom('images')
+    .where((eb) => eb.and([
+      eb('artist_id', '=', loserId),
+      eb('status', '=', 'not_found'),
+      eb('source', 'in', trx.selectFrom('images').select('source').where('artist_id', '=', targetId).where('status', '=', 'not_found')),
+    ]))
+    .execute()
+
+  const destPrimaryImage = await trx
+    .selectFrom('images')
+    .select('id')
+    .where('artist_id', '=', targetId)
+    .where('is_primary', '=', true)
+    .executeTakeFirst()
+  if (destPrimaryImage) {
+    await trx
+      .updateTable('images')
+      .set({ is_primary: false })
+      .where('artist_id', '=', loserId)
+      .where('is_primary', '=', true)
+      .execute()
+  }
+
+  await trx.updateTable('images').set({ artist_id: targetId }).where('artist_id', '=', loserId).execute()
+
+  if (!destPrimaryImage) {
+    const newPrimaryImage = await trx
+      .selectFrom('images')
+      .leftJoin('media_files', (join) =>
+        join.onRef('media_files.entity_id', '=', 'images.id').on('media_files.entity_type', '=', 'image')
+      )
+      .select('media_files.absolute_path as path')
+      .where('images.artist_id', '=', targetId)
+      .where('images.is_primary', '=', true)
+      .executeTakeFirst()
+    if (newPrimaryImage?.path) {
+      await trx.updateTable('artists').set({ image_path: newPrimaryImage.path, updated_at: new Date() }).where('id', '=', targetId).execute()
+    }
+  }
+
+  // favorites (kind='artist'): dedup against UNIQUE(user_id, kind, target_id), then redirect
+  await trx
+    .deleteFrom('favorites')
+    .where((eb) => eb.and([
+      eb('kind', '=', 'artist'),
+      eb('target_id', '=', loserId),
+      eb('user_id', 'in', trx.selectFrom('favorites').select('user_id').where('kind', '=', 'artist').where('target_id', '=', targetId)),
+    ]))
+    .execute()
+  await trx.updateTable('favorites').set({ target_id: targetId }).where('kind', '=', 'artist').where('target_id', '=', loserId).execute()
+
+  // artists_tags (curated tags): dedup, then redirect — mirrors albums_tags in albumMergeService
+  await trx
+    .deleteFrom('artists_tags')
+    .where((eb) => eb.and([
+      eb('artist_id', '=', loserId),
+      eb('tag_id', 'in', trx.selectFrom('artists_tags').select('tag_id').where('artist_id', '=', targetId)),
+    ]))
+    .execute()
+  await trx.updateTable('artists_tags').set({ artist_id: targetId }).where('artist_id', '=', loserId).execute()
+
+  // artist_mb_tags (MusicBrainz-sourced tags): dedup by tag_id, then redirect the rest.
+  // Keep the target's own row where both sides already have the same tag — its
+  // tag_count reflects the target's own (still-current) source_mbid.
+  await trx
+    .deleteFrom('artist_mb_tags')
+    .where((eb) => eb.and([
+      eb('artist_id', '=', loserId),
+      eb('tag_id', 'in', trx.selectFrom('artist_mb_tags').select('tag_id').where('artist_id', '=', targetId)),
+    ]))
+    .execute()
+  await trx.updateTable('artist_mb_tags').set({ artist_id: targetId }).where('artist_id', '=', loserId).execute()
+
   await trx.deleteFrom('artists').where('id', '=', loserId).execute()
 }

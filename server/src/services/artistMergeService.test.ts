@@ -3,8 +3,12 @@ import 'dotenv/config'
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { db } from '../db/database.js'
-import { createArtist, createAlbum, createTrack, cleanupFixtures } from '../test/fixtures.js'
+import {
+  createArtist, createAlbum, createTrack, cleanupFixtures,
+  createArtistImage, createFavorite, createUser, createTag, tagArtist, fixtureName,
+} from '../test/fixtures.js'
 import { mergeArtistInto } from './artistMergeService.js'
+import { applyArtistTags } from './musicbrainzTags.js'
 
 after(cleanupFixtures)
 
@@ -94,4 +98,88 @@ test('regression: track_artists credits move to the target (they cascaded away b
     { track_id: soloCredit.id, role: 'featured' },
     { track_id: sharedCredit.id, role: 'guest' },
   ])
+})
+
+test('regression: images move to the target, deduping primary/not_found conflicts (they cascaded away before)', async () => {
+  const target = await createArtist('images-target')
+  const loser = await createArtist('images-loser')
+
+  // Target has no primary yet — loser's primary should become the survivor
+  // and artists.image_path (denormalized off the primary row) should sync.
+  const loserPrimary = await createArtistImage(loser.id, { isPrimary: true, source: 'fanart' })
+  const primaryPath = `/tmp/${fixtureName('images-primary')}.jpg`
+  await db.insertInto('media_files').values({
+    entity_type: 'image', entity_id: loserPrimary.id, discriminator: 'image',
+    absolute_path: primaryPath, name: fixtureName('images-primary'), file_type: 'image',
+    created_at: new Date(), updated_at: new Date(),
+  }).execute()
+  // Both sides checked the same source and found nothing — must collapse to one row.
+  const targetNotFound = await createArtistImage(target.id, { status: 'not_found', source: 'lastfm' })
+  await createArtistImage(loser.id, { status: 'not_found', source: 'lastfm' })
+  // A source only the loser has — should transfer untouched.
+  const loserOnly = await createArtistImage(loser.id, { source: 'manual' })
+
+  await db.transaction().execute((trx) => mergeArtistInto(target.id, loser.id, trx))
+
+  const images = await db.selectFrom('images').select(['id', 'is_primary', 'status', 'source'])
+    .where('artist_id', '=', target.id).orderBy('id').execute()
+  assert.deepEqual(images.map((i) => i.id).sort((a, b) => a - b), [loserPrimary.id, targetNotFound.id, loserOnly.id].sort((a, b) => a - b))
+  assert.equal(images.find((i) => i.id === loserPrimary.id)!.is_primary, true)
+  assert.equal(images.filter((i) => i.status === 'not_found' && i.source === 'lastfm').length, 1)
+
+  const artist = await db.selectFrom('artists').select('image_path').where('id', '=', target.id).executeTakeFirstOrThrow()
+  assert.equal(artist.image_path, primaryPath)
+})
+
+test('regression: favorites move to the target, deduping when both sides were favorited (they orphaned before)', async () => {
+  const target = await createArtist('favorites-target')
+  const loser = await createArtist('favorites-loser')
+  const userA = await createUser('favorites-user-a')
+  const userB = await createUser('favorites-user-b')
+
+  await createFavorite(userA.id, 'artist', loser.id) // only favorited the loser
+  await createFavorite(userB.id, 'artist', loser.id)
+  await createFavorite(userB.id, 'artist', target.id) // favorited both — must not violate the unique constraint
+
+  await db.transaction().execute((trx) => mergeArtistInto(target.id, loser.id, trx))
+
+  const favorites = await db.selectFrom('favorites').select(['user_id'])
+    .where('kind', '=', 'artist').where('target_id', '=', target.id).execute()
+  assert.deepEqual(favorites.map((f) => f.user_id).sort(), [userA.id, userB.id].sort())
+})
+
+test('regression: curated tags move to the target, deduping shared tags (they orphaned before)', async () => {
+  const target = await createArtist('tags-target')
+  const loser = await createArtist('tags-loser')
+  const onlyOnLoser = await createTag('tags-only-loser')
+  const onBoth = await createTag('tags-on-both')
+
+  await tagArtist(loser.id, onlyOnLoser.id)
+  await tagArtist(loser.id, onBoth.id)
+  await tagArtist(target.id, onBoth.id)
+
+  await db.transaction().execute((trx) => mergeArtistInto(target.id, loser.id, trx))
+
+  const tagIds = (await db.selectFrom('artists_tags').select('tag_id').where('artist_id', '=', target.id).execute()).map((r) => r.tag_id)
+  assert.deepEqual(tagIds.sort(), [onlyOnLoser.id, onBoth.id].sort())
+})
+
+test('regression: musicbrainz tags move to the target, deduping shared tags (they cascaded away before)', async () => {
+  const target = await createArtist('mbtags-target')
+  const loser = await createArtist('mbtags-loser')
+
+  const rockTag = fixtureName('mbtags-rock')
+  const sharedTag = fixtureName('mbtags-shared')
+  await applyArtistTags(loser.id, 'mbid-loser', [{ name: rockTag, count: 5 }, { name: sharedTag, count: 3 }])
+  await applyArtistTags(target.id, 'mbid-target', [{ name: sharedTag, count: 7 }])
+
+  await db.transaction().execute((trx) => mergeArtistInto(target.id, loser.id, trx))
+
+  const rows = await db.selectFrom('artist_mb_tags')
+    .innerJoin('mb_tags', 'mb_tags.id', 'artist_mb_tags.tag_id')
+    .select(['mb_tags.name', 'artist_mb_tags.tag_count'])
+    .where('artist_id', '=', target.id).execute()
+  assert.deepEqual(rows.map((r) => r.name).sort(), [rockTag, sharedTag].sort())
+  // target's own row for the shared tag must survive untouched, not the loser's
+  assert.equal(rows.find((r) => r.name === sharedTag)!.tag_count, 7)
 })

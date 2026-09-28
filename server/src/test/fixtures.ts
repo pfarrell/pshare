@@ -61,6 +61,25 @@ export const tagArtist = (artistId: number, tagId: number) =>
 export const tagTrack = (trackId: number, tagId: number) =>
   db.insertInto('tags_tracks').values({ track_id: trackId, tag_id: tagId }).execute()
 
+export const createArtistImage = (
+  artistId: number,
+  { isPrimary = false, source = 'manual', status = 'active' }: { isPrimary?: boolean, source?: string, status?: string } = {}
+) =>
+  db.insertInto('images')
+    .values({ artist_id: artistId, album_id: null, is_primary: isPrimary, source, status })
+    .returningAll().executeTakeFirstOrThrow()
+
+export const createAlbumImage = (
+  albumId: number,
+  { isPrimary = false, source = 'manual', status = 'active' }: { isPrimary?: boolean, source?: string, status?: string } = {}
+) =>
+  db.insertInto('images')
+    .values({ album_id: albumId, artist_id: null, is_primary: isPrimary, source, status })
+    .returningAll().executeTakeFirstOrThrow()
+
+export const createFavorite = (userId: number, kind: string, targetId: number) =>
+  db.insertInto('favorites').values({ user_id: userId, kind, target_id: targetId }).returningAll().executeTakeFirstOrThrow()
+
 export const createPlaylist = (label: string) =>
   db.insertInto('playlists').values({ name: fixtureName(label) }).returningAll().executeTakeFirstOrThrow()
 
@@ -96,6 +115,11 @@ export async function cleanupFixtures(): Promise<void> {
       await db.deleteFrom('media_files').where('entity_type', '=', 'image').where('entity_id', 'in', imageIds).execute()
     }
   }
+
+  // favorites.target_id has no FK (polymorphic by kind), so it won't cascade
+  // when the fixture artist/album is deleted below — clean up explicitly.
+  if (artistIds.length > 0) await db.deleteFrom('favorites').where('kind', '=', 'artist').where('target_id', 'in', artistIds).execute()
+  if (albumIds.length > 0) await db.deleteFrom('favorites').where('kind', '=', 'album').where('target_id', 'in', albumIds).execute()
 
   await db.deleteFrom('tracks').where('title', 'like', like).execute()
   if (albumIds.length > 0) await db.deleteFrom('logs').where('album_id', 'in', albumIds).execute()
