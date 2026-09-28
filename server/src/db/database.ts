@@ -394,6 +394,13 @@ interface AiPlaylistGenerationsTable {
   created_at: ColumnType<Date, string | Date | undefined, never>
 }
 
+interface PhotoTable {
+  id: Generated<number>
+  width: number | null
+  height: number | null
+  created_at: ColumnType<Date, string | Date | undefined, never>
+}
+
 export interface Database {
   artists: ArtistTable
   albums: AlbumTable
@@ -434,6 +441,7 @@ export interface Database {
   error_log: ErrorLogTable
   signup_log: SignupLogTable
   ai_playlist_generations: AiPlaylistGenerationsTable
+  photos: PhotoTable
 }
 
 // ---- DB instance ----
