@@ -9,6 +9,7 @@ import musicbrainz from './musicbrainz.js'
 import tags from './tags.js'
 import duplicates from './duplicates.js'
 import profiles from './profiles.js'
+import photos from './photos.js'
 
 const admin = new Hono()
 
@@ -21,5 +22,6 @@ admin.route('/', musicbrainz)
 admin.route('/', tags)
 admin.route('/', duplicates)
 admin.route('/', profiles)
+admin.route('/', photos)
 
 export default admin
