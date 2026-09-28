@@ -20,7 +20,7 @@ node ~/.claude/skills/check-deploy/stamp-version.cjs dist/version.json
 
 # Create directory structure on remote
 echo "📁 Creating remote directories..."
-ssh -p ${REMOTE_PORT} ${REMOTE_USER}@${REMOTE_HOST} "mkdir -p ${RELEASE_DIR} ${SHARED_DIR}/public/images/artists ${SHARED_DIR}/public/images/albums"
+ssh -p ${REMOTE_PORT} ${REMOTE_USER}@${REMOTE_HOST} "mkdir -p ${RELEASE_DIR} ${SHARED_DIR}/public/images/artists ${SHARED_DIR}/public/images/albums ${SHARED_DIR}/public/images/photos"
 
 # Upload built code and dependencies
 echo "📤 Uploading server code..."
