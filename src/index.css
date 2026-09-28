@@ -3018,6 +3018,37 @@ body:has(.jukebox-app) {
   border-color: #2f6fd6;
   font-weight: 600;
 }
+/* Screensaver on/off toggle — deliberately NOT a direct child of
+   .jukebox-settings-tab (see JukeboxSettingsTab.jsx), so it doesn't pick up
+   the profile buttons' shared aria-pressed="true" blue-pill styling above.
+   Reviewed finding: sharing that look under a header literally reading
+   "Filter" made it look like a second active filter rather than a separate
+   setting. A neutral ghost/outline treatment plus the divider below reads
+   as its own control instead. */
+.jukebox-app .jukebox-settings-tab-screensaver {
+  display: flex;
+}
+.jukebox-app .jukebox-settings-tab-screensaver-toggle {
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  font-size: 1rem;
+  text-align: left;
+  color: rgba(255, 255, 255, 0.75);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+.jukebox-app .jukebox-settings-tab-screensaver-toggle[aria-pressed="true"] {
+  color: #93c5fd;
+  border-color: rgba(147, 197, 253, 0.4);
+  font-weight: 600;
+}
+.jukebox-app .jukebox-settings-tab-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 0.25rem 0;
+}
 .jukebox-app .jukebox-active-profile {
   margin: 0;
   font-size: 0.95rem;

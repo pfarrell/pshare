@@ -97,4 +97,21 @@ describe('screensaver toggle', () => {
 
     expect(screen.getByRole('button', { name: 'Screensaver: Off' })).toBeInTheDocument();
   });
+
+  test('is visually and structurally separated from the profile filter list, not styled as a filter option', async () => {
+    render(<JukeboxSettingsTab />);
+    await waitFor(() => screen.getByText('Kids'));
+
+    const toggle = screen.getByRole('button', { name: 'Screensaver: On' });
+    const allButton = screen.getByRole('button', { name: 'All' });
+
+    // Its own class, distinct from the plain profile-filter buttons, so it
+    // can be styled differently rather than sharing the profile list's
+    // aria-pressed="true" blue-pill highlight (which would make it read as
+    // a second active filter under the "Filter" header).
+    expect(toggle).toHaveClass('jukebox-settings-tab-screensaver-toggle');
+    // Not a sibling of the profile buttons in the same flat list — wrapped
+    // in its own section, separated from "Filter" rather than blended in.
+    expect(toggle.parentElement).not.toBe(allButton.parentElement);
+  });
 });

@@ -54,13 +54,17 @@ const JukeboxSettingsTab = () => {
         </>
       ) : (
         <>
-          <button
-            type="button"
-            aria-pressed={screensaverEnabled}
-            onClick={() => setScreensaverEnabled(!screensaverEnabled)}
-          >
-            {screensaverEnabled ? 'Screensaver: On' : 'Screensaver: Off'}
-          </button>
+          <div className="jukebox-settings-tab-screensaver">
+            <button
+              type="button"
+              className="jukebox-settings-tab-screensaver-toggle"
+              aria-pressed={screensaverEnabled}
+              onClick={() => setScreensaverEnabled(!screensaverEnabled)}
+            >
+              {screensaverEnabled ? 'Screensaver: On' : 'Screensaver: Off'}
+            </button>
+          </div>
+          <div className="jukebox-settings-tab-divider" />
           <button type="button" aria-pressed={activeProfileId === null} onClick={() => setProfile(null)}>
             All
           </button>
