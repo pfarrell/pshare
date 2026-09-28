@@ -37,13 +37,16 @@ import { useTouchScroll } from './useTouchScroll';
 // 'aimix' (prompt-driven playlist generation — see JukeboxAiMixTab.jsx).
 // Settings, Next Up, and AI Mix all unmount when switched away from, same as
 // before — only Search's query/results are worth preserving hidden-but-mounted.
-const JukeboxBrowsePanel = ({ activeDestination, onSelectDestination, onEnqueue, pendingArtist, onJumpToArtist, onPendingArtistConsumed, onGeneratingChange, onPlaylistSaved }) => {
+const JukeboxBrowsePanel = ({ activeDestination, onSelectDestination, onEnqueue, pendingItem, onJumpToArtist, onPendingItemConsumed, onGeneratingChange, onPlaylistSaved }) => {
   const [viewStack, setViewStack] = useState([]);
   const [selectedAlbum, setSelectedAlbum] = useState(null);
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const lastShownDestinationRef = useRef(activeDestination);
   const panelRef = useTouchScroll({ axis: 'y' });
   const open = activeDestination !== null;
+
+  const selectAlbum = (album) => { setSelectedPlaylist(null); setSelectedAlbum(album); };
+  const selectPlaylist = (playlist) => { setSelectedAlbum(null); setSelectedPlaylist(playlist); };
 
   useEffect(() => {
     if (activeDestination === null) {
@@ -52,15 +55,24 @@ const JukeboxBrowsePanel = ({ activeDestination, onSelectDestination, onEnqueue,
       setSelectedPlaylist(null);
       return;
     }
-    // A jump-to-artist request (from the tracks panel's artist link) replaces
-    // whatever's on the drill-down stack with that artist, rather than being
-    // stacked on top of it or cleared by the destination-switch rule below —
-    // it fires together with (or after) the parent switching activeDestination
-    // to 'browse', so this branch must win over the "different destination"
+    // A pending item — from the tracks panel's artist link, or the idle
+    // screensaver's View button (see JukeboxApp.jsx's jumpToItem) — replaces
+    // whatever's on the drill-down stack for an artist, or opens the tracks
+    // panel directly for an album, rather than being stacked on top of
+    // anything or cleared by the destination-switch rule below. It fires
+    // together with (or after) the parent switching activeDestination to
+    // 'browse', so this branch must win over the "different destination"
     // clear on the same pass.
-    if (pendingArtist) {
-      setViewStack([{ type: 'artist', data: pendingArtist }]);
-      onPendingArtistConsumed?.();
+    if (pendingItem?.type === 'artist') {
+      setViewStack([{ type: 'artist', data: pendingItem.data }]);
+      onPendingItemConsumed?.();
+      lastShownDestinationRef.current = activeDestination;
+      return;
+    }
+    if (pendingItem?.type === 'album') {
+      setViewStack([]);
+      selectAlbum(pendingItem.data);
+      onPendingItemConsumed?.();
       lastShownDestinationRef.current = activeDestination;
       return;
     }
@@ -71,15 +83,13 @@ const JukeboxBrowsePanel = ({ activeDestination, onSelectDestination, onEnqueue,
       setViewStack([]);
     }
     lastShownDestinationRef.current = activeDestination;
-  }, [activeDestination, pendingArtist, onPendingArtistConsumed]);
+  }, [activeDestination, pendingItem, onPendingItemConsumed]);
 
   const pushView = (view) => setViewStack((stack) => [...stack, view]);
   const popView = () => setViewStack((stack) => stack.slice(0, -1));
-  const selectAlbum = (album) => { setSelectedPlaylist(null); setSelectedAlbum(album); };
-  const selectPlaylist = (playlist) => { setSelectedAlbum(null); setSelectedPlaylist(playlist); };
   // The tracks panel's artist link: close it and hand the artist up to
-  // JukeboxApp, which owns activeTab and switches to Browse if needed (see
-  // the pendingArtist effect above for how it lands back here).
+  // JukeboxApp, which owns activeDestination and switches to Browse if
+  // needed (see the pendingItem effect above for how it lands back here).
   const jumpToArtistFromTracksPanel = (artist) => {
     setSelectedAlbum(null);
     onJumpToArtist?.(artist);

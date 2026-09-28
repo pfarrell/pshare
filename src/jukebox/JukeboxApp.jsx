@@ -24,11 +24,15 @@ const JukeboxApp = () => {
   // drawer's own JukeboxDrawerMenu can switch directly to any destination
   // via onSelectDestination without closing.
   const [activeDestination, setActiveDestination] = useState(null);
-  // Set when the tracks panel's artist link is tapped: the target artist to
-  // show in Search's drill-down view, carried across a destination switch to
-  // Search if one is needed. JukeboxBrowsePanel consumes it (pushes it as the
-  // artist view) and reports back via onPendingArtistConsumed.
-  const [pendingArtist, setPendingArtist] = useState(null);
+  // Set when something elsewhere in the app wants Browse to jump straight to
+  // an artist or album drill-down view: the tracks panel's artist link
+  // (jumpToArtist below), or the idle screensaver's "View" button (which
+  // calls jumpToItem directly, since it already knows whether it's showing
+  // an album or an artist). Carried across a destination switch to Browse if
+  // one is needed. JukeboxBrowsePanel consumes it (pushes the artist view,
+  // or opens the tracks panel for an album) and reports back via
+  // onPendingItemConsumed.
+  const [pendingItem, setPendingItem] = useState(null);
   // The platform's own on-screen keyboard (squeekboard + labwc) proved
   // unreliable on the actual kiosk hardware, so this shell provides its own —
   // see JukeboxKeyboard.jsx. Called unconditionally (before the early return
@@ -66,13 +70,15 @@ const JukeboxApp = () => {
   // Saving doesn't close the drawer or interrupt playback — Next Up stays
   // open and the queue keeps playing, unlike enqueue above.
   const handlePlaylistSaved = (name) => showToast(`Saved as "${name}"`);
-  // "Close the album page and show this artist's albums as if we'd
-  // searched" — switches to Browse (a no-op if already there) and hands the
-  // artist to the drawer.
-  const jumpToArtist = (artist) => {
+  // "Close the album/artist page and show this item as if we'd searched" —
+  // switches to Browse (a no-op if already there) and hands the item to the
+  // drawer. Generic over artist/album so both the tracks panel's artist link
+  // and the idle screensaver's View button can share it.
+  const jumpToItem = (item) => {
     setActiveDestination('browse');
-    setPendingArtist(artist);
+    setPendingItem(item);
   };
+  const jumpToArtist = (artist) => jumpToItem({ type: 'artist', data: artist });
 
   // Auto-close on inactivity: armed only while the drawer is open, reset by
   // any pointerdown inside it (Search, Next Up, Settings, drill-downs, or
@@ -130,9 +136,9 @@ const JukeboxApp = () => {
         activeDestination={activeDestination}
         onSelectDestination={setActiveDestination}
         onEnqueue={handleEnqueue}
-        pendingArtist={pendingArtist}
+        pendingItem={pendingItem}
         onJumpToArtist={jumpToArtist}
-        onPendingArtistConsumed={() => setPendingArtist(null)}
+        onPendingItemConsumed={() => setPendingItem(null)}
         onGeneratingChange={setAiMixGenerating}
         onPlaylistSaved={handlePlaylistSaved}
       />

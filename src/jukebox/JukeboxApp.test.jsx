@@ -39,18 +39,18 @@ vi.mock('./JukeboxFooterStrip', () => ({
   ),
 }));
 vi.mock('./JukeboxBrowsePanel', () => ({
-  default: ({ activeDestination, onSelectDestination, onEnqueue, pendingArtist, onJumpToArtist, onPendingArtistConsumed, onGeneratingChange, onPlaylistSaved }) => (
+  default: ({ activeDestination, onSelectDestination, onEnqueue, pendingItem, onJumpToArtist, onPendingItemConsumed, onGeneratingChange, onPlaylistSaved }) => (
     <div
       className="jukebox-browse-panel"
       data-testid="jukebox-browse-panel"
       data-active-destination={activeDestination ?? 'none'}
-      data-pending-artist={pendingArtist?.name ?? 'none'}
+      data-pending-item={pendingItem ? `${pendingItem.type}:${pendingItem.data.name ?? pendingItem.data.title}` : 'none'}
     >
       <button onClick={() => onSelectDestination('nextup')}>trigger-select-nextup</button>
       <button onClick={() => onSelectDestination('settings')}>trigger-select-settings</button>
       <button onClick={onEnqueue}>trigger-enqueue</button>
       <button onClick={() => onJumpToArtist({ id: 42, name: 'Jumped Artist' })}>trigger-jump-to-artist</button>
-      <button onClick={onPendingArtistConsumed}>trigger-pending-artist-consumed</button>
+      <button onClick={onPendingItemConsumed}>trigger-pending-item-consumed</button>
       <button onClick={() => onGeneratingChange(true)}>trigger-generating-start</button>
       <button onClick={() => onGeneratingChange(false)}>trigger-generating-end</button>
       <button onClick={() => onPlaylistSaved('Road Trip')}>trigger-playlist-saved</button>
@@ -67,7 +67,7 @@ import { useJukeboxKeyboardFocus } from './useJukeboxKeyboardFocus';
 
 const renderApp = () => render(<MemoryRouter><JukeboxApp /></MemoryRouter>);
 const activeDestination = () => screen.getByTestId('jukebox-browse-panel').getAttribute('data-active-destination');
-const pendingArtistName = () => screen.getByTestId('jukebox-browse-panel').getAttribute('data-pending-artist');
+const pendingItemLabel = () => screen.getByTestId('jukebox-browse-panel').getAttribute('data-pending-item');
 const nowPlayingTap = () => screen.getByText('trigger-now-playing-tap');
 
 // jsdom has no native EventSource, and useJukeboxQueueEvents (run
@@ -251,7 +251,7 @@ describe('playlist saved toast', () => {
   });
 });
 
-test('jumping to an artist from a different destination switches to Browse and carries the artist along', () => {
+test('jumping to an artist from a different destination switches to Browse and carries the item along', () => {
   renderApp();
   fireEvent.click(nowPlayingTap());
   fireEvent.click(screen.getByText('trigger-select-nextup'));
@@ -259,27 +259,27 @@ test('jumping to an artist from a different destination switches to Browse and c
   fireEvent.click(screen.getByText('trigger-jump-to-artist'));
 
   expect(activeDestination()).toBe('browse');
-  expect(pendingArtistName()).toBe('Jumped Artist');
+  expect(pendingItemLabel()).toBe('artist:Jumped Artist');
 });
 
-test('jumping to an artist while already on Browse still carries the artist along', () => {
+test('jumping to an artist while already on Browse still carries the item along', () => {
   renderApp();
   fireEvent.click(nowPlayingTap());
 
   fireEvent.click(screen.getByText('trigger-jump-to-artist'));
 
   expect(activeDestination()).toBe('browse');
-  expect(pendingArtistName()).toBe('Jumped Artist');
+  expect(pendingItemLabel()).toBe('artist:Jumped Artist');
 });
 
-test('clears the pending artist once the drawer reports it consumed', () => {
+test('clears the pending item once the drawer reports it consumed', () => {
   renderApp();
   fireEvent.click(screen.getByText('trigger-jump-to-artist'));
-  expect(pendingArtistName()).toBe('Jumped Artist');
+  expect(pendingItemLabel()).toBe('artist:Jumped Artist');
 
-  fireEvent.click(screen.getByText('trigger-pending-artist-consumed'));
+  fireEvent.click(screen.getByText('trigger-pending-item-consumed'));
 
-  expect(pendingArtistName()).toBe('none');
+  expect(pendingItemLabel()).toBe('none');
 });
 
 // --- Drawer auto-close on inactivity ---------------------------------------

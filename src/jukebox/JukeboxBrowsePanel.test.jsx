@@ -373,23 +373,23 @@ test('the artist link in the tracks panel closes it and hands the artist up via 
   expect(onJumpToArtist).toHaveBeenCalledWith(expect.objectContaining({ id: 8, name: 'Album Artist' }));
 });
 
-test('a pending artist is pushed as the drill-down view once the parent hands it over, and reported consumed', () => {
-  const onPendingArtistConsumed = vi.fn();
+test('a pending artist item is pushed as the drill-down view once the parent hands it over, and reported consumed', () => {
+  const onPendingItemConsumed = vi.fn();
   const { rerender } = renderPanel('nextup');
 
   rerender(
     <JukeboxBrowsePanel
       activeDestination="browse"
-      pendingArtist={{ id: 8, name: 'Album Artist' }}
-      onPendingArtistConsumed={onPendingArtistConsumed}
+      pendingItem={{ type: 'artist', data: { id: 8, name: 'Album Artist' } }}
+      onPendingItemConsumed={onPendingItemConsumed}
     />
   );
 
   expect(screen.getByText('artist-view: Album Artist')).toBeInTheDocument();
-  expect(onPendingArtistConsumed).toHaveBeenCalledTimes(1);
+  expect(onPendingItemConsumed).toHaveBeenCalledTimes(1);
 });
 
-test('a pending artist replaces whatever was on the drill-down stack, not stacked on top of it', () => {
+test('a pending artist item replaces whatever was on the drill-down stack, not stacked on top of it', () => {
   const { rerender } = renderPanel('browse');
   fireEvent.click(screen.getByText('select-search-artist'));
   expect(screen.getByText('artist-view: Search Artist')).toBeInTheDocument();
@@ -397,13 +397,30 @@ test('a pending artist replaces whatever was on the drill-down stack, not stacke
   rerender(
     <JukeboxBrowsePanel
       activeDestination="browse"
-      pendingArtist={{ id: 8, name: 'Album Artist' }}
-      onPendingArtistConsumed={vi.fn()}
+      pendingItem={{ type: 'artist', data: { id: 8, name: 'Album Artist' } }}
+      onPendingItemConsumed={vi.fn()}
     />
   );
 
   expect(screen.getByText('artist-view: Album Artist')).toBeInTheDocument();
   expect(screen.queryByText('artist-view: Search Artist')).not.toBeInTheDocument();
+});
+
+test('a pending album item opens the tracks panel directly, without touching the drill-down stack', () => {
+  const onPendingItemConsumed = vi.fn();
+  const { rerender } = renderPanel('nextup');
+
+  rerender(
+    <JukeboxBrowsePanel
+      activeDestination="browse"
+      pendingItem={{ type: 'album', data: { id: 9, title: 'Screensaver Album' } }}
+      onPendingItemConsumed={onPendingItemConsumed}
+    />
+  );
+
+  expect(screen.getByText('tracks-panel: Screensaver Album')).toBeInTheDocument();
+  expect(screen.queryByTestId('jukebox-artist-view')).not.toBeInTheDocument();
+  expect(onPendingItemConsumed).toHaveBeenCalledTimes(1);
 });
 
 test('onPlaylistSaved is passed through to Next Up', () => {
