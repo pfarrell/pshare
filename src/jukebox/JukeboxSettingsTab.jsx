@@ -14,7 +14,7 @@ import JukeboxQrCode from './JukeboxQrCode';
 // Design §5: this is a filter/settings change, not a playback action.
 const JukeboxSettingsTab = () => {
   const { activeProfileId, setProfile } = useProfileFilterStore();
-  const { enabled: screensaverEnabled, setEnabled: setScreensaverEnabled } = useJukeboxScreensaverStore();
+  const { mode: screensaverMode, setMode: setScreensaverMode } = useJukeboxScreensaverStore();
   const [profiles, setProfiles] = useState(null);
   const [view, setView] = useState('filter');
   const deviceId = useAuthStore((s) => s.jukeboxDeviceId);
@@ -55,13 +55,30 @@ const JukeboxSettingsTab = () => {
       ) : (
         <>
           <div className="jukebox-settings-tab-screensaver">
+            <span className="jukebox-settings-tab-screensaver-label">Screensaver</span>
             <button
               type="button"
               className="jukebox-settings-tab-screensaver-toggle"
-              aria-pressed={screensaverEnabled}
-              onClick={() => setScreensaverEnabled(!screensaverEnabled)}
+              aria-pressed={screensaverMode === 'off'}
+              onClick={() => setScreensaverMode('off')}
             >
-              {screensaverEnabled ? 'Screensaver: On' : 'Screensaver: Off'}
+              Off
+            </button>
+            <button
+              type="button"
+              className="jukebox-settings-tab-screensaver-toggle"
+              aria-pressed={screensaverMode === 'music'}
+              onClick={() => setScreensaverMode('music')}
+            >
+              Music
+            </button>
+            <button
+              type="button"
+              className="jukebox-settings-tab-screensaver-toggle"
+              aria-pressed={screensaverMode === 'photos'}
+              onClick={() => setScreensaverMode('photos')}
+            >
+              Photos
             </button>
           </div>
           <div className="jukebox-settings-tab-divider" />

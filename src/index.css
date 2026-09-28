@@ -3027,6 +3027,13 @@ body:has(.jukebox-app) {
    as its own control instead. */
 .jukebox-app .jukebox-settings-tab-screensaver {
   display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.jukebox-app .jukebox-settings-tab-screensaver-label {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-right: 0.25rem;
 }
 .jukebox-app .jukebox-settings-tab-screensaver-toggle {
   min-height: 2.75rem;

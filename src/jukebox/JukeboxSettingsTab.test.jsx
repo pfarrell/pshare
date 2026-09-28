@@ -18,7 +18,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   __resetProfilesCacheForTests();
   useProfileFilterStore.setState({ activeProfileId: null });
-  useJukeboxScreensaverStore.setState({ enabled: true });
+  useJukeboxScreensaverStore.setState({ mode: 'music' });
   useAuthStore.setState({ jukeboxDeviceId: 5, jukeboxEnqueueToken: 'tok-abc' });
   apiService.getProfiles.mockResolvedValue({ data: [{ id: 1, name: 'Kids', tags: [] }] });
 });
@@ -72,46 +72,53 @@ describe('JukeboxSettingsTab', () => {
   });
 });
 
-describe('screensaver toggle', () => {
-  test('shows the toggle as On by default', async () => {
+describe('screensaver mode selector', () => {
+  test('shows Music as pressed by default', async () => {
     render(<JukeboxSettingsTab />);
     await waitFor(() => screen.getByText('Kids'));
 
-    expect(screen.getByRole('button', { name: 'Screensaver: On' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Music' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Off' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Photos' })).toHaveAttribute('aria-pressed', 'false');
   });
 
-  test('tapping it turns the screensaver off and updates the store', async () => {
+  test('tapping Photos switches the mode and updates the store', async () => {
     render(<JukeboxSettingsTab />);
     await waitFor(() => screen.getByText('Kids'));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Screensaver: On' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Photos' }));
 
-    expect(screen.getByRole('button', { name: 'Screensaver: Off' })).toHaveAttribute('aria-pressed', 'false');
-    expect(useJukeboxScreensaverStore.getState().enabled).toBe(false);
+    expect(screen.getByRole('button', { name: 'Photos' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Music' })).toHaveAttribute('aria-pressed', 'false');
+    expect(useJukeboxScreensaverStore.getState().mode).toBe('photos');
   });
 
-  test('reflects a persisted disabled state', async () => {
-    useJukeboxScreensaverStore.setState({ enabled: false });
+  test('tapping Off switches the mode and updates the store', async () => {
     render(<JukeboxSettingsTab />);
     await waitFor(() => screen.getByText('Kids'));
 
-    expect(screen.getByRole('button', { name: 'Screensaver: Off' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Off' }));
+
+    expect(screen.getByRole('button', { name: 'Off' })).toHaveAttribute('aria-pressed', 'true');
+    expect(useJukeboxScreensaverStore.getState().mode).toBe('off');
   });
 
-  test('is visually and structurally separated from the profile filter list, not styled as a filter option', async () => {
+  test('reflects a persisted photos mode', async () => {
+    useJukeboxScreensaverStore.setState({ mode: 'photos' });
     render(<JukeboxSettingsTab />);
     await waitFor(() => screen.getByText('Kids'));
 
-    const toggle = screen.getByRole('button', { name: 'Screensaver: On' });
+    expect(screen.getByRole('button', { name: 'Photos' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('the mode buttons are visually and structurally separated from the profile filter list, not styled as filter options', async () => {
+    render(<JukeboxSettingsTab />);
+    await waitFor(() => screen.getByText('Kids'));
+
+    const musicButton = screen.getByRole('button', { name: 'Music' });
     const allButton = screen.getByRole('button', { name: 'All' });
 
-    // Its own class, distinct from the plain profile-filter buttons, so it
-    // can be styled differently rather than sharing the profile list's
-    // aria-pressed="true" blue-pill highlight (which would make it read as
-    // a second active filter under the "Filter" header).
-    expect(toggle).toHaveClass('jukebox-settings-tab-screensaver-toggle');
-    // Not a sibling of the profile buttons in the same flat list — wrapped
-    // in its own section, separated from "Filter" rather than blended in.
-    expect(toggle.parentElement).not.toBe(allButton.parentElement);
+    expect(musicButton).toHaveClass('jukebox-settings-tab-screensaver-toggle');
+    expect(musicButton.parentElement).not.toBe(allButton.parentElement);
   });
 });
