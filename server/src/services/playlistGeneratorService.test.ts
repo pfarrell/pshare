@@ -1,11 +1,15 @@
 // server/src/services/playlistGeneratorService.test.ts
 import 'dotenv/config'
-import { test } from 'node:test'
+import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import type { Context } from 'hono'
 import Anthropic from '@anthropic-ai/sdk'
 import { db } from '../db/database.js'
-import { generatePlaylist } from './playlistGeneratorService.js'
+import { generatePlaylist, fetchArtistTagsForModel, MAX_MB_TAGS_FOR_MODEL } from './playlistGeneratorService.js'
+import { createArtist, createTag, tagArtist, cleanupFixtures } from '../test/fixtures.js'
+import { applyArtistTags } from './musicbrainzTags.js'
+
+after(cleanupFixtures)
 
 async function makeFixtureTrack(names?: { artistName: string; albumTitle: string; trackTitle: string }) {
   const { artistName, albumTitle, trackTitle } = names ?? {
@@ -176,6 +180,43 @@ test('search_library narrows by artist when both title and artist are given', as
     await cleanupFixtureTrack(wanted)
     await cleanupFixtureTrack(other)
   }
+})
+
+test('fetchArtistTagsForModel returns found:false for an artist that does not exist', async () => {
+  const result = await fetchArtistTagsForModel('Some Artist That Definitely Does Not Exist 12345')
+  assert.deepEqual(result, { found: false, tags: [], mb_tags: [] })
+})
+
+test('fetchArtistTagsForModel returns curated tags for a known artist', async () => {
+  const artist = await createArtist('tags-curated')
+  const tag = await createTag('tags-curated-genre')
+  await tagArtist(artist.id, tag.id)
+
+  const result = await fetchArtistTagsForModel(artist.name)
+  assert.equal(result.found, true)
+  assert.deepEqual(result.tags, [tag.name])
+  assert.deepEqual(result.mb_tags, [])
+})
+
+test('fetchArtistTagsForModel returns MusicBrainz tags ordered by vote count, capped at the max', async () => {
+  const artist = await createArtist('tags-mb')
+  const tagRows = Array.from({ length: MAX_MB_TAGS_FOR_MODEL + 3 }, (_, i) => ({ name: `mb-tag-${i}`, count: i + 1 }))
+  await applyArtistTags(artist.id, 'mbid-test', tagRows)
+
+  const result = await fetchArtistTagsForModel(artist.name)
+  const expectedTopNames = tagRows.slice().sort((a, b) => b.count - a.count).slice(0, MAX_MB_TAGS_FOR_MODEL).map((t) => t.name)
+  assert.deepEqual(result.mb_tags, expectedTopNames)
+})
+
+test('fetchArtistTagsForModel returns both curated and MusicBrainz tags together', async () => {
+  const artist = await createArtist('tags-both')
+  const tag = await createTag('tags-both-genre')
+  await tagArtist(artist.id, tag.id)
+  await applyArtistTags(artist.id, 'mbid-both', [{ name: 'community-tag', count: 5 }])
+
+  const result = await fetchArtistTagsForModel(artist.name)
+  assert.deepEqual(result.tags, [tag.name])
+  assert.deepEqual(result.mb_tags, ['community-tag'])
 })
 
 test('hitting the overall timeout resolves with the already-finalized tracks instead of rejecting', async (t) => {

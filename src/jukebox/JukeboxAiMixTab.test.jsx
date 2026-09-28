@@ -115,6 +115,34 @@ test('a 429 shows the server rate-limit message with no Retry button', async () 
   expect(screen.queryByText("Couldn't generate right now.")).not.toBeInTheDocument();
 });
 
+describe('loading spinner', () => {
+  test('shows a spinner while generating', () => {
+    apiService.generatePlaylist.mockReturnValue(new Promise(() => {}));
+    renderTab();
+
+    fireEvent.change(screen.getByPlaceholderText(/describe what you want to hear/i), { target: { value: 'upbeat cleaning music' } });
+    fireEvent.click(screen.getByRole('button', { name: /generate/i }));
+
+    expect(screen.getByTestId('jukebox-ai-mix-spinner')).toBeInTheDocument();
+  });
+
+  test('does not show a spinner before generating starts', () => {
+    renderTab();
+    expect(screen.queryByTestId('jukebox-ai-mix-spinner')).not.toBeInTheDocument();
+  });
+
+  test('hides the spinner once generation finishes', async () => {
+    apiService.generatePlaylist.mockResolvedValue(generateResponse(someTracks));
+    renderTab();
+
+    fireEvent.change(screen.getByPlaceholderText(/describe what you want to hear/i), { target: { value: 'upbeat cleaning music' } });
+    fireEvent.click(screen.getByRole('button', { name: /generate/i }));
+    expect(screen.getByTestId('jukebox-ai-mix-spinner')).toBeInTheDocument();
+
+    await waitFor(() => expect(screen.queryByTestId('jukebox-ai-mix-spinner')).not.toBeInTheDocument());
+  });
+});
+
 test('reports generation in flight via onGeneratingChange (success)', async () => {
   let resolve;
   apiService.generatePlaylist.mockReturnValue(new Promise((r) => { resolve = r; }));

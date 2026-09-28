@@ -69,6 +69,13 @@ const JukeboxAiMixTab = ({ onEnqueue, onGeneratingChange }) => {
         </button>
       </div>
 
+      {generating && (
+        <div className="jukebox-ai-mix-loading" role="status" aria-live="polite">
+          <span className="jukebox-ai-mix-spinner" data-testid="jukebox-ai-mix-spinner" aria-hidden="true" />
+          <span>This can take up to a minute…</span>
+        </div>
+      )}
+
       {error && (
         <div className="jukebox-panel-error">
           <p>Couldn't generate right now.</p>

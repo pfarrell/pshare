@@ -43,6 +43,17 @@ export function resolveTrackIdsForSuggestion(raw: unknown): number[] {
   return raw.filter((id): id is number => Number.isInteger(id)).slice(0, MAX_SUGGEST_NAME_TRACKS)
 }
 
+// A generated playlist's autosaved name: the AI-suggested name when one
+// came back, else the same truncated-prompt name shown before autosave
+// existed — a naming failure/timeout must never block the save itself.
+export function resolveGeneratedPlaylistName(prompt: string, suggestedName: string | null): string {
+  return suggestedName ?? prompt.slice(0, 60)
+}
+
+function trackDescriptionsFor(tracks: { title: string, artist?: { name: string | null } | null }[]): string[] {
+  return tracks.map((t) => `${t.artist?.name ?? 'Unknown Artist'} - ${t.title}`)
+}
+
 interface OtherAlbum {
   id: number
   title: string
@@ -214,17 +225,21 @@ playlists.get('/', requireAuth, async (c) => {
   })))
 })
 
-// POST /playlists - Create a new playlist, optionally seeded with tracks
-playlists.post('/', requireAuth, async (c) => {
-  const user = c.get('user')!
-  const { name, track_ids } = await c.req.json()
+// Shared by POST /playlists and POST /playlists/generate's autosave.
+export const MAX_PLAYLIST_TRACKS = 1000
 
-  const result = await db.transaction().execute(async (trx) => {
+export function resolvePlaylistTrackIds(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return []
+  return raw.filter((id): id is number => Number.isInteger(id)).slice(0, MAX_PLAYLIST_TRACKS)
+}
+
+export async function createPlaylistWithTracks(userId: number, name: string, trackIds: number[]) {
+  return db.transaction().execute(async (trx) => {
     const playlist = await trx
       .insertInto('playlists')
       .values({
         name,
-        user_id: user.id,
+        user_id: userId,
         created_at: new Date(),
         updated_at: new Date(),
       })
@@ -235,14 +250,10 @@ playlists.post('/', requireAuth, async (c) => {
       throw new Error('Failed to create playlist')
     }
 
-    const ids = Array.isArray(track_ids)
-      ? track_ids.filter((id: unknown): id is number => Number.isInteger(id)).slice(0, 1000)
-      : []
-
-    if (ids.length > 0) {
+    if (trackIds.length > 0) {
       await trx
         .insertInto('playlist_tracks')
-        .values(ids.map((track_id: number, i: number) => ({
+        .values(trackIds.map((track_id, i) => ({
           playlist_id: playlist.id,
           track_id,
           order: i + 1,
@@ -252,6 +263,14 @@ playlists.post('/', requireAuth, async (c) => {
 
     return playlist
   })
+}
+
+// POST /playlists - Create a new playlist, optionally seeded with tracks
+playlists.post('/', requireAuth, async (c) => {
+  const user = c.get('user')!
+  const { name, track_ids } = await c.req.json()
+
+  const result = await createPlaylistWithTracks(user.id, name, resolvePlaylistTrackIds(track_ids))
 
   return c.json(result)
 })
@@ -342,8 +361,23 @@ playlists.post('/generate', requireAuth, async (c) => {
   try {
     const { trackIds } = await generatePlaylist(prompt, size, c)
     const tracks = await fetchTracksForIds(trackIds, c)
+
+    if (tracks.length === 0) {
+      return c.json({
+        playlist: { name: prompt.slice(0, 60), image_path: null },
+        tracks,
+      })
+    }
+
+    // Autosave: a real playlist now, not an ephemeral result — never gated
+    // on the name suggestion succeeding, since naming is a nice-to-have and
+    // the generated tracks are the actual value of the call.
+    const suggestedName = await suggestPlaylistName(trackDescriptionsFor(tracks)).catch(() => null)
+    const name = resolveGeneratedPlaylistName(prompt, suggestedName)
+    const playlist = await createPlaylistWithTracks(user.id, name, trackIds)
+
     return c.json({
-      playlist: { name: prompt.slice(0, 60), image_path: null },
+      playlist: { id: playlist.id, name: playlist.name, image_path: playlist.image_path },
       tracks,
     })
   } catch (err) {
@@ -381,8 +415,7 @@ playlists.post('/suggest-name', requireAuth, async (c) => {
 
   try {
     const tracks = await fetchTracksForIds(trackIds, c)
-    const descriptions = tracks.map((t) => `${t.artist?.name ?? 'Unknown Artist'} - ${t.title}`)
-    const name = await suggestPlaylistName(descriptions)
+    const name = await suggestPlaylistName(trackDescriptionsFor(tracks))
     return c.json({ name })
   } catch (err) {
     console.error('Playlist name suggestion failed:', err)

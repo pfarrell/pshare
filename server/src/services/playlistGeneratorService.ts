@@ -8,6 +8,45 @@ import { searchService } from './searchService.js'
 const MAX_TOOL_ITERATIONS = 20
 const OVERALL_TIMEOUT_MS = 45_000
 const SIMILAR_ARTIST_MIN_SIMILARITY = 0.8
+// Community-sourced MusicBrainz tags can run into the dozens for a popular
+// artist and are noisier than the curated set — cap to the top (by vote
+// count) few so the model gets signal, not a long tail of one-off tags.
+export const MAX_MB_TAGS_FOR_MODEL = 8
+
+export interface ArtistTagsForModel {
+  found: boolean
+  tags: string[]
+  mb_tags: string[]
+}
+
+// Shared by get_tags's tool `run` below and directly unit-tested here,
+// rather than only exercisable through a full mocked Anthropic tool loop.
+export async function fetchArtistTagsForModel(artistName: string): Promise<ArtistTagsForModel> {
+  const artist = await db
+    .selectFrom('artists')
+    .select('id')
+    .where(sql<boolean>`f_unaccent(lower(name)) = f_unaccent(lower(${artistName}))`)
+    .executeTakeFirst()
+  if (!artist) return { found: false, tags: [], mb_tags: [] }
+
+  const curatedRows = await db
+    .selectFrom('artists_tags as at')
+    .innerJoin('tags as t', 't.id', 'at.tag_id')
+    .select('t.name')
+    .where('at.artist_id', '=', artist.id)
+    .execute()
+
+  const mbRows = await db
+    .selectFrom('artist_mb_tags as amt')
+    .innerJoin('mb_tags as mt', 'mt.id', 'amt.tag_id')
+    .select('mt.name')
+    .where('amt.artist_id', '=', artist.id)
+    .orderBy('amt.tag_count', 'desc')
+    .limit(MAX_MB_TAGS_FOR_MODEL)
+    .execute()
+
+  return { found: true, tags: curatedRows.map((r) => r.name), mb_tags: mbRows.map((r) => r.name) }
+}
 
 export interface GeneratePlaylistResult {
   trackIds: number[]
@@ -107,7 +146,7 @@ export async function generatePlaylist(
 
   const getTags = betaTool({
     name: 'get_tags',
-    description: 'Given an artist name already confirmed to exist in the library (via search_library or get_similar_artists), returns the tags applied to that artist. Use this to broaden or narrow within a tag once you have one confirmed match.',
+    description: 'Given an artist name already confirmed to exist in the library (via search_library or get_similar_artists), returns tags applied to that artist. Use this to broaden or narrow within a tag once you have one confirmed match. Returns two lists: "tags" (curated, admin-vetted) and "mb_tags" (community-sourced from MusicBrainz — broader and noisier, but useful for genre/style signal curated tags may lack).',
     inputSchema: {
       type: 'object',
       properties: { artist_name: { type: 'string' } },
@@ -116,21 +155,7 @@ export async function generatePlaylist(
     },
     run: async (input) => {
       const { artist_name } = input as { artist_name: string }
-      const artist = await db
-        .selectFrom('artists')
-        .select('id')
-        .where(sql<boolean>`f_unaccent(lower(name)) = f_unaccent(lower(${artist_name}))`)
-        .executeTakeFirst()
-      if (!artist) return JSON.stringify({ found: false, tags: [] })
-
-      const rows = await db
-        .selectFrom('artists_tags as at')
-        .innerJoin('tags as t', 't.id', 'at.tag_id')
-        .select('t.name')
-        .where('at.artist_id', '=', artist.id)
-        .execute()
-
-      return JSON.stringify({ found: true, tags: rows.map((r) => r.name) })
+      return JSON.stringify(await fetchArtistTagsForModel(artist_name))
     },
   })
 
