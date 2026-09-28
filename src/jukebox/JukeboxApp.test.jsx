@@ -63,8 +63,8 @@ vi.mock('./JukeboxKeyboard', () => ({
 vi.mock('../stores/playerStore', () => ({ usePlayerStore: vi.fn() }));
 vi.mock('../stores/jukeboxScreensaverStore', () => ({ useJukeboxScreensaverStore: vi.fn() }));
 vi.mock('./JukeboxScreensaver', () => ({
-  default: ({ onDismiss, onView }) => (
-    <div data-testid="jukebox-screensaver">
+  default: ({ mode, onDismiss, onView }) => (
+    <div data-testid="jukebox-screensaver" data-mode={mode}>
       <button onClick={onDismiss}>trigger-screensaver-dismiss</button>
       <button onClick={() => onView({ type: 'artist', data: { id: 99, name: 'Screensaver Artist' } })}>trigger-screensaver-view</button>
     </div>
@@ -94,7 +94,7 @@ beforeEach(() => {
   useJukeboxKeyboardFocus.mockReturnValue(null);
   useAuthStore.mockReturnValue(true);
   usePlayerStore.mockReturnValue(false);
-  useJukeboxScreensaverStore.mockReturnValue(true);
+  useJukeboxScreensaverStore.mockReturnValue('music');
   global.EventSource = NoOpEventSource;
 });
 
@@ -452,9 +452,9 @@ describe('idle screensaver', () => {
     expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
   });
 
-  test('does not arm when disabled in Settings', async () => {
+  test('does not arm when the mode is off', async () => {
     vi.useFakeTimers();
-    useJukeboxScreensaverStore.mockReturnValue(false);
+    useJukeboxScreensaverStore.mockReturnValue('off');
     renderApp();
 
     await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
@@ -462,13 +462,13 @@ describe('idle screensaver', () => {
     expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
   });
 
-  test('turning it off in Settings while active hides it immediately', async () => {
+  test('switching to Off in Settings while active hides it immediately', async () => {
     vi.useFakeTimers();
     const { rerender } = renderApp();
     await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
     expect(screen.getByTestId('jukebox-screensaver')).toBeInTheDocument();
 
-    useJukeboxScreensaverStore.mockReturnValue(false);
+    useJukeboxScreensaverStore.mockReturnValue('off');
     rerender(<MemoryRouter><JukeboxApp /></MemoryRouter>);
 
     expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
@@ -517,5 +517,15 @@ describe('idle screensaver', () => {
     expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
     expect(activeDestination()).toBe('browse');
     expect(pendingItemLabel()).toBe('artist:Screensaver Artist');
+  });
+
+  test('passes the current screensaver mode through to JukeboxScreensaver', async () => {
+    vi.useFakeTimers();
+    useJukeboxScreensaverStore.mockReturnValue('photos');
+    renderApp();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
+
+    expect(screen.getByTestId('jukebox-screensaver')).toHaveAttribute('data-mode', 'photos');
   });
 });

@@ -49,7 +49,7 @@ const JukeboxApp = () => {
   // useJukeboxKeyboardFocus above, since it's a hook.
   useJukeboxQueueEvents(jukeboxDeviceId);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const screensaverEnabled = useJukeboxScreensaverStore((s) => s.enabled);
+  const screensaverMode = useJukeboxScreensaverStore((s) => s.mode);
 
   // Enqueueing something (a track, an album, an artist/collection shuffle)
   // from Browse closes everything, so the kiosk lands back on Now Playing
@@ -133,7 +133,7 @@ const JukeboxApp = () => {
   const [screensaverActive, setScreensaverActive] = useState(false);
   const screensaverTimerRef = useRef(null);
   useEffect(() => {
-    if (activeDestination !== null || isPlaying || !screensaverEnabled) {
+    if (activeDestination !== null || isPlaying || screensaverMode === 'off') {
       clearTimeout(screensaverTimerRef.current);
       setScreensaverActive(false);
       return undefined;
@@ -148,7 +148,7 @@ const JukeboxApp = () => {
       clearTimeout(screensaverTimerRef.current);
       document.removeEventListener('pointerdown', arm);
     };
-  }, [activeDestination, isPlaying, screensaverEnabled]);
+  }, [activeDestination, isPlaying, screensaverMode]);
 
   // Explicit alongside the effect's own teardown above (which fires once
   // activeDestination changes) so the dismissal is immediate rather than
@@ -176,6 +176,7 @@ const JukeboxApp = () => {
       <JukeboxToast message={toastMessage} />
       {screensaverActive && (
         <JukeboxScreensaver
+          mode={screensaverMode}
           onDismiss={() => setScreensaverActive(false)}
           onView={handleScreensaverView}
         />
