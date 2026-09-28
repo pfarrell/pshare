@@ -33,6 +33,13 @@ describe('apiService query strings are unchanged', () => {
     expect(http.get).toHaveBeenLastCalledWith('/albums/random?size=30&profileId=5');
   });
 
+  test('random photos', () => {
+    apiService.getRandomPhotos();
+    expect(http.get).toHaveBeenLastCalledWith('/photos/random?size=10');
+    apiService.getRandomPhotos(3);
+    expect(http.get).toHaveBeenLastCalledWith('/photos/random?size=3');
+  });
+
   test('errors page with source', () => {
     apiService.getErrors(2, 25, 'upload');
     expect(http.get).toHaveBeenLastCalledWith('/admin/errors?page=2&limit=25&source=upload');

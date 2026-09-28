@@ -88,6 +88,9 @@ export const apiService = {
   getRecentAlbums: (size = 20, profileId = null) => api.get(`/albums/recent${qs({ size, profileId })}`),
   getAdjacentAlbums: (id, collectionId = null) => api.get(`/album/${id}/adjacent${qs({ collection_id: collectionId })}`), // Returns { prev, next }
 
+  // Photos (jukebox photo-frame screensaver)
+  getRandomPhotos: (size = 10) => api.get(`/photos/random${qs({ size })}`),
+
   // Tracks
   getTrack: (id) => api.get(`/track/${id}`), // Returns { track }
 
@@ -266,6 +269,10 @@ export const apiService = {
         return `${baseUrl}/albums/sm/${imagePath}`;
       case 'album_page':
         return `${baseUrl}/albums/${imagePath}`;
+      case 'photo_page':
+        return `${baseUrl}/photos/${imagePath}`;
+      case 'photo_small':
+        return `${baseUrl}/photos/sm/${imagePath}`;
       case 'base':
       default:
         return `${baseUrl}/${imagePath}`;
