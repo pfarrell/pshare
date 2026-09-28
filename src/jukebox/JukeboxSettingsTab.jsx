@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useProfileFilterStore } from '../stores/profileFilterStore';
+import { useJukeboxScreensaverStore } from '../stores/jukeboxScreensaverStore';
 import { useAuthStore } from '../stores/authStore';
 import { getProfilesCached, subscribeProfilesInvalidated } from '../utils/profilesCache';
 import JukeboxQrCode from './JukeboxQrCode';
@@ -13,6 +14,7 @@ import JukeboxQrCode from './JukeboxQrCode';
 // Design §5: this is a filter/settings change, not a playback action.
 const JukeboxSettingsTab = () => {
   const { activeProfileId, setProfile } = useProfileFilterStore();
+  const { enabled: screensaverEnabled, setEnabled: setScreensaverEnabled } = useJukeboxScreensaverStore();
   const [profiles, setProfiles] = useState(null);
   const [view, setView] = useState('filter');
   const deviceId = useAuthStore((s) => s.jukeboxDeviceId);
@@ -52,6 +54,13 @@ const JukeboxSettingsTab = () => {
         </>
       ) : (
         <>
+          <button
+            type="button"
+            aria-pressed={screensaverEnabled}
+            onClick={() => setScreensaverEnabled(!screensaverEnabled)}
+          >
+            {screensaverEnabled ? 'Screensaver: On' : 'Screensaver: Off'}
+          </button>
           <button type="button" aria-pressed={activeProfileId === null} onClick={() => setProfile(null)}>
             All
           </button>

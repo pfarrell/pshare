@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import JukeboxSettingsTab from './JukeboxSettingsTab';
 import { __resetProfilesCacheForTests, invalidateProfilesCache } from '../utils/profilesCache';
 import { useProfileFilterStore } from '../stores/profileFilterStore';
+import { useJukeboxScreensaverStore } from '../stores/jukeboxScreensaverStore';
 import { useAuthStore } from '../stores/authStore';
 import { apiService } from '../services/api';
 
@@ -17,6 +18,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   __resetProfilesCacheForTests();
   useProfileFilterStore.setState({ activeProfileId: null });
+  useJukeboxScreensaverStore.setState({ enabled: true });
   useAuthStore.setState({ jukeboxDeviceId: 5, jukeboxEnqueueToken: 'tok-abc' });
   apiService.getProfiles.mockResolvedValue({ data: [{ id: 1, name: 'Kids', tags: [] }] });
 });
@@ -67,5 +69,32 @@ describe('JukeboxSettingsTab', () => {
     await waitFor(() => expect(screen.getByText('Adults')).toBeInTheDocument());
     expect(apiService.getProfiles).toHaveBeenCalledTimes(2);
     expect(screen.queryByText('Kids')).not.toBeInTheDocument();
+  });
+});
+
+describe('screensaver toggle', () => {
+  test('shows the toggle as On by default', async () => {
+    render(<JukeboxSettingsTab />);
+    await waitFor(() => screen.getByText('Kids'));
+
+    expect(screen.getByRole('button', { name: 'Screensaver: On' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('tapping it turns the screensaver off and updates the store', async () => {
+    render(<JukeboxSettingsTab />);
+    await waitFor(() => screen.getByText('Kids'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Screensaver: On' }));
+
+    expect(screen.getByRole('button', { name: 'Screensaver: Off' })).toHaveAttribute('aria-pressed', 'false');
+    expect(useJukeboxScreensaverStore.getState().enabled).toBe(false);
+  });
+
+  test('reflects a persisted disabled state', async () => {
+    useJukeboxScreensaverStore.setState({ enabled: false });
+    render(<JukeboxSettingsTab />);
+    await waitFor(() => screen.getByText('Kids'));
+
+    expect(screen.getByRole('button', { name: 'Screensaver: Off' })).toBeInTheDocument();
   });
 });
