@@ -136,6 +136,18 @@ export async function mergeAlbumInto(
     .execute()
   await trx.updateTable('artist_albums').set({ album_id: targetId }).where('album_id', '=', loserId).execute()
 
+  // album_mb_tags (MusicBrainz-sourced tags): dedup by tag_id, then redirect the rest.
+  // Keep the target's own row where both sides already have the same tag — its
+  // tag_count reflects the target's own (still-current) source_mbid.
+  await trx
+    .deleteFrom('album_mb_tags')
+    .where((eb) => eb.and([
+      eb('album_id', '=', loserId),
+      eb('tag_id', 'in', trx.selectFrom('album_mb_tags').select('tag_id').where('album_id', '=', targetId)),
+    ]))
+    .execute()
+  await trx.updateTable('album_mb_tags').set({ album_id: targetId }).where('album_id', '=', loserId).execute()
+
   await trx.deleteFrom('albums').where('id', '=', loserId).execute()
 
   return { tracksMoved }
