@@ -3214,6 +3214,11 @@ body:has(.jukebox-app) {
 .jukebox-app .jukebox-keyboard-done {
   flex: 1.5;
   max-width: none;
+  /* Extra separation on top of the row's own 0.4rem gap — Done sits right of
+     Space and dismisses the whole keyboard on a single tap (targetElement.blur()
+     in JukeboxKeyboard.jsx), so a mis-tap reaching for the right edge of the
+     spacebar must not land here. */
+  margin-left: 1rem;
   background: rgba(59, 130, 246, 0.8);
   border-color: rgba(59, 130, 246, 1);
 }
@@ -3596,6 +3601,14 @@ body:has(.jukebox-app) {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  /* Reserves room for the drawer menu icon (see .jukebox-drawer-menu above),
+     which is pinned absolute at the browse panel's top-right corner and
+     otherwise sits directly on top of the textarea's top-right corner —
+     same overlap .jukebox-search-bar form's padding-right already guards
+     against. Without this, a tap meant for the textarea can hit the icon
+     instead, and a second tap on the popover switches destinations, which
+     unmounts this tab and discards whatever was typed. */
+  padding-right: 3.5rem;
 }
 
 .jukebox-ai-mix-prompt {
