@@ -102,23 +102,7 @@ async function fetchArtistDiscography(c: any, id: number, name: string, imagePat
   return { albums, singles }
 }
 
-// GET /artists/random?size=N&profileId=N — gated: this powers the logged-in
-// Home feed and must not become a public catalog-browsing endpoint just
-// because /artist/:id (below, in this same router) is public. An unrecognized
-// or non-numeric profileId means "no match", never an error.
-artists.get('/random', requireAuth, async (c) => {
-  const size = Math.min(parseInt(c.req.query('size') ?? '10'), 200)
-  const profileIdParam = c.req.query('profileId')
-
-  let tagIds: number[] | null = null
-  if (profileIdParam) {
-    const profileId = parseInt(profileIdParam)
-    // NaN would be bound as a Postgres integer and throw a raw DB error, so a
-    // non-numeric profileId resolves to "no match" instead. Same for a
-    // numeric id with no profile row — getTagIds() returns [] on its own.
-    tagIds = Number.isNaN(profileId) ? [] : await profilesService.getTagIds(profileId)
-  }
-
+export async function fetchRandomArtists(size: number, tagIds: number[] | null) {
   const rows = tagIds
     ? (tagIds.length === 0
         ? { rows: [] }
@@ -156,10 +140,30 @@ artists.get('/random', requireAuth, async (c) => {
   const artistIds = rows.rows.map((row: any) => row.id)
   const albumCounts = await countsService.albumCountsByArtistIds(artistIds)
 
-  return c.json(rows.rows.map((row: any) => ({
+  return rows.rows.map((row: any) => ({
     ...row,
     album_count: albumCounts.get(row.id) ?? 0,
-  })))
+  }))
+}
+
+// GET /artists/random?size=N&profileId=N — gated: this powers the logged-in
+// Home feed and must not become a public catalog-browsing endpoint just
+// because /artist/:id (below, in this same router) is public. An unrecognized
+// or non-numeric profileId means "no match", never an error.
+artists.get('/random', requireAuth, async (c) => {
+  const size = Math.min(parseInt(c.req.query('size') ?? '10'), 200)
+  const profileIdParam = c.req.query('profileId')
+
+  let tagIds: number[] | null = null
+  if (profileIdParam) {
+    const profileId = parseInt(profileIdParam)
+    // NaN would be bound as a Postgres integer and throw a raw DB error, so a
+    // non-numeric profileId resolves to "no match" instead. Same for a
+    // numeric id with no profile row — getTagIds() returns [] on its own.
+    tagIds = Number.isNaN(profileId) ? [] : await profilesService.getTagIds(profileId)
+  }
+
+  return c.json(await fetchRandomArtists(size, tagIds))
 })
 
 // GET /artist/:id

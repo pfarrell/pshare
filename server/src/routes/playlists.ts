@@ -202,17 +202,14 @@ playlists.get('/:id', async (c) => {
   return c.json({ playlist, tracks })
 })
 
-// GET /playlists — gated: the full playlist list must not become
-// browsable without an account just because a single playlist (/:id,
-// below) is public.
-playlists.get('/', requireAuth, async (c) => {
+export async function listPlaylists() {
   const rows = await db
     .selectFrom('playlists')
     .selectAll()
     .where('auto_generated', 'is', null)
     .execute()
 
-  if (rows.length === 0) return c.json([])
+  if (rows.length === 0) return []
 
   const playlistIds = rows.map((r) => r.id)
   const trackCounts = await countsService.trackCountsByPlaylistIds(playlistIds)
@@ -239,12 +236,17 @@ playlists.get('/', requireAuth, async (c) => {
     previewsByPlaylist.set(row.playlist_id, list)
   }
 
-  return c.json(rows.map((r) => ({
+  return rows.map((r) => ({
     ...r,
     track_count: trackCounts.get(r.id) ?? 0,
     preview_albums: previewsByPlaylist.get(r.id) ?? [],
-  })))
-})
+  }))
+}
+
+// GET /playlists — gated: the full playlist list must not become
+// browsable without an account just because a single playlist (/:id,
+// below) is public.
+playlists.get('/', requireAuth, async (c) => c.json(await listPlaylists()))
 
 // Shared by POST /playlists and POST /playlists/generate's autosave.
 export const MAX_PLAYLIST_TRACKS = 1000

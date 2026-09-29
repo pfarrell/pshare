@@ -12,6 +12,24 @@ import { createNotesRoutes } from './notesRoutes.js'
 
 const albums = new Hono<{ Variables: Variables }>()
 
+export async function fetchRandomAlbums(size: number, tagIds: number[] | null) {
+  const rows = tagIds
+    ? await albumsService.randomByTagIds(tagIds, size)
+    : await albumsService.randomAll(size)
+
+  const albumIds = rows.rows.map((row: any) => row.id)
+  const trackCounts = await countsService.trackCountsByAlbumIds(albumIds)
+
+  return rows.rows.map((row: any) => ({
+    id: row.id,
+    title: row.title,
+    image_path: row.image_path,
+    artist: { id: row.artist_id, name: row.artist_name },
+    has_collaborators: row.has_collaborators,
+    track_count: trackCounts.get(row.id) ?? 0,
+  }))
+}
+
 // GET /albums/random?size=N&profileId=N — gated, same reasoning as
 // artists.ts's /random: powers the logged-in Home feed. An unrecognized or
 // non-numeric profileId means "no match", never an error.
@@ -28,21 +46,7 @@ albums.get('/random', requireAuth, async (c) => {
     tagIds = Number.isNaN(profileId) ? [] : await profilesService.getTagIds(profileId)
   }
 
-  const rows = tagIds
-    ? await albumsService.randomByTagIds(tagIds, size)
-    : await albumsService.randomAll(size)
-
-  const albumIds = rows.rows.map((row: any) => row.id)
-  const trackCounts = await countsService.trackCountsByAlbumIds(albumIds)
-
-  return c.json(rows.rows.map((row: any) => ({
-    id: row.id,
-    title: row.title,
-    image_path: row.image_path,
-    artist: { id: row.artist_id, name: row.artist_name },
-    has_collaborators: row.has_collaborators,
-    track_count: trackCounts.get(row.id) ?? 0,
-  })))
+  return c.json(await fetchRandomAlbums(size, tagIds))
 })
 
 // GET /albums/recent?size=N&profileId=N — gated, powers Jukebox Mode's Quick
