@@ -1,5 +1,5 @@
 import { apiService } from '../../services/api';
-import { useGuest } from './GuestContext';
+import { useGuest } from './useGuest';
 
 const BIG_ADD = 25;
 const SHUFFLE_KINDS = ['artist', 'collection'];

@@ -70,7 +70,7 @@ describe('App: anonymous visitor at /jukebox/:token', () => {
     window.history.pushState({}, '', originalPathname);
   });
 
-  test('renders the bare guest enqueue page with no header/hamburger/footer chrome', async () => {
+  test('renders the guest app with no Layout header/hamburger/footer chrome', async () => {
     window.history.pushState({}, '', '/jukebox/sometoken');
 
     render(<App />);
@@ -79,7 +79,7 @@ describe('App: anonymous visitor at /jukebox/:token', () => {
     // resolve so App moves past its "Loading..." gate.
     await waitFor(() => expect(screen.queryByText('Loading...')).not.toBeInTheDocument());
 
-    // The guest enqueue page itself renders (its first-load state is the
+    // The guest app itself renders (its first-load state is the
     // "your name" form).
     expect(screen.getByPlaceholderText('Your name')).toBeInTheDocument();
 

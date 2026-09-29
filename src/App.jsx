@@ -47,7 +47,7 @@ import MusicPlayerWrapper from './components/player/MusicPlayerWrapper';
 import NowPlaying from './components/NowPlaying';
 import { applyJukeboxModeFromUrl, isJukeboxMode } from './jukebox/jukeboxMode';
 import JukeboxApp from './jukebox/JukeboxApp';
-import JukeboxEnqueuePage from './jukebox/JukeboxEnqueuePage';
+import GuestApp from './jukebox/guest/GuestApp';
 import JukeboxEnqueueRoute from './jukebox/JukeboxEnqueueRoute';
 
 // Handle scroll to top on route changes
@@ -227,25 +227,25 @@ function App() {
     );
   }
 
-  // An anonymous visitor hitting /jukebox/:token (a kiosk's QR code) needs a
-  // bare, chrome-free page — no header, no hamburger menu, no persistent
-  // audio-player footer. Those are rendered unconditionally for every route
-  // in the normal tree below (the footer sits outside <Routes> entirely), so
-  // this has to short-circuit before that tree renders at all, the same way
-  // jukeboxMode does above. An *authenticated* visitor should NOT take this
+  // An anonymous visitor hitting /jukebox/:token (a kiosk's QR code) gets the
+  // guest browse app (src/jukebox/guest/) — its own header, no hamburger menu
+  // from Layout, no persistent audio-player footer. Those are rendered
+  // unconditionally for every route in the normal tree below (the footer sits
+  // outside <Routes> entirely), so this has to short-circuit before that tree
+  // renders at all, the same way jukeboxMode does above. An *authenticated* visitor should NOT take this
   // branch — falls through to the normal tree below, where the /jukebox/:token
   // route (JukeboxEnqueueRoute) stores the token and redirects them into the
   // normal app instead. See docs/superpowers/specs/2026-09-25-jukebox-server-queue-design.md Design §4.
   const strippedPath = basename !== '/' && window.location.pathname.startsWith(basename)
     ? window.location.pathname.slice(basename.length) || '/'
     : window.location.pathname;
-  const guestEnqueueMatch = matchPath('/jukebox/:token', strippedPath);
+  const guestEnqueueMatch = matchPath({ path: '/jukebox/:token', end: false }, strippedPath);
 
   if (guestEnqueueMatch && !useAuthStore.getState().isAuthenticated) {
     return (
       <Router basename={basename}>
         {toaster}
-        <JukeboxEnqueuePage token={guestEnqueueMatch.params.token} />
+        <GuestApp token={guestEnqueueMatch.params.token} />
       </Router>
     );
   }
@@ -266,7 +266,7 @@ function App() {
               branch above already intercepted the anonymous case. Sits
               outside <Layout> deliberately: JukeboxEnqueueRoute stores the
               token and redirects to "/", so it never needs app chrome. */}
-          <Route path="/jukebox/:token" element={<JukeboxEnqueueRoute />} />
+          <Route path="/jukebox/:token/*" element={<JukeboxEnqueueRoute />} />
           {/* All pages use the shared layout */}
           <Route path="/*" element={
             <Layout>

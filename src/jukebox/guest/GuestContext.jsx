@@ -1,7 +1,6 @@
-import { createContext, useContext, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useGuestEnqueue } from './useGuestEnqueue';
-
-const GuestContext = createContext(null);
+import { GuestContext } from './useGuest';
 
 export const GuestProvider = ({ token, children }) => {
   const { enqueue, statusFor } = useGuestEnqueue(token);
@@ -13,5 +12,3 @@ export const GuestProvider = ({ token, children }) => {
   }), [token, enqueue, statusFor]);
   return <GuestContext.Provider value={value}>{children}</GuestContext.Provider>;
 };
-
-export const useGuest = () => useContext(GuestContext);

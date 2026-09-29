@@ -4,13 +4,13 @@ import JukeboxEnqueueRoute from './JukeboxEnqueueRoute';
 import { useAuthStore } from '../stores/authStore';
 import { getStoredJukeboxToken } from '../utils/jukeboxEnqueueToken';
 
-vi.mock('./JukeboxEnqueuePage', () => ({ default: ({ token }) => <div>Enqueue page for {token}</div> }));
+vi.mock('./guest/GuestApp', () => ({ default: ({ token }) => <div>Guest app for {token}</div> }));
 
 const renderAt = (path) =>
   render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/jukebox/:token" element={<JukeboxEnqueueRoute />} />
+        <Route path="/jukebox/:token/*" element={<JukeboxEnqueueRoute />} />
         <Route path="/" element={<div>Normal app home</div>} />
       </Routes>
     </MemoryRouter>
@@ -21,14 +21,22 @@ beforeEach(() => {
   useAuthStore.setState({ isAuthenticated: false });
 });
 
-test('renders JukeboxEnqueuePage with the token when not authenticated', () => {
+test('renders GuestApp with the token when not authenticated', () => {
   renderAt('/jukebox/abc123');
-  expect(screen.getByText('Enqueue page for abc123')).toBeInTheDocument();
+  expect(screen.getByText('Guest app for abc123')).toBeInTheDocument();
 });
 
 test('stores the token and redirects to / when already authenticated', async () => {
   useAuthStore.setState({ isAuthenticated: true });
   renderAt('/jukebox/abc123');
+
+  await waitFor(() => expect(screen.getByText('Normal app home')).toBeInTheDocument());
+  expect(getStoredJukeboxToken()).toBe('abc123');
+});
+
+test('a logged-in visitor on a deep guest link is still redirected home with the token stored', async () => {
+  useAuthStore.setState({ isAuthenticated: true });
+  renderAt('/jukebox/abc123/artist/5');
 
   await waitFor(() => expect(screen.getByText('Normal app home')).toBeInTheDocument());
   expect(getStoredJukeboxToken()).toBe('abc123');
