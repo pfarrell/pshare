@@ -97,6 +97,7 @@ interface LogTable {
   ip_address: string | null
   cookie: string | null
   query: string | null
+  playlist_id: number | null
 }
 
 interface FavoriteTable {

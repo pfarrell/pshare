@@ -49,6 +49,11 @@ export const createLog = (albumId: number, trackId: number | null, artistId: num
     .values({ album_id: albumId, track_id: trackId, artist_id: artistId, action: 'stream', created_at: createdAt, ip_address: null })
     .execute()
 
+export const createPlaylistLog = (playlistId: number, trackId: number | null, albumId: number | null, artistId: number | null, createdAt: Date) =>
+  db.insertInto('logs')
+    .values({ playlist_id: playlistId, album_id: albumId, track_id: trackId, artist_id: artistId, action: 'stream', created_at: createdAt, ip_address: null })
+    .execute()
+
 export const createTag = (label: string) =>
   db.insertInto('tags').values({ name: fixtureName(label) }).returningAll().executeTakeFirstOrThrow()
 
@@ -137,6 +142,7 @@ export async function cleanupFixtures(): Promise<void> {
   if (profileIds.length > 0) await db.deleteFrom('profiles').where('id', 'in', profileIds).execute()
 
   const playlistIds = (await db.selectFrom('playlists').select('id').where('name', 'like', like).execute()).map((r) => r.id)
+  if (playlistIds.length > 0) await db.deleteFrom('logs').where('playlist_id', 'in', playlistIds).execute()
   if (playlistIds.length > 0) await db.deleteFrom('playlists').where('id', 'in', playlistIds).execute()
 
   const collectionIds = (await db.selectFrom('collections').select('id').where('name', 'like', like).execute()).map((r) => r.id)

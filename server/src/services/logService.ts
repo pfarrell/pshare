@@ -9,6 +9,7 @@ interface NewLogEntry {
   created_at: Date
   ip_address: string | null
   query?: string | null
+  playlist_id?: number | null
 }
 
 export function createLogService(db: Kysely<Database>) {
@@ -45,6 +46,17 @@ export function createLogService(db: Kysely<Database>) {
         .selectAll()
         .where('id', '=', id)
         .executeTakeFirst()
+    },
+
+    // The ?playlist= query param is client-supplied, so anything that isn't a
+    // positive safe integer naming a real playlist becomes null: a bad value
+    // must never stop the play itself from being logged.
+    async resolvePlaylistId(raw: string | undefined): Promise<number | null> {
+      if (!raw || !/^[1-9]\d*$/.test(raw)) return null
+      const id = Number(raw)
+      if (!Number.isSafeInteger(id)) return null
+      const row = await db.selectFrom('playlists').select('id').where('id', '=', id).executeTakeFirst()
+      return row ? row.id : null
     },
 
     async record(entry: NewLogEntry) {
