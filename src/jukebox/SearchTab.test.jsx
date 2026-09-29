@@ -9,6 +9,7 @@ vi.mock('../services/api', () => ({
   apiService: {
     search: vi.fn(),
     getRecentAlbums: vi.fn(),
+    getRecentPlaylists: vi.fn(),
     getProfiles: vi.fn(),
     getImageUrl: vi.fn(() => '/img/sm/x.jpg'),
   },
@@ -57,6 +58,7 @@ beforeEach(() => {
   // a test overrides this — a harmless empty grid by default so unrelated
   // search-behavior tests aren't left with an unresolved fetch.
   apiService.getRecentAlbums.mockResolvedValue({ data: [] });
+  apiService.getRecentPlaylists.mockResolvedValue({ data: [] });
   // Same defensive-default reasoning as getRecentAlbums above — the
   // active-profile-name lookup (and its self-heal check) fetches this.
   apiService.getProfiles.mockResolvedValue({ data: [] });
@@ -660,4 +662,15 @@ test('"See all" for a type still under 100 shows its exact count', async () => {
   await waitFor(() => screen.getByRole('heading', { name: 'Albums' }));
 
   expect(within(section('Albums')).getByRole('button', { name: 'See all (6)' })).toBeInTheDocument();
+});
+
+test('tapping a recently played playlist in the empty-box Quick Hit grid calls onSelectPlaylist', async () => {
+  apiService.getRecentPlaylists.mockResolvedValue({
+    data: [{ id: 9, name: 'Sunday Kitchen', image_path: null, track_count: 7, last_played: '2026-09-15T00:00:00Z' }],
+  });
+  const onSelectPlaylist = vi.fn();
+  renderTab({ onSelectPlaylist });
+
+  fireEvent.click(await screen.findByText('Sunday Kitchen'));
+  expect(onSelectPlaylist).toHaveBeenCalledWith(expect.objectContaining({ id: 9, name: 'Sunday Kitchen' }));
 });

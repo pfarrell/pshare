@@ -292,7 +292,7 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
       {/* An empty box is always Quick Hit — even after a previous search,
           clearing the box gets you back to browsing, not a frozen view of
           stale results. See SearchTab.test.jsx. */}
-      {isEmpty && <QuickHitTab onSelectAlbum={onSelectAlbum} profileId={activeProfileId} />}
+      {isEmpty && <QuickHitTab onSelectAlbum={onSelectAlbum} onSelectPlaylist={onSelectPlaylist} profileId={activeProfileId} />}
 
       {!isEmpty && error && (
         <div className="jukebox-panel-error">
