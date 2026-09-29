@@ -46,3 +46,51 @@ test('savePhotoFile resizes an oversized image down to the 1920px cap', async ()
   assert.ok((full.width ?? 0) <= 1920)
   assert.ok((full.height ?? 0) <= 1920)
 })
+
+test('readPhotoDimensions swaps width/height for a sideways-tagged (EXIF orientation >= 5) photo', async () => {
+  // Phones store portrait photos as landscape pixels plus an EXIF tag
+  // ("rotate 90° to display correctly") — orientation 6 here. A reader
+  // that ignores the tag shows the photo sideways.
+  const jpeg = await sharp({ create: { width: 4000, height: 3000, channels: 3, background: '#00ffff' } })
+    .jpeg()
+    .withMetadata({ orientation: 6 })
+    .toBuffer()
+
+  const dims = await readPhotoDimensions(jpeg)
+
+  assert.deepEqual(dims, { width: 3000, height: 4000 })
+})
+
+test('savePhotoFile bakes in EXIF rotation so the saved file is upright with no outstanding orientation tag', async () => {
+  const jpeg = await sharp({ create: { width: 4000, height: 3000, channels: 3, background: '#00ffff' } })
+    .jpeg()
+    .withMetadata({ orientation: 6 })
+    .toBuffer()
+  const root = tmpRoot()
+
+  const dims = await readPhotoDimensions(jpeg)
+  await savePhotoFile(jpeg, 'rotated.jpg', dims, root)
+
+  const saved = await sharp(path.join(root, 'photos', 'rotated.jpg')).metadata()
+  assert.ok((saved.width ?? 0) <= 1920)
+  assert.ok((saved.height ?? 0) <= 1920)
+  assert.ok((saved.height ?? 0) > (saved.width ?? 0), 'expected the saved file to stay portrait, not end up sideways')
+  assert.equal(saved.orientation, undefined)
+})
+
+test('savePhotoFile cleans up any partial write and throws PhotoStorageError when sharp cannot fully decode the buffer', async () => {
+  const full = await sharp({ create: { width: 1000, height: 800, channels: 3, background: '#ff0000' } }).jpeg().toBuffer()
+  // A valid JPEG header but a truncated body: readPhotoDimensions/metadata()
+  // succeeds (it only reads the header), but the full pixel decode inside
+  // savePhotoFile fails.
+  const truncated = full.subarray(0, Math.floor(full.length / 3))
+  const root = tmpRoot()
+
+  await assert.rejects(
+    savePhotoFile(truncated, 'corrupt.jpg', { width: 1000, height: 800 }, root),
+    (err: unknown) => err instanceof PhotoStorageError
+  )
+
+  assert.equal(fs.existsSync(path.join(root, 'photos', 'corrupt.jpg')), false)
+  assert.equal(fs.existsSync(path.join(root, 'photos', 'sm', 'corrupt.jpg')), false)
+})

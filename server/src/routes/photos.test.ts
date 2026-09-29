@@ -29,10 +29,21 @@ test('GET /photos/random requires a logged-in session', async () => {
   assert.equal(res.status, 401)
 })
 
-test('GET /photos/random returns an empty array when there are no photos', async () => {
+test('GET /photos/random returns a size-bounded JSON array', async () => {
+  // Not asserting the table is empty here: this test file's process runs
+  // concurrently with photosService.test.ts and admin/photos.test.ts
+  // (Node's test runner runs separate files in parallel by default) against
+  // the same shared dev database, so an ambient "no photos" assumption
+  // would be racy — and would break permanently the first time someone
+  // uploads a real photo to try the feature by hand in dev. The client's
+  // handling of a genuinely empty response is covered without this
+  // constraint by JukeboxScreensaver.test.jsx's "renders nothing when the
+  // photo pool is empty" (apiService mocked there, not a real shared table).
   const res = await appWithUser().request('/random?size=5')
   assert.equal(res.status, 200)
-  assert.deepEqual(await res.json(), [])
+  const body = await res.json()
+  assert.ok(Array.isArray(body))
+  assert.ok(body.length <= 5)
 })
 
 test('GET /photos/random respects the size parameter', async () => {
