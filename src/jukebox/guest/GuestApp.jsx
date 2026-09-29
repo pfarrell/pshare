@@ -9,8 +9,10 @@ import GuestHome from './GuestHome';
 import GuestSearch from './GuestSearch';
 import GuestPlaylists from './GuestPlaylists';
 import GuestCollections from './GuestCollections';
-
-const Placeholder = ({ name }) => <div>{name}</div>;   // TASK 9/10: delete once every route has a real page
+import GuestArtist from './GuestArtist';
+import GuestAlbum from './GuestAlbum';
+import GuestPlaylist from './GuestPlaylist';
+import GuestCollection from './GuestCollection';
 
 const GuestNotFound = () => {
   const { path } = useGuest();
@@ -35,10 +37,10 @@ const GuestApp = ({ token }) => {
         <Route path="/jukebox/:token" element={<GuestShell />}>
           <Route index element={<GuestHome />} />
           <Route path="search" element={<GuestSearch />} />
-          <Route path="artist/:id" element={<Placeholder name="artist" />} />
-          <Route path="album/:id" element={<Placeholder name="album" />} />
-          <Route path="playlist/:id" element={<Placeholder name="playlist" />} />
-          <Route path="collection/:id" element={<Placeholder name="collection" />} />
+          <Route path="artist/:id" element={<GuestArtist />} />
+          <Route path="album/:id" element={<GuestAlbum />} />
+          <Route path="playlist/:id" element={<GuestPlaylist />} />
+          <Route path="collection/:id" element={<GuestCollection />} />
           <Route path="playlists" element={<GuestPlaylists />} />
           <Route path="collections" element={<GuestCollections />} />
           <Route path="*" element={<GuestNotFound />} />
