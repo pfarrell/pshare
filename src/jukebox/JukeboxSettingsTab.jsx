@@ -16,9 +16,7 @@ const JukeboxSettingsTab = () => {
   const { activeProfileId, setProfile } = useProfileFilterStore();
   const { mode: screensaverMode, setMode: setScreensaverMode } = useJukeboxScreensaverStore();
   const [profiles, setProfiles] = useState(null);
-  const deviceId = useAuthStore((s) => s.jukeboxDeviceId);
-  const initialToken = useAuthStore((s) => s.jukeboxEnqueueToken);
-  const [token, setToken] = useState(initialToken);
+  const token = useAuthStore((s) => s.jukeboxEnqueueToken);
 
   // Fetches on mount, and again whenever an external invalidate resets
   // `profiles` back to null below — this component unmounts whenever the
@@ -40,7 +38,7 @@ const JukeboxSettingsTab = () => {
 
   return (
     <div className="jukebox-settings-tab">
-      <JukeboxQrCode url={qrUrl} deviceId={deviceId} onRotated={setToken} />
+      <JukeboxQrCode url={qrUrl} />
       <div className="jukebox-settings-tab-divider" />
       <div className="jukebox-settings-tab-screensaver">
         <span className="jukebox-settings-tab-screensaver-label">Screensaver</span>

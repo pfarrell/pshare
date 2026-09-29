@@ -7,7 +7,7 @@ import { useAuthStore } from '../stores/authStore';
 import { apiService } from '../services/api';
 
 vi.mock('../services/api', () => ({
-  apiService: { getProfiles: vi.fn(), rotateJukeboxToken: vi.fn() },
+  apiService: { getProfiles: vi.fn() },
 }));
 
 vi.mock('qrcode', () => ({
