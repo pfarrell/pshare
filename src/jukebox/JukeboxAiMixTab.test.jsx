@@ -223,3 +223,27 @@ test('Play mix and Add to queue drive the result through the shared queue hook, 
   expect(queue.addToQueue).toHaveBeenCalledTimes(1);
   expect(onEnqueue).toHaveBeenCalledTimes(2);
 });
+
+test('a mix the server autosaved queues as that playlist (so plays log its id)', async () => {
+  apiService.generatePlaylist.mockResolvedValue({
+    data: { playlist: { id: 9, name: 'Sunday Kitchen', image_path: null }, tracks: someTracks },
+  });
+  renderTab();
+  fireEvent.change(screen.getByPlaceholderText(/describe what you want to hear/i), { target: { value: 'sunday' } });
+  fireEvent.click(screen.getByRole('button', { name: /generate/i }));
+  await waitFor(() => screen.getByText(/Track One/));
+
+  const [, options] = useQueueActions.mock.calls.at(-1);
+  expect(options.queueSource).toEqual({ type: 'playlist', id: 9 });
+});
+
+test('a mix with no saved playlist id keeps the ai-mix queue source', async () => {
+  apiService.generatePlaylist.mockResolvedValue(generateResponse(someTracks));
+  renderTab();
+  fireEvent.change(screen.getByPlaceholderText(/describe what you want to hear/i), { target: { value: 'sunday' } });
+  fireEvent.click(screen.getByRole('button', { name: /generate/i }));
+  await waitFor(() => screen.getByText(/Track One/));
+
+  const [, options] = useQueueActions.mock.calls.at(-1);
+  expect(options.queueSource).toEqual({ type: 'ai-mix', id: 'sunday' });
+});

@@ -150,6 +150,28 @@ test('timeupdate fires apiService.log once the 5-second mark is crossed, and onl
   expect(apiService.log).toHaveBeenCalledTimes(1);
 });
 
+test('the 5-second log passes the playlist id when the queue came from a playlist', () => {
+  const audioRefA = makeAudioRef();
+  const audioRefB = makeAudioRef();
+  usePlayerStore.setState({ currentTrack: { id: 42 }, queueSource: { type: 'playlist', id: 9 } });
+  renderHook(() => usePlayerEngine(audioRefA, audioRefB));
+
+  audioRefA.current.currentTime = 6;
+  audioRefA.current.dispatchEvent(new Event('timeupdate'));
+  expect(apiService.log).toHaveBeenCalledWith(42, 9);
+});
+
+test('the 5-second log has no playlist arg for a non-playlist queue source', () => {
+  const audioRefA = makeAudioRef();
+  const audioRefB = makeAudioRef();
+  usePlayerStore.setState({ currentTrack: { id: 42 }, queueSource: { type: 'album', id: 3 } });
+  renderHook(() => usePlayerEngine(audioRefA, audioRefB));
+
+  audioRefA.current.currentTime = 6;
+  audioRefA.current.dispatchEvent(new Event('timeupdate'));
+  expect(apiService.log).toHaveBeenCalledWith(42);
+});
+
 test('anonymous playback does not call apiService.log at the 5-second mark', () => {
   useAuthStore.setState({ isAuthenticated: false });
   const audioRefA = makeAudioRef();

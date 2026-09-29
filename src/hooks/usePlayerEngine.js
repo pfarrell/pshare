@@ -65,7 +65,14 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
       if (audio.currentTime >= 5 && !fiveSecondMarkFired) {
         fiveSecondMarkFired = true;
         const track = usePlayerStore.getState().currentTrack;
-        if (track && isAuthenticated) apiService.log(track.id).catch(() => {});
+        if (track && isAuthenticated) {
+          const { queueSource } = usePlayerStore.getState();
+          const playlistId = queueSource?.type === 'playlist' ? queueSource.id : null;
+          // Only pass the second arg for playlist plays, so every other play
+          // keeps the exact apiService.log(id) call it always had.
+          const request = playlistId ? apiService.log(track.id, playlistId) : apiService.log(track.id);
+          request.catch(() => {});
+        }
       }
       if (Number.isFinite(audio.duration) && audio.duration - audio.currentTime <= PREFETCH_THRESHOLD_SECONDS) {
         usePlayerStore.getState().ensureStandbyLoaded();

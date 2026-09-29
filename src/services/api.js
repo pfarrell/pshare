@@ -86,6 +86,7 @@ export const apiService = {
   getAlbum: (id) => api.get(`/album/${id}`), // Returns { artist, album, tracks }
   getRandomAlbums: (size = 30, profileId = null) => api.get(`/albums/random${qs({ size, profileId })}`),
   getRecentAlbums: (size = 20, profileId = null) => api.get(`/albums/recent${qs({ size, profileId })}`),
+  getRecentPlaylists: (size = 20) => api.get(`/playlists/recent${qs({ size })}`),
   getAdjacentAlbums: (id, collectionId = null) => api.get(`/album/${id}/adjacent${qs({ collection_id: collectionId })}`), // Returns { prev, next }
 
   // Photos (jukebox photo-frame screensaver)
@@ -133,7 +134,7 @@ export const apiService = {
   rotateJukeboxToken: (deviceId) => api.post(`/jukebox/devices/${deviceId}/rotate-token`),
 
   // log
-  log: (id) => api.get(`/log/${id}`),
+  log: (id, playlistId = null) => api.get(`/log/${id}${qs({ playlist: playlistId })}`),
   getLogs: (page = 1, limit = 25) => api.get(`/log/admin${qs({ page, limit })}`),
 
   // Admin

@@ -56,7 +56,11 @@ const JukeboxAiMixTab = ({ onBack, onEnqueue, onGeneratingChange, onPlaylistSave
   };
 
   const queue = useQueueActions(data?.tracks ?? [], {
-    queueSource: { type: 'ai-mix', id: prompt.trim() },
+    // The server autosaves each non-empty mix as a real playlist, so it queues
+    // as one: plays then log the playlist id and it can show up as recent.
+    queueSource: data?.playlist?.id
+      ? { type: 'playlist', id: data.playlist.id }
+      : { type: 'ai-mix', id: prompt.trim() },
     errorLabel: 'Failed to queue AI Mix',
   });
 
