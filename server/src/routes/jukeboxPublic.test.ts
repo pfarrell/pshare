@@ -116,24 +116,31 @@ test('POST /jukebox/:token/queue accepts multiple track ids in one call', async 
   assert.deepEqual(body.map((s: any) => s.track_id).sort(), [trackA.id, trackB.id].sort())
 })
 
-test('POST /jukebox/:token/queue rejects the 31st submission within a minute from the same token', async () => {
+test('POST /jukebox/:token/queue counts tracks, not requests, against the rate limit', async () => {
   const owner = await createUser('jpub-queue-ratelimit-owner')
   const device = await createJukeboxDevice('jpub-queue-ratelimit-device', owner.id)
   const artist = await createArtist('jpub-queue-ratelimit-artist')
   const album = await createAlbum('jpub-queue-ratelimit-album', artist.id)
   const track = await createTrack('jpub-queue-ratelimit-track', album.id, artist.id)
-  const submitOnce = () =>
+  const submit = (n: number) =>
     app().request(`/jukebox/${device.enqueue_token}/queue`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ trackIds: [track.id], name: 'Riley' }),
+      body: JSON.stringify({ trackIds: Array(n).fill(track.id), name: 'Riley' }),
     })
 
-  for (let i = 0; i < 30; i++) {
-    const res = await submitOnce()
-    assert.equal(res.status, 201, `submission ${i + 1} should succeed`)
-  }
-  const res31 = await submitOnce()
+  assert.equal((await submit(250)).status, 201)
+  assert.equal((await submit(50)).status, 201)
+  assert.equal((await submit(1)).status, 429)
+})
 
-  assert.equal(res31.status, 429)
+test('POST /jukebox/:token/queue rejects more than 500 ids in one request', async () => {
+  const owner = await createUser('jpub-queue-cap-owner')
+  const device = await createJukeboxDevice('jpub-queue-cap-device', owner.id)
+  const res = await app().request(`/jukebox/${device.enqueue_token}/queue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ trackIds: Array(501).fill(1), name: 'Riley' }),
+  })
+  assert.equal(res.status, 400)
 })

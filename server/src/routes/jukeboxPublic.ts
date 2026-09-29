@@ -25,23 +25,30 @@ async function loadDeviceByToken(c: any, next: any) {
 
 jukeboxPublic.get('/:token/search', loadDeviceByToken, handleSearchRequest)
 
+export const MAX_GUEST_QUEUE_IDS = 500
+export const GUEST_TRACKS_PER_MINUTE = 300
+
 // Cheap abuse protection against one QR-code token spamming submissions —
 // keyed by enqueue_token, one limiter instance shared by every request this
-// process handles (see rateLimit.ts).
-const submissionsAllowed = createFixedWindowLimiter(30, 60_000)
+// process handles (see rateLimit.ts). Counts tracks, not requests: adding an
+// album is one tap but many submissions.
+const submissionsAllowed = createFixedWindowLimiter(GUEST_TRACKS_PER_MINUTE, 60_000)
 
 jukeboxPublic.post('/:token/queue', loadDeviceByToken, async (c: any) => {
   const device = c.get('jukeboxTokenDevice')
-
-  if (!submissionsAllowed(device.enqueue_token)) {
-    return c.json({ error: 'Too many submissions, try again in a moment' }, 429)
-  }
 
   const body = await c.req.json()
   const trackIds: number[] = Array.isArray(body.trackIds)
     ? body.trackIds.filter((id: unknown) => Number.isInteger(id))
     : []
   if (trackIds.length === 0) return c.json({ error: 'trackIds must be a non-empty array of track ids' }, 400)
+  if (trackIds.length > MAX_GUEST_QUEUE_IDS) {
+    return c.json({ error: `at most ${MAX_GUEST_QUEUE_IDS} tracks per request` }, 400)
+  }
+
+  if (!submissionsAllowed(device.enqueue_token, trackIds.length)) {
+    return c.json({ error: 'Too many submissions, try again in a moment' }, 429)
+  }
 
   // A logged-in submitter is attributed by their account, ignoring any name
   // in the body — matches the spec's "if the request carries a valid auth

@@ -34,3 +34,23 @@ test('resets after the window elapses', () => {
     }, 20)
   })
 })
+
+test('a cost greater than 1 consumes that much of the window', () => {
+  const allowed = createFixedWindowLimiter(10, 60_000)
+  assert.equal(allowed('key-f', 6), true)
+  assert.equal(allowed('key-f', 4), true)
+  assert.equal(allowed('key-f', 1), false)
+})
+
+test('rejects a single call whose cost exceeds the whole limit', () => {
+  const allowed = createFixedWindowLimiter(5, 60_000)
+  assert.equal(allowed('key-g', 6), false)
+  assert.equal(allowed('key-g', 5), true)
+})
+
+test('a rejected call does not consume any of the window', () => {
+  const allowed = createFixedWindowLimiter(5, 60_000)
+  assert.equal(allowed('key-h', 4), true)
+  assert.equal(allowed('key-h', 3), false)
+  assert.equal(allowed('key-h', 1), true)
+})
