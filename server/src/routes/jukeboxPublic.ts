@@ -8,6 +8,7 @@ import { Hono } from 'hono'
 import { getCookie } from 'hono/cookie'
 import jwt from 'jsonwebtoken'
 import { jukeboxQueueService } from '../services/jukeboxQueueService.js'
+import { db } from '../db/database.js'
 import { sseBroadcaster } from '../services/sseBroadcaster.js'
 import { createFixedWindowLimiter } from '../utils/rateLimit.js'
 import { handleSearchRequest } from './search.js'
@@ -207,6 +208,66 @@ jukeboxPublic.get('/:token/collections', loadDeviceByToken, async (c: any) => {
     image_path: r.image_path ?? null,
     preview_albums: (r.preview_albums ?? []).map(pickPreview),
   })))
+})
+
+export const MAX_GUEST_TRACKS = 500
+export const GUEST_RANDOM_TRACKS = 25
+
+const trackNo = (n: string | null) => parseInt(n ?? '0') || 0
+
+// Albums and playlists are bounded, so they enqueue whole. Artists and
+// collections are not (a collection can hold 140+ albums): see random-tracks.
+async function trackIdsFor(kind: string, id: number): Promise<number[] | null> {
+  if (kind === 'album') {
+    const album = await db.selectFrom('albums').select('id').where('id', '=', id).executeTakeFirst()
+    if (!album) return null
+    const rows = await db.selectFrom('tracks').select(['id', 'track_number'])
+      .where('album_id', '=', id).where('approved', '=', true).execute()
+    return rows.sort((a, b) => trackNo(a.track_number) - trackNo(b.track_number)).map((r) => r.id)
+  }
+
+  if (kind === 'playlist') {
+    const playlist = await db.selectFrom('playlists').select('id').where('id', '=', id).executeTakeFirst()
+    if (!playlist) return null
+    const rows = await db.selectFrom('playlist_tracks')
+      .innerJoin('tracks', 'tracks.id', 'playlist_tracks.track_id')
+      .select('tracks.id')
+      .where('playlist_tracks.playlist_id', '=', id)
+      .where('tracks.approved', '=', true)
+      .orderBy('playlist_tracks.order', 'asc')
+      .execute()
+    return rows.map((r) => r.id)
+  }
+
+  return null
+}
+
+jukeboxPublic.get('/:token/:kind/:id/track-ids', loadDeviceByToken, async (c: any) => {
+  const id = parseId(c.req.param('id'))
+  const ids = id ? await trackIdsFor(c.req.param('kind'), id) : null
+  if (!ids) return c.json({ error: 'Not found' }, 404)
+  return c.json({ trackIds: ids.slice(0, MAX_GUEST_TRACKS) })
+})
+
+// Same "Shuffle" pattern the kiosk uses: a random batch, not the whole scope.
+// Reuses the public POST /artist|collection/:id/tracks/random routes by
+// internal dispatch (no cookie forwarded), which already restrict to approved
+// tracks and the artist's own discography / the collection's albums.
+jukeboxPublic.post('/:token/:kind/:id/random-tracks', loadDeviceByToken, async (c: any) => {
+  const kind = c.req.param('kind')
+  const router = kind === 'artist' ? artists : kind === 'collection' ? collections : null
+  const id = parseId(c.req.param('id'))
+  if (!router || !id) return c.json({ error: 'Not found' }, 404)
+
+  const res = await router.request(`/${id}/tracks/random`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ limit: GUEST_RANDOM_TRACKS }),
+  })
+  if (!res.ok) return c.json({ error: 'Not found' }, 404)
+
+  const { tracks } = await res.json()
+  return c.json({ trackIds: (tracks ?? []).map((t: any) => t.id) })
 })
 
 export default jukeboxPublic

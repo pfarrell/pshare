@@ -261,3 +261,109 @@ test('GET /jukebox/:token/playlists and /collections return lists', async () => 
   assert.ok(cols.body.some((c: any) => c.id === collection.id))
   for (const c of cols.body) assert.deepEqual(Object.keys(c).sort(), ['id', 'image_path', 'name', 'preview_albums'])
 })
+
+test('GET /jukebox/:token/album/:id/track-ids returns approved track ids in track order', async () => {
+  const device = await guestDevice('jpub-ids-album')
+  const artist = await createArtist('jpub-ids-album-artist')
+  const album = await createAlbum('jpub-ids-album-album', artist.id)
+  const second = await createTrack('jpub-ids-album-second', album.id, artist.id)
+  const first = await createTrack('jpub-ids-album-first', album.id, artist.id)
+  await db.updateTable('tracks').set({ approved: true, track_number: '2' }).where('id', '=', second.id).execute()
+  await db.updateTable('tracks').set({ approved: true, track_number: '1' }).where('id', '=', first.id).execute()
+  const hidden = await createTrack('jpub-ids-album-hidden', album.id, artist.id)
+  await db.updateTable('tracks').set({ approved: false }).where('id', '=', hidden.id).execute()
+
+  const { status, body } = await getJson(`/jukebox/${device.enqueue_token}/album/${album.id}/track-ids`)
+
+  assert.equal(status, 200)
+  assert.deepEqual(body.trackIds, [first.id, second.id])
+})
+
+test('GET track-ids works for a playlist and is empty for an empty playlist', async () => {
+  const device = await guestDevice('jpub-ids-playlist')
+  const artist = await createArtist('jpub-ids-playlist-artist')
+  const album = await createAlbum('jpub-ids-playlist-album', artist.id)
+  const track = await createTrack('jpub-ids-playlist-track', album.id, artist.id)
+  await db.updateTable('tracks').set({ approved: true }).where('id', '=', track.id).execute()
+  const playlist = await createPlaylist('jpub-ids-playlist-full')
+  await db.insertInto('playlist_tracks').values({ playlist_id: playlist.id, track_id: track.id, order: 1 }).execute()
+  const empty = await createPlaylist('jpub-ids-playlist-empty')
+
+  const full = await getJson(`/jukebox/${device.enqueue_token}/playlist/${playlist.id}/track-ids`)
+  assert.deepEqual(full.body.trackIds, [track.id])
+  const none = await getJson(`/jukebox/${device.enqueue_token}/playlist/${empty.id}/track-ids`)
+  assert.equal(none.status, 200)
+  assert.deepEqual(none.body.trackIds, [])
+})
+
+test('track-ids 404s for artist/collection kinds, unknown kinds, bad ids and missing entities', async () => {
+  const device = await guestDevice('jpub-ids-404')
+  for (const path of ['artist/1/track-ids', 'collection/1/track-ids', 'bogus/1/track-ids', 'album/abc/track-ids', 'album/2147483647/track-ids', 'playlist/2147483647/track-ids']) {
+    const res = await app().request(`/jukebox/${device.enqueue_token}/${path}`)
+    assert.equal(res.status, 404, path)
+  }
+})
+
+const postRandom = (token: string, path: string) =>
+  app().request(`/jukebox/${token}/${path}/random-tracks`, { method: 'POST' })
+
+test('POST random-tracks for an artist returns at most 25 of the artist tracks, never the whole catalog', async () => {
+  const device = await guestDevice('jpub-rand-artist')
+  const artist = await createArtist('jpub-rand-artist-artist')
+  const album = await createAlbum('jpub-rand-artist-album', artist.id)
+  const ids: number[] = []
+  for (let i = 0; i < 30; i++) {
+    const t = await createTrack(`jpub-rand-artist-track-${i}`, album.id, artist.id)
+    ids.push(t.id)
+  }
+  await db.updateTable('tracks').set({ approved: true }).where('id', 'in', ids).execute()
+
+  const res = await postRandom(device.enqueue_token, `artist/${artist.id}`)
+  const body = await res.json()
+
+  assert.equal(res.status, 200)
+  assert.equal(body.trackIds.length, 25)
+  assert.ok(body.trackIds.every((id: number) => ids.includes(id)))
+  assert.equal(new Set(body.trackIds).size, 25, 'no duplicates')
+})
+
+test('POST random-tracks for a collection draws from its albums, capped at 25', async () => {
+  const device = await guestDevice('jpub-rand-col')
+  const artist = await createArtist('jpub-rand-col-artist')
+  const collection = await createCollection('jpub-rand-col-collection')
+  const ids: number[] = []
+  for (let a = 0; a < 3; a++) {
+    const album = await createAlbum(`jpub-rand-col-album-${a}`, artist.id)
+    await db.insertInto('collection_albums').values({ collection_id: collection.id, album_id: album.id, order: a + 1 }).execute()
+    for (let i = 0; i < 10; i++) {
+      const t = await createTrack(`jpub-rand-col-track-${a}-${i}`, album.id, artist.id)
+      ids.push(t.id)
+    }
+  }
+  await db.updateTable('tracks').set({ approved: true }).where('id', 'in', ids).execute()
+
+  const res = await postRandom(device.enqueue_token, `collection/${collection.id}`)
+  const body = await res.json()
+
+  assert.equal(res.status, 200)
+  assert.equal(body.trackIds.length, 25)
+  assert.ok(body.trackIds.every((id: number) => ids.includes(id)))
+})
+
+test('POST random-tracks is empty for an entity with no tracks', async () => {
+  const device = await guestDevice('jpub-rand-empty')
+  const collection = await createCollection('jpub-rand-empty-collection')
+  const res = await postRandom(device.enqueue_token, `collection/${collection.id}`)
+  assert.equal(res.status, 200)
+  assert.deepEqual((await res.json()).trackIds, [])
+})
+
+test('POST random-tracks 404s for album/playlist kinds, unknown kinds, bad ids, missing entities and bad tokens', async () => {
+  const device = await guestDevice('jpub-rand-404')
+  for (const path of ['album/1', 'playlist/1', 'bogus/1', 'artist/abc', 'artist/2147483647', 'collection/2147483647']) {
+    const res = await postRandom(device.enqueue_token, path)
+    assert.equal(res.status, 404, path)
+  }
+  const badToken = await postRandom('not-a-real-token', 'artist/1')
+  assert.equal(badToken.status, 404)
+})
