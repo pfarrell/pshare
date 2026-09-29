@@ -15,6 +15,14 @@ const EXT_BY_MIME: Record<string, string> = {
   'image/gif': 'gif',
 }
 
+// Generous for a phone photo. Enforced manually after parsing rather than
+// via parseBody's options — this Hono version's ParseBodyOptions type has
+// no maxSize field (upload.ts's identically-shaped { all: true, maxSize }
+// call happens to dodge TypeScript's excess-property check via a generic-
+// inference quirk tied to the presence of `all`; relying on that here would
+// be copying an unverified pattern rather than a real, type-checked option).
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+
 // GET /admin/photos — the flat pool for the photo-management grid.
 photos.get('/photos', async (c) => {
   return c.json(await photosService.list())
@@ -29,9 +37,11 @@ photos.get('/photos', async (c) => {
 // sharing a device-default name like "IMG_1234.jpg".
 photos.post('/photos', async (c) => {
   try {
-    const body = await c.req.parseBody({ maxSize: 50 * 1024 * 1024 }) // 50MB — generous for a phone photo
+    const body = await c.req.parseBody()
     const file = body.file
     if (!file || typeof file === 'string') return c.json({ error: 'No file uploaded' }, 400)
+
+    if (file.size > MAX_UPLOAD_BYTES) return c.json({ error: 'File too large (50MB max)' }, 400)
 
     const ext = EXT_BY_MIME[file.type]
     if (!ext) return c.json({ error: 'Unsupported image type — use JPEG, PNG, WebP, or GIF' }, 400)

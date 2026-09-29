@@ -35,7 +35,10 @@ const appWithUser = (user: any = { id: 1, admin: true }) => {
 const uploadPng = async (app: Hono, width = 100, height = 80) => {
   const png = await sharp({ create: { width, height, channels: 3, background: '#123456' } }).png().toBuffer()
   const form = new FormData()
-  form.append('file', new Blob([png], { type: 'image/png' }), 'test.png')
+  // Buffer isn't assignable to BlobPart under this TS lib (its ArrayBufferLike
+  // includes SharedArrayBuffer, which BlobPart's ArrayBufferView rejects) —
+  // Uint8Array copies into a plain ArrayBuffer-backed view, which satisfies it.
+  form.append('file', new Blob([new Uint8Array(png)], { type: 'image/png' }), 'test.png')
   return app.request('/photos', { method: 'POST', body: form })
 }
 
