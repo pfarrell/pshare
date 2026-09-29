@@ -3748,3 +3748,290 @@ body:has(.jukebox-app) {
   border-radius: 0.5rem;
   cursor: pointer;
 }
+
+/* =================================
+   JUKEBOX GUEST (phone browse via kiosk QR code)
+   Separate from the main app's chrome on purpose: does not use .app-header,
+   .main-content, .app-footer or --mb (they carry many !important mobile
+   overrides). The root is its own fixed scroll container so it is immune to
+   whatever body/html overflow rules exist, and the header is sticky inside it.
+   box-sizing is set explicitly: Tailwind preflight is not wired into this build.
+   ================================= */
+.jukebox-guest,
+.jukebox-guest * {
+  box-sizing: border-box;
+}
+
+.jukebox-guest {
+  --jukebox-guest-bar: 2.75rem;
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--color-bg-page);
+  color: var(--color-text-primary);
+  font-size: 1rem;
+}
+
+.jukebox-guest-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: calc(var(--jukebox-guest-bar) + env(safe-area-inset-top, 0));
+  padding: env(safe-area-inset-top, 0) max(0.75rem, env(safe-area-inset-right, 0)) 0 max(0.75rem, env(safe-area-inset-left, 0));
+  background: #1a252f;
+  border-bottom: 1px solid #2c3e50;
+}
+
+.jukebox-guest-search {
+  flex: 1;
+  min-width: 0;
+}
+
+.jukebox-guest-search input {
+  width: 100%;
+  height: 2rem;
+  padding: 0 0.75rem;
+  border: 1px solid #3c4a57;
+  border-radius: 999px;
+  background: #24323f;
+  color: #fff;
+  font-size: 1rem; /* 16px minimum stops iOS zooming the page on focus */
+}
+
+.jukebox-guest-menu-button {
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.jukebox-guest-menu {
+  position: absolute;
+  top: 100%;
+  right: max(0.5rem, env(safe-area-inset-right, 0));
+  min-width: 11rem;
+  display: flex;
+  flex-direction: column;
+  background: #1a252f;
+  border: 1px solid #2c3e50;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.jukebox-guest-menu a {
+  padding: 0.75rem 1rem;
+  color: #fff;
+  text-decoration: none;
+  border-bottom: 1px solid #2c3e50;
+}
+.jukebox-guest-menu a:last-child { border-bottom: 0; }
+
+.jukebox-guest-content {
+  padding: 0.5rem max(0.75rem, env(safe-area-inset-left, 0)) calc(1.5rem + env(safe-area-inset-bottom, 0));
+}
+
+.jukebox-guest-heading,
+.jukebox-guest-section h2 {
+  margin: 1rem 0 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.jukebox-guest-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 3.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.jukebox-guest-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.jukebox-guest-row-art,
+.jukebox-guest-row-art-placeholder {
+  flex: none;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 4px;
+  object-fit: cover;
+  background: var(--color-bg-surface-muted);
+}
+
+.jukebox-guest-row-art-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-faint);
+}
+
+.jukebox-guest-row-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.jukebox-guest-row-title,
+.jukebox-guest-row-subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jukebox-guest-row-subtitle {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.jukebox-guest-add {
+  flex: none;
+  min-width: 2.75rem;  /* iOS minimum touch target */
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-link-accent);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.jukebox-guest-add-all {
+  min-width: 0;
+  min-height: 2.25rem;
+  margin: 0.25rem 0;
+  padding: 0 0.9rem;
+  background: var(--color-bg-surface-muted);
+  font-size: 0.85rem;
+}
+
+.jukebox-guest-add-added { color: var(--color-success-text); }
+.jukebox-guest-add-error,
+.jukebox-guest-add-slow,
+.jukebox-guest-add-empty { color: var(--color-warning-text); }
+
+.jukebox-guest-toggle {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0.75rem 0 0.25rem;
+  padding: 0.2rem;
+  border-radius: 999px;
+  background: var(--color-bg-surface-muted);
+}
+.jukebox-guest-toggle button {
+  flex: 1;
+  min-height: 2.25rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+.jukebox-guest-toggle button.active {
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.jukebox-guest-show-all {
+  width: 100%;
+  min-height: 2.75rem;
+  border: 0;
+  background: transparent;
+  color: var(--color-link-accent);
+  font-weight: 600;
+}
+
+.jukebox-guest-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.jukebox-guest-detail-art {
+  flex: none;
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 6px;
+  object-fit: cover;
+}
+.jukebox-guest-detail-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.jukebox-guest-detail-text h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.25;
+}
+.jukebox-guest-detail-text a { color: var(--color-link-accent); }
+.jukebox-guest-detail-meta {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.jukebox-guest-message {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+.jukebox-guest-message button,
+.jukebox-guest-message a { color: var(--color-link-accent); }
+
+.jukebox-guest-gate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: env(safe-area-inset-top, 0) 1rem env(safe-area-inset-bottom, 0);
+}
+.jukebox-guest-gate-form {
+  width: 100%;
+  max-width: 22rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.jukebox-guest-gate-form h1 { margin: 0; font-size: 1.4rem; }
+.jukebox-guest-gate-form p { margin: 0; color: var(--color-text-muted); }
+.jukebox-guest-gate-form input {
+  height: 2.75rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-size: 1rem;
+}
+.jukebox-guest-gate-form button {
+  height: 2.75rem;
+  border: 0;
+  border-radius: 8px;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+}
