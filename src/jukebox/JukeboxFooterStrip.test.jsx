@@ -57,3 +57,12 @@ test('tapping the queue button reports it', () => {
 
   expect(onOpenQueue).toHaveBeenCalledTimes(1);
 });
+
+test('the settings gear calls onOpenSettings and is compact', () => {
+  const onOpenSettings = vi.fn();
+  render(<JukeboxFooterStrip onOpenQueue={vi.fn()} onOpenSettings={onOpenSettings} />);
+  const gear = screen.getByRole('button', { name: 'Settings' });
+  fireEvent.click(gear);
+  expect(onOpenSettings).toHaveBeenCalledTimes(1);
+  expect(gear).toHaveClass('jukebox-footer-gear');
+});

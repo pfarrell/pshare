@@ -55,6 +55,10 @@ const JukeboxApp = () => {
   // from Browse closes everything, so the kiosk lands back on Now Playing
   // instead of leaving the drawer open over it.
   const closeAll = () => setActiveDestination(null);
+  // The footer's queue and gear buttons: tapping the one for the destination
+  // already showing goes back to Browse, since there is no drawer menu any
+  // more to get back there from Next Up or Settings.
+  const toggleDestination = (dest) => setActiveDestination((current) => (current === dest ? 'browse' : dest));
   const toggleBrowse = () => setActiveDestination((current) => (current === null ? 'browse' : null));
 
   // A brief, generic confirmation that something actually happened —
@@ -191,7 +195,10 @@ const JukeboxApp = () => {
         onGeneratingChange={setAiMixGenerating}
         onPlaylistSaved={handlePlaylistSaved}
       />
-      <JukeboxFooterStrip onOpenQueue={() => setActiveDestination('nextup')} />
+      <JukeboxFooterStrip
+        onOpenQueue={() => toggleDestination('nextup')}
+        onOpenSettings={() => toggleDestination('settings')}
+      />
       {/* MusicPlayerWrapper owns both <audio> elements and usePlayerEngine
           (gapless prefetch, Media Session, play logging), so it must stay
           mounted — but its own controls are replaced by the footer strip and

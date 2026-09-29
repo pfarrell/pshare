@@ -1,11 +1,10 @@
 // src/jukebox/JukeboxNextUpTab.test.jsx
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import JukeboxNextUpTab from './JukeboxNextUpTab';
 
 vi.mock('../stores/playerStore', () => ({ usePlayerStore: vi.fn() }));
-vi.mock('./JukeboxTransport', () => ({ default: () => <div data-testid="jukebox-transport" /> }));
 vi.mock('./JukeboxSavePlaylistModal', () => ({
   default: ({ trackIds, onClose, onSaved }) => (
     <div data-testid="jukebox-save-playlist-modal">
@@ -39,22 +38,71 @@ test('renders every queued track', () => {
   expect(screen.getByText(/Track Two/)).toBeInTheDocument();
 });
 
-test('renders the transport above the queue when there are tracks', () => {
+test('renders the action header above the queue', () => {
   usePlayerStore.mockImplementation((selector) => selector({
     playlist: [{ id: 1, title: 'Track One', url: '/stream/1', artist: {} }],
     currentTrackIndex: 0,
   }));
   renderTab();
-  const transport = screen.getByTestId('jukebox-transport');
+  const header = document.querySelector('.jukebox-next-up-header');
   const firstTrack = screen.getByText(/Track One/);
-  // DOCUMENT_POSITION_FOLLOWING (4): the track comes after the transport.
-  expect(transport.compareDocumentPosition(firstTrack) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(header.compareDocumentPosition(firstTrack) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
-test('still renders the transport when the queue is empty (so Clear/mode stay visible)', () => {
+test('AI Mix button calls onOpenAiMix', () => {
   usePlayerStore.mockImplementation((selector) => selector({ playlist: [], currentTrackIndex: -1 }));
+  const onOpenAiMix = vi.fn();
+  render(<MemoryRouter><JukeboxNextUpTab onOpenAiMix={onOpenAiMix} /></MemoryRouter>);
+  fireEvent.click(screen.getByRole('button', { name: 'AI Mix' }));
+  expect(onOpenAiMix).toHaveBeenCalledTimes(1);
+});
+
+test('the seek slider reflects progress and seeks on change', () => {
+  const seek = vi.fn();
+  usePlayerStore.mockImplementation((selector) => selector({
+    playlist: [{ id: 1, title: 'Track One', url: '/stream/1', artist: {} }],
+    currentTrackIndex: 0, currentTime: 30, duration: 120, seek,
+  }));
   renderTab();
-  expect(screen.getByTestId('jukebox-transport')).toBeInTheDocument();
+  const slider = screen.getByRole('slider', { name: 'Seek' });
+  expect(slider).toHaveValue('25');
+  fireEvent.change(slider, { target: { value: '50' } });
+  expect(seek).toHaveBeenCalledWith(60);
+});
+
+describe('clear queue', () => {
+  const clearPlaylist = vi.fn();
+  const setup = (playlist = [{ id: 1, title: 'Track One', url: '/stream/1', artist: {} }]) => {
+    usePlayerStore.mockImplementation((selector) => selector({
+      playlist, currentTrackIndex: playlist.length ? 0 : -1, playbackMode: 'off', queueSource: null,
+      cyclePlaybackMode: vi.fn(), clearPlaylist,
+    }));
+    renderTab();
+  };
+  beforeEach(() => clearPlaylist.mockClear());
+
+  test('first tap arms, second tap clears', () => {
+    setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear queue' }));
+    expect(clearPlaylist).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Tap again to clear' }));
+    expect(clearPlaylist).toHaveBeenCalledTimes(1);
+  });
+
+  test('disarms after a timeout without clearing', () => {
+    vi.useFakeTimers();
+    setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear queue' }));
+    act(() => { vi.advanceTimersByTime(3100); });
+    expect(screen.getByRole('button', { name: 'Clear queue' })).toBeInTheDocument();
+    expect(clearPlaylist).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  test('is disabled when the queue is empty', () => {
+    setup([]);
+    expect(screen.getByRole('button', { name: 'Clear queue' })).toBeDisabled();
+  });
 });
 
 test('hides already-played tracks, opening on the current track', () => {
@@ -143,10 +191,10 @@ describe('swipe-to-delete', () => {
 });
 
 describe('save as playlist', () => {
-  test('does not show a Save button when the queue is empty', () => {
+  test('disables the Save button when the queue is empty', () => {
     usePlayerStore.mockImplementation((selector) => selector({ playlist: [], currentTrackIndex: -1 }));
     renderTab();
-    expect(screen.queryByRole('button', { name: /save as playlist/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /save as playlist/i })).toBeDisabled();
   });
 
   test('shows a Save button once something is queued', () => {

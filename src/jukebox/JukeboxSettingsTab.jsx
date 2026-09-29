@@ -16,7 +16,6 @@ const JukeboxSettingsTab = () => {
   const { activeProfileId, setProfile } = useProfileFilterStore();
   const { mode: screensaverMode, setMode: setScreensaverMode } = useJukeboxScreensaverStore();
   const [profiles, setProfiles] = useState(null);
-  const [view, setView] = useState('filter');
   const deviceId = useAuthStore((s) => s.jukeboxDeviceId);
   const initialToken = useAuthStore((s) => s.jukeboxEnqueueToken);
   const [token, setToken] = useState(initialToken);
@@ -41,57 +40,44 @@ const JukeboxSettingsTab = () => {
 
   return (
     <div className="jukebox-settings-tab">
-      <div className="jukebox-settings-tab-header">
-        <span>{view === 'qr' ? 'QR Code' : 'Filter'}</span>
-        {view === 'filter' && (
-          <button type="button" onClick={() => setView('qr')}>Show QR code</button>
-        )}
+      <JukeboxQrCode url={qrUrl} deviceId={deviceId} onRotated={setToken} />
+      <div className="jukebox-settings-tab-divider" />
+      <div className="jukebox-settings-tab-screensaver">
+        <span className="jukebox-settings-tab-screensaver-label">Screensaver</span>
+        <button
+          type="button"
+          className="jukebox-settings-tab-screensaver-toggle"
+          aria-pressed={screensaverMode === 'off'}
+          onClick={() => setScreensaverMode('off')}
+        >
+          Off
+        </button>
+        <button
+          type="button"
+          className="jukebox-settings-tab-screensaver-toggle"
+          aria-pressed={screensaverMode === 'music'}
+          onClick={() => setScreensaverMode('music')}
+        >
+          Music
+        </button>
+        <button
+          type="button"
+          className="jukebox-settings-tab-screensaver-toggle"
+          aria-pressed={screensaverMode === 'photos'}
+          onClick={() => setScreensaverMode('photos')}
+        >
+          Photos
+        </button>
       </div>
-      {view === 'qr' ? (
-        <>
-          <JukeboxQrCode url={qrUrl} deviceId={deviceId} onRotated={setToken} />
-          <button type="button" onClick={() => setView('filter')}>Back</button>
-        </>
-      ) : (
-        <>
-          <div className="jukebox-settings-tab-screensaver">
-            <span className="jukebox-settings-tab-screensaver-label">Screensaver</span>
-            <button
-              type="button"
-              className="jukebox-settings-tab-screensaver-toggle"
-              aria-pressed={screensaverMode === 'off'}
-              onClick={() => setScreensaverMode('off')}
-            >
-              Off
-            </button>
-            <button
-              type="button"
-              className="jukebox-settings-tab-screensaver-toggle"
-              aria-pressed={screensaverMode === 'music'}
-              onClick={() => setScreensaverMode('music')}
-            >
-              Music
-            </button>
-            <button
-              type="button"
-              className="jukebox-settings-tab-screensaver-toggle"
-              aria-pressed={screensaverMode === 'photos'}
-              onClick={() => setScreensaverMode('photos')}
-            >
-              Photos
-            </button>
-          </div>
-          <div className="jukebox-settings-tab-divider" />
-          <button type="button" aria-pressed={activeProfileId === null} onClick={() => setProfile(null)}>
-            All
-          </button>
-          {(profiles ?? []).map((p) => (
-            <button key={p.id} type="button" aria-pressed={activeProfileId === p.id} onClick={() => setProfile(p.id)}>
-              {p.name}
-            </button>
-          ))}
-        </>
-      )}
+      <div className="jukebox-settings-tab-divider" />
+      <button type="button" aria-pressed={activeProfileId === null} onClick={() => setProfile(null)}>
+        All
+      </button>
+      {(profiles ?? []).map((p) => (
+        <button key={p.id} type="button" aria-pressed={activeProfileId === p.id} onClick={() => setProfile(p.id)}>
+          {p.name}
+        </button>
+      ))}
     </div>
   );
 };

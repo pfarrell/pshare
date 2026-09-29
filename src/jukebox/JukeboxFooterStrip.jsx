@@ -3,13 +3,10 @@ import { GLYPHS } from './jukeboxPlayerGlyphs';
 import JukeboxProgressLine from './JukeboxProgressLine';
 
 // A compact, always-visible transport: previous/play-pause/next go through
-// the same playerStore actions and glyphs as JukeboxTransport (the fuller
-// transport pinned at the top of Next Up, which this doesn't replace — both
-// exist for now), plus a queue button that jumps straight to Next Up. Tapping
-// the Now Playing screen above is still how you reach Browse; this strip no
-// longer doubles as a generic "open Browse" tap target now that it holds real
-// controls (see JukeboxApp.jsx).
-const JukeboxFooterStrip = ({ onOpenQueue }) => {
+// playerStore actions, plus a queue button (Next Up) and a settings gear.
+// Tapping the Now Playing screen above is how you reach Browse; this strip
+// doesn't double as a generic "open Browse" tap target (see JukeboxApp.jsx).
+const JukeboxFooterStrip = ({ onOpenQueue, onOpenSettings }) => {
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const playPrev = usePlayerStore((s) => s.playPrev);
   const playNext = usePlayerStore((s) => s.playNext);
@@ -30,6 +27,7 @@ const JukeboxFooterStrip = ({ onOpenQueue }) => {
         </button>
         <button type="button" aria-label="Next" onClick={() => playNext({ manual: true })}>{GLYPHS.NEXT}</button>
         <button type="button" aria-label="Open queue" onClick={onOpenQueue}>⋯</button>
+        <button type="button" className="jukebox-footer-gear" aria-label="Settings" onClick={onOpenSettings}>⚙</button>
       </div>
     </div>
   );

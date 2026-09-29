@@ -58,23 +58,14 @@ vi.mock('./JukeboxPlaylistPanel', () => ({
   ),
 }));
 vi.mock('./JukeboxNextUpTab', () => ({
-  default: ({ onSaved }) => (
+  default: ({ onSaved, onOpenAiMix }) => (
     <div data-testid="jukebox-next-up-tab">
+      <button onClick={onOpenAiMix}>next-up-open-aimix</button>
       <button onClick={() => onSaved('Saved Name')}>next-up-saved</button>
     </div>
   ),
 }));
 vi.mock('./JukeboxSettingsTab', () => ({ default: () => <div data-testid="jukebox-settings-tab" /> }));
-vi.mock('./JukeboxDrawerMenu', () => ({
-  default: ({ activeDestination, onSelectDestination }) => (
-    <div data-testid="jukebox-drawer-menu" data-active-destination={activeDestination}>
-      <button onClick={() => onSelectDestination('nextup')}>menu-select-nextup</button>
-      <button onClick={() => onSelectDestination('settings')}>menu-select-settings</button>
-      <button onClick={() => onSelectDestination('browse')}>menu-select-browse</button>
-    </div>
-  ),
-}));
-
 const renderPanel = (activeDestination = 'browse', extraProps = {}) =>
   render(<JukeboxBrowsePanel activeDestination={activeDestination} {...extraProps} />);
 const drawer = (container) => container.querySelector('.jukebox-browse-panel');
@@ -101,18 +92,13 @@ test('the drawer is visible when a tab is active', () => {
   expect(drawer(container)).toBeVisible();
 });
 
-test('always renders the drawer menu, reflecting the active destination', () => {
-  renderPanel('nextup');
-  expect(screen.getByTestId('jukebox-drawer-menu')).toHaveAttribute('data-active-destination', 'nextup');
-});
-
-test('selecting a destination from the drawer menu is reported to the parent via onSelectDestination', () => {
+test('Next Up\'s AI button switches to the aimix destination', () => {
   const onSelectDestination = vi.fn();
-  renderPanel('browse', { onSelectDestination });
+  renderPanel('nextup', { onSelectDestination });
 
-  fireEvent.click(screen.getByText('menu-select-settings'));
+  fireEvent.click(screen.getByText('next-up-open-aimix'));
 
-  expect(onSelectDestination).toHaveBeenCalledWith('settings');
+  expect(onSelectDestination).toHaveBeenCalledWith('aimix');
 });
 
 test('the drawer is hidden — but still mounted — when closed (activeDestination null)', () => {

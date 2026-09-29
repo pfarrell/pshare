@@ -2646,6 +2646,12 @@ body:has(.jukebox-app) {
   border-radius: 0.5rem;
   cursor: pointer;
 }
+.jukebox-app .jukebox-footer-controls button.jukebox-footer-gear {
+  flex: none;
+  min-width: 0;
+  padding: 0 0.75rem;
+  font-size: 1.3rem;
+}
 .jukebox-app .jukebox-footer-controls button.jukebox-footer-play {
   background: #2f6fd6;
   border-color: #2f6fd6;
@@ -2876,10 +2882,6 @@ body:has(.jukebox-app) {
 .jukebox-app .jukebox-search-bar form {
   display: flex;
   gap: 0.5rem;
-  /* Reserves room for the drawer menu icon (see .jukebox-drawer-menu below),
-     which is pinned above this same sticky row and would otherwise sit on
-     top of the Search button. */
-  padding-right: 3.5rem;
 }
 .jukebox-app .jukebox-search-bar input {
   flex: 1;
@@ -2928,52 +2930,6 @@ body:has(.jukebox-app) {
   border-radius: 50%;
   cursor: pointer;
 }
-/* Drawer menu (JukeboxDrawerMenu.jsx) — the small round icon fixed in the
-   drawer's top-right corner, present on all three destinations, that
-   replaces the old bottom tab bar's Next Up/Browse tabs and settings gear.
-   Positioned absolute against .jukebox-browse-panel's own fixed box, so it
-   stays put while the destination's content scrolls underneath it. */
-.jukebox-app .jukebox-drawer-menu {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  z-index: 61; /* above the sticky search bar (z-index: 1) and its own panel */
-}
-.jukebox-app .jukebox-drawer-menu > button {
-  width: 2.75rem;
-  height: 2.75rem;
-  font-size: 1.35rem;
-  color: rgba(255, 255, 255, 0.75);
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 50%;
-  cursor: pointer;
-}
-.jukebox-app .jukebox-drawer-menu-popover {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 0.4rem;
-  min-width: 10rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  background: #1a252f;
-  border: 1px solid #4a5a68;
-  border-radius: 0.5rem;
-  padding: 0.6rem;
-}
-.jukebox-app .jukebox-drawer-menu-popover > button {
-  min-height: 2.75rem;
-  padding: 0 0.75rem;
-  font-size: 1rem;
-  text-align: left;
-  color: white;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 0.5rem;
-  cursor: pointer;
-}
 /* Settings destination (JukeboxSettingsTab.jsx) — profile filter + QR code,
    formerly the standalone JukeboxProfilePicker gear popover. Laid out like
    the other destination panes (see .jukebox-search-tab) rather than as a
@@ -2989,9 +2945,6 @@ body:has(.jukebox-app) {
   align-items: center;
   color: white;
   font-size: 1rem;
-  /* Same reservation as .jukebox-search-bar form and .jukebox-transport-seek
-     — the drawer menu icon is pinned above this row too. */
-  padding-right: 3.5rem;
 }
 .jukebox-app .jukebox-settings-tab-header button {
   min-height: 2.5rem;
@@ -3412,23 +3365,6 @@ body:has(.jukebox-app) {
   cursor: pointer;
 }
 
-/* Save Queue as Playlist trigger (JukeboxNextUpTab.jsx) — sits above the
-   queue list, same treatment as "Show previous" above but with an accent
-   color so it reads as the more consequential action of the two. */
-.jukebox-app .jukebox-next-up-save {
-  align-self: stretch;
-  padding: 0.6rem;
-  margin-bottom: 0.5rem;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: white;
-  background: #2f6fd6;
-  border: none;
-  border-radius: 0.5rem;
-  cursor: pointer;
-  min-height: 44px;
-}
-
 /* JukeboxSavePlaylistModal.jsx — a jukebox-styled sibling of the desktop
    SavePlaylistModal, rendered through the same shared Modal component. Kept
    close to Modal's default light-panel look (a real dialog reads fine
@@ -3682,14 +3618,6 @@ body:has(.jukebox-app) {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  /* Reserves room for the drawer menu icon (see .jukebox-drawer-menu above),
-     which is pinned absolute at the browse panel's top-right corner and
-     otherwise sits directly on top of the textarea's top-right corner —
-     same overlap .jukebox-search-bar form's padding-right already guards
-     against. Without this, a tap meant for the textarea can hit the icon
-     instead, and a second tap on the popover switches destinations, which
-     unmounts this tab and discards whatever was typed. */
-  padding-right: 3.5rem;
 }
 
 .jukebox-ai-mix-prompt {
@@ -3734,12 +3662,11 @@ body:has(.jukebox-app) {
   overflow-y: auto;
 }
 
-/* Transport (JukeboxTransport.jsx), pinned at the top of the Next Up tab. The
-   drawer has 1rem of padding and sticky offsets are measured inside it, so
+/* Next Up action header (JukeboxNextUpTab.jsx), pinned at the top of the tab.
+   The drawer has 1rem of padding and sticky offsets are measured inside it, so
    top:-1rem plus the -1rem margins pin it flush to the drawer's top and side
-   edges (the same trick the old tab header used). Opaque background so the
-   queue rows slide under it. */
-.jukebox-app .jukebox-transport {
+   edges. Opaque background so the queue rows slide under it. */
+.jukebox-app .jukebox-next-up-header {
   position: sticky;
   top: -1rem;
   z-index: 1;
@@ -3751,33 +3678,32 @@ body:has(.jukebox-app) {
   flex-direction: column;
   gap: 0.75rem;
 }
-.jukebox-app .jukebox-transport-seek {
+.jukebox-app .jukebox-next-up-seek {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  /* Same reservation as .jukebox-search-bar form — this row is sticky at
-     the same offset as the drawer menu icon. */
-  padding-right: 3.5rem;
 }
-.jukebox-app .jukebox-transport-seek input[type="range"] {
+.jukebox-app .jukebox-next-up-seek input[type="range"] {
   flex: 1;
   min-width: 0;
   height: 2.5rem;
 }
-.jukebox-app .jukebox-transport-time {
+.jukebox-app .jukebox-next-up-time {
   min-width: 2.75rem;
   font-size: 0.95rem;
   color: rgba(255, 255, 255, 0.7);
   text-align: center;
 }
-.jukebox-app .jukebox-transport-buttons {
+.jukebox-app .jukebox-next-up-actions {
   display: flex;
   gap: 0.5rem;
 }
-.jukebox-app .jukebox-transport-buttons button {
-  flex: 1;
+.jukebox-app .jukebox-next-up-header button {
   min-width: 3.5rem;
   min-height: 3.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 1.6rem;
   color: white;
   background: rgba(255, 255, 255, 0.1);
@@ -3785,24 +3711,31 @@ body:has(.jukebox-app) {
   border-radius: 0.5rem;
   cursor: pointer;
 }
-.jukebox-app .jukebox-transport-buttons button.jukebox-transport-play {
-  background: #2f6fd6;
-  border-color: #2f6fd6;
-}
-.jukebox-app .jukebox-transport-buttons button.active {
+.jukebox-app .jukebox-next-up-header button.active {
   background: rgba(96, 165, 250, 0.35);
   border-color: #60a5fa;
 }
-.jukebox-app .jukebox-transport-buttons button.jukebox-transport-clear {
-  flex: 2;
+.jukebox-app .jukebox-next-up-header button.jukebox-next-up-clear {
+  flex: 1;
   font-size: 1rem;
   font-weight: 600;
 }
-.jukebox-app .jukebox-transport-buttons button.jukebox-transport-clear.armed {
+.jukebox-app .jukebox-next-up-header button.jukebox-next-up-clear.armed {
   background: #b42318;
   border-color: #b42318;
 }
-.jukebox-app .jukebox-transport-buttons button:disabled {
+.jukebox-app .jukebox-next-up-header button:disabled {
   opacity: 0.4;
   cursor: default;
+}
+.jukebox-app .jukebox-ai-mix-back {
+  align-self: flex-start;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  font-size: 1rem;
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 0.5rem;
+  cursor: pointer;
 }

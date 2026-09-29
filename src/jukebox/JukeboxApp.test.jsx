@@ -32,9 +32,10 @@ vi.mock('./JukeboxNowPlaying', () => ({
 vi.mock('../components/player/MusicPlayerWrapper', () => ({ default: () => <div data-testid="player-engine" /> }));
 vi.mock('./JukeboxProgressLine', () => ({ default: () => <div data-testid="progress-line" /> }));
 vi.mock('./JukeboxFooterStrip', () => ({
-  default: ({ onOpenQueue }) => (
+  default: ({ onOpenQueue, onOpenSettings }) => (
     <div data-testid="jukebox-footer-strip">
       <button onClick={onOpenQueue}>trigger-open-queue</button>
+      <button onClick={onOpenSettings}>trigger-open-settings</button>
     </div>
   ),
 }));
@@ -528,4 +529,19 @@ describe('idle screensaver', () => {
 
     expect(screen.getByTestId('jukebox-screensaver')).toHaveAttribute('data-mode', 'photos');
   });
+});
+
+test('the footer gear opens Settings, and tapping it again returns to Browse', () => {
+  renderApp();
+  fireEvent.click(screen.getByText('trigger-open-settings'));
+  expect(activeDestination()).toBe('settings');
+  fireEvent.click(screen.getByText('trigger-open-settings'));
+  expect(activeDestination()).toBe('browse');
+});
+
+test('tapping the footer queue button while on Next Up returns to Browse', () => {
+  renderApp();
+  fireEvent.click(screen.getByText('trigger-open-queue'));
+  fireEvent.click(screen.getByText('trigger-open-queue'));
+  expect(activeDestination()).toBe('browse');
 });

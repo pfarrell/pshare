@@ -15,7 +15,7 @@ const DEFAULT_SIZE = 20;
 // whose drawer idle-close timer must not fire mid-generation (a real run can
 // take up to 45s with nobody touching the screen, and closing the drawer
 // unmounts this tab and discards the already-billed result).
-const JukeboxAiMixTab = ({ onEnqueue, onGeneratingChange }) => {
+const JukeboxAiMixTab = ({ onBack, onEnqueue, onGeneratingChange }) => {
   const [prompt, setPrompt] = useState('');
   const [data, setData] = useState(null);
   const [error, setError] = useState(false);
@@ -56,6 +56,9 @@ const JukeboxAiMixTab = ({ onEnqueue, onGeneratingChange }) => {
 
   return (
     <div className="jukebox-ai-mix-tab">
+      {onBack && (
+        <button type="button" className="jukebox-ai-mix-back" onClick={onBack}>‹ Next Up</button>
+      )}
       <div className="jukebox-ai-mix-prompt-row">
         <textarea
           className="jukebox-ai-mix-prompt"

@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { usePlayerStore } from '../stores/playerStore';
 import JukeboxQueueRow from './JukeboxQueueRow';
-import JukeboxTransport from './JukeboxTransport';
+import { formatPlaybackTime } from '../utils/formatters';
+import { getPlaybackModeDisplay } from './jukeboxPlayerGlyphs';
 import JukeboxSavePlaylistModal from './JukeboxSavePlaylistModal';
 
-// The transport controls are pinned at the top (see JukeboxTransport), with
-// the queue below. The queue only needs the core "see what's queued, tap one to
+// A slim action header is pinned at the top (save as playlist, AI Mix,
+// playback mode, and Clear with its two-step confirm), with the queue below.
+// Play/pause/prev/next live in the footer strip, not here. The queue only needs the core "see what's queued, tap one to
 // jump to it" behavior, which Track already does on its own (tapping a track
 // already in the queue jumps straight to playing it — see Track.jsx's
 // handleTrackClick).
@@ -22,10 +24,34 @@ import JukeboxSavePlaylistModal from './JukeboxSavePlaylistModal';
 // already-played history above it — matching what this tab already shows by
 // default (see the "hidden by default" note above). Someone who wants an
 // earlier track included can rewind with the transport before saving.
-const JukeboxNextUpTab = ({ onSaved }) => {
+const CLEAR_CONFIRM_MS = 3000;
+
+const DiscIcon = () => (
+  <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+    <circle cx="12" cy="12" r="9" />
+    <circle cx="12" cy="12" r="2.5" />
+  </svg>
+);
+
+// Placeholder four-point sparkle; swap for the real AI logo when provided.
+const SparkleIcon = () => (
+  <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
+    <path d="M12 2l2.2 6.8L21 11l-6.8 2.2L12 20l-2.2-6.8L3 11l6.8-2.2z" />
+  </svg>
+);
+
+const JukeboxNextUpTab = ({ onSaved, onOpenAiMix }) => {
   const playlist = usePlayerStore((s) => s.playlist);
   const currentTrackIndex = usePlayerStore((s) => s.currentTrackIndex);
   const removeTrackFromPlaylist = usePlayerStore((s) => s.removeTrackFromPlaylist);
+  const playbackMode = usePlayerStore((s) => s.playbackMode);
+  const queueSource = usePlayerStore((s) => s.queueSource);
+  const cyclePlaybackMode = usePlayerStore((s) => s.cyclePlaybackMode);
+  const clearPlaylist = usePlayerStore((s) => s.clearPlaylist);
+  const currentTime = usePlayerStore((s) => s.currentTime);
+  const duration = usePlayerStore((s) => s.duration);
+  const seek = usePlayerStore((s) => s.seek);
+  const [confirmingClear, setConfirmingClear] = useState(false);
   const [backOffset, setBackOffset] = useState(0);
   // Which row (by its React key below) is currently swiped open, if any —
   // only one at a time, which is why this lives here rather than in each
@@ -37,6 +63,27 @@ const JukeboxNextUpTab = ({ onSaved }) => {
   const visible = playlist.slice(revealFrom);
   const hasEarlierTracks = revealFrom > 0;
   const savableTrackIds = currentTrackIndex >= 0 ? playlist.slice(currentTrackIndex).map((t) => t.id) : [];
+
+  const hasQueue = playlist.length > 0;
+  const clearArmed = confirmingClear && hasQueue;
+  const progressPercent = Number.isFinite(duration) && duration > 0 ? (currentTime / duration) * 100 : 0;
+  const handleSeek = (e) => seek((Number(e.target.value) / 100) * duration);
+  const { glyph: modeGlyph, title: modeTitle } = getPlaybackModeDisplay(playbackMode, queueSource);
+
+  useEffect(() => {
+    if (!confirmingClear) return undefined;
+    const timer = setTimeout(() => setConfirmingClear(false), CLEAR_CONFIRM_MS);
+    return () => clearTimeout(timer);
+  }, [confirmingClear]);
+
+  const handleClear = () => {
+    if (!clearArmed) {
+      setConfirmingClear(true);
+      return;
+    }
+    setConfirmingClear(false);
+    clearPlaylist();
+  };
 
   // Closes whatever's swiped open on any interaction outside that row —
   // tapping a different row, the transport, "Show previous", or scrolling
@@ -59,16 +106,49 @@ const JukeboxNextUpTab = ({ onSaved }) => {
 
   return (
     <>
-      <JukeboxTransport />
-      {savableTrackIds.length > 0 && (
+      <div className="jukebox-next-up-header">
+        <div className="jukebox-next-up-seek">
+          <span className="jukebox-next-up-time">{formatPlaybackTime(currentTime)}</span>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={progressPercent}
+            onChange={handleSeek}
+            aria-label="Seek"
+          />
+          <span className="jukebox-next-up-time">{formatPlaybackTime(duration)}</span>
+        </div>
+        <div className="jukebox-next-up-actions">
         <button
           type="button"
-          className="jukebox-next-up-save"
+          aria-label="Save as playlist"
+          disabled={savableTrackIds.length === 0}
           onClick={() => setSaveModalOpen(true)}
         >
-          💾 Save as Playlist
+          <DiscIcon />
         </button>
-      )}
+        <button type="button" aria-label="AI Mix" onClick={onOpenAiMix}>
+          <SparkleIcon />
+        </button>
+        <button
+          type="button"
+          className={playbackMode !== 'off' ? 'active' : ''}
+          aria-label={modeTitle}
+          onClick={cyclePlaybackMode}
+        >
+          {modeGlyph}
+        </button>
+        <button
+          type="button"
+          className={`jukebox-next-up-clear ${clearArmed ? 'armed' : ''}`}
+          disabled={!hasQueue}
+          onClick={handleClear}
+        >
+          {clearArmed ? 'Tap again to clear' : 'Clear queue'}
+        </button>
+        </div>
+      </div>
       {saveModalOpen && (
         <JukeboxSavePlaylistModal
           trackIds={savableTrackIds}

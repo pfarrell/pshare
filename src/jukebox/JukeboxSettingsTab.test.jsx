@@ -39,23 +39,12 @@ describe('JukeboxSettingsTab', () => {
     expect(screen.getByRole('button', { name: 'Kids' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  test('shows a "Show QR code" entry alongside the profile list', async () => {
+  test('shows the QR code together with the profile list and screensaver selector', async () => {
     render(<JukeboxSettingsTab />);
-    await waitFor(() => screen.getByText('Kids'));
-
-    expect(screen.getByRole('button', { name: /show qr code/i })).toBeInTheDocument();
-  });
-
-  test('tapping "Show QR code" swaps to the QR view and back', async () => {
-    render(<JukeboxSettingsTab />);
-    await waitFor(() => screen.getByText('Kids'));
-
-    fireEvent.click(screen.getByRole('button', { name: /show qr code/i }));
     await waitFor(() => expect(screen.getByRole('img', { name: /qr code/i })).toBeInTheDocument());
-    expect(screen.queryByText('Kids')).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /back/i }));
-    await waitFor(() => expect(screen.getByText('Kids')).toBeInTheDocument());
+    expect(screen.getByText('Kids')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Music' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /show qr code/i })).not.toBeInTheDocument();
   });
 
   test('refetches the profile list after an external invalidate while mounted', async () => {

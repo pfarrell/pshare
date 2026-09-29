@@ -3,7 +3,6 @@ import SearchTab from './SearchTab';
 import JukeboxNextUpTab from './JukeboxNextUpTab';
 import JukeboxSettingsTab from './JukeboxSettingsTab';
 import JukeboxAiMixTab from './JukeboxAiMixTab';
-import JukeboxDrawerMenu from './JukeboxDrawerMenu';
 import JukeboxArtistView from './JukeboxArtistView';
 import JukeboxCollectionView from './JukeboxCollectionView';
 import JukeboxTracksPanel from './JukeboxTracksPanel';
@@ -12,9 +11,9 @@ import { useTouchScroll } from './useTouchScroll';
 
 // The drawer body. Which destination is showing — and whether the drawer is
 // open at all (activeDestination === null) — is decided by JukeboxApp; this
-// component has no close button of its own, but does own the small
-// JukeboxDrawerMenu that switches between destinations (replacing the old
-// bottom tab bar's Next Up/Browse tabs and settings gear).
+// component has no close button of its own. Destinations are reached from
+// the footer strip (Next Up, Settings), by tapping Now Playing (Browse), and
+// from Next Up's AI button (AI Mix, which has a back arrow to Next Up).
 //
 // It is mounted even while closed and hidden with the `hidden` attribute,
 // because switching destinations (or closing and reopening) is now a
@@ -32,8 +31,8 @@ import { useTouchScroll } from './useTouchScroll';
 // close with the drawer.
 //
 // There are four destinations: 'browse' (Search, with Quick Hit as its
-// empty-box state — see SearchTab.jsx), 'nextup', 'settings' (profile
-// filter + QR code, formerly the standalone JukeboxProfilePicker gear), and
+// empty-box state — see SearchTab.jsx), 'nextup', 'settings' (QR code,
+// screensaver mode and profile filter), and
 // 'aimix' (prompt-driven playlist generation — see JukeboxAiMixTab.jsx).
 // Settings, Next Up, and AI Mix all unmount when switched away from, same as
 // before — only Search's query/results are worth preserving hidden-but-mounted.
@@ -105,7 +104,6 @@ const JukeboxBrowsePanel = ({ activeDestination, onSelectDestination, onEnqueue,
   return (
     <>
       <div className="jukebox-browse-panel" ref={panelRef} hidden={!open}>
-        <JukeboxDrawerMenu activeDestination={activeDestination} onSelectDestination={onSelectDestination} />
         {currentView?.type === 'artist' && (
           <JukeboxArtistView
             artist={currentView.data}
@@ -134,9 +132,9 @@ const JukeboxBrowsePanel = ({ activeDestination, onSelectDestination, onEnqueue,
             onEnqueue={onEnqueue}
           />
         </div>
-        {!currentView && activeDestination === 'nextup' && <JukeboxNextUpTab onSaved={onPlaylistSaved} />}
+        {!currentView && activeDestination === 'nextup' && <JukeboxNextUpTab onSaved={onPlaylistSaved} onOpenAiMix={() => onSelectDestination?.('aimix')} />}
         {!currentView && activeDestination === 'settings' && <JukeboxSettingsTab />}
-        {!currentView && activeDestination === 'aimix' && <JukeboxAiMixTab onEnqueue={onEnqueue} onGeneratingChange={onGeneratingChange} />}
+        {!currentView && activeDestination === 'aimix' && <JukeboxAiMixTab onBack={() => onSelectDestination?.('nextup')} onEnqueue={onEnqueue} onGeneratingChange={onGeneratingChange} />}
       </div>
       {open && selectedAlbum && (
         <JukeboxTracksPanel
