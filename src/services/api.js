@@ -129,6 +129,16 @@ export const apiService = {
   // Jukebox phone enqueue (see docs/superpowers/specs/2026-09-25-jukebox-server-queue-design.md)
   jukeboxSearch: (token, query) => api.get(`/jukebox/${token}/search${qs({ q: query })}`),
   submitToJukebox: (token, trackIds, name) => api.post(`/jukebox/${token}/queue`, { trackIds, name: name || undefined }),
+  // Guest browse (read-only) - see docs/superpowers/specs/2026-09-29-jukebox-guest-browse-design.md
+  guestHome: (token, mode) => api.get(`/jukebox/${token}/home${qs({ mode })}`),
+  guestArtist: (token, id) => api.get(`/jukebox/${token}/artist/${id}`),
+  guestAlbum: (token, id) => api.get(`/jukebox/${token}/album/${id}`),
+  guestPlaylist: (token, id) => api.get(`/jukebox/${token}/playlist/${id}`),
+  guestCollection: (token, id) => api.get(`/jukebox/${token}/collection/${id}`),
+  guestPlaylists: (token) => api.get(`/jukebox/${token}/playlists`),
+  guestCollections: (token) => api.get(`/jukebox/${token}/collections`),
+  guestTrackIds: (token, kind, id) => api.get(`/jukebox/${token}/${kind}/${id}/track-ids`),
+  guestRandomTracks: (token, kind, id) => api.post(`/jukebox/${token}/${kind}/${id}/random-tracks`),
   getJukeboxPendingQueue: (deviceId) => api.get(`/jukebox/devices/${deviceId}/queue/pending`),
   markJukeboxDelivered: (deviceId, submissionId) => api.post(`/jukebox/devices/${deviceId}/queue/${submissionId}/delivered`),
   rotateJukeboxToken: (deviceId) => api.post(`/jukebox/devices/${deviceId}/rotate-token`),
