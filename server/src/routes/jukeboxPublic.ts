@@ -11,6 +11,10 @@ import { jukeboxQueueService } from '../services/jukeboxQueueService.js'
 import { sseBroadcaster } from '../services/sseBroadcaster.js'
 import { createFixedWindowLimiter } from '../utils/rateLimit.js'
 import { handleSearchRequest } from './search.js'
+import artists, { fetchRandomArtists } from './artists.js'
+import albums, { fetchRandomAlbums } from './albums.js'
+import collections from './collections.js'
+import playlists, { listPlaylists } from './playlists.js'
 
 const JWT_SECRET = process.env.BEMUSED_JWT_SECRET || 'default-secret-change-me'
 
@@ -74,6 +78,135 @@ jukeboxPublic.post('/:token/queue', loadDeviceByToken, async (c: any) => {
   submissions.forEach((submission) => sseBroadcaster.broadcastQueueItemAdded(device.id, submission))
 
   return c.json(submissions, 201)
+})
+
+// --- Read-only browse surface -------------------------------------------
+// Detail views reuse the real (already public) routes by dispatching to them
+// internally, then run the result through an allowlist. Deliberately NO
+// cookie/headers are forwarded: authMiddleware is mounted globally in
+// index.ts, not inside these sub-apps, so the reused handlers see no user and
+// therefore never attach notes or make Recall calls.
+async function readThrough(app: { request: (path: string) => Response | Promise<Response> }, path: string) {
+  const res = await app.request(path)
+  if (!res.ok) return null
+  return res.json()
+}
+
+const parseId = (raw: string): number | null => {
+  const id = Number(raw)
+  return Number.isInteger(id) && id > 0 && id <= 2147483647 ? id : null
+}
+
+const pickPerson = (p: any) => (p?.id != null ? { id: p.id, name: p.name ?? '' } : null)
+
+const pickAlbum = (a: any) => ({
+  id: a.id,
+  title: a.title ?? '',
+  release_year: a.release_year ?? null,
+  image_path: a.image_path ?? null,
+  artist: pickPerson(a.artist),
+  track_count: a.track_count ?? 0,
+})
+
+const pickTrack = (t: any) => ({
+  id: t.id,
+  title: t.title ?? '',
+  duration: t.duration ?? null,
+  track_number: t.track_number ?? null,
+  artist: pickPerson(t.artist),
+  album: t.album?.id != null ? { id: t.album.id, title: t.album.title ?? '' } : null,
+})
+
+const HOME_SIZE = 30
+
+jukeboxPublic.get('/:token/home', loadDeviceByToken, async (c: any) => {
+  if (c.req.query('mode') === 'albums') {
+    const rows = await fetchRandomAlbums(HOME_SIZE, null)
+    return c.json(rows.map((a: any) => ({
+      id: a.id,
+      title: a.title ?? '',
+      image_path: a.image_path ?? null,
+      artist: pickPerson(a.artist),
+      track_count: a.track_count ?? 0,
+    })))
+  }
+  const rows = await fetchRandomArtists(HOME_SIZE, null)
+  return c.json(rows.map((a: any) => ({
+    id: a.id,
+    name: a.name ?? '',
+    image_path: a.image_path ?? null,
+    album_count: a.album_count ?? 0,
+  })))
+})
+
+jukeboxPublic.get('/:token/artist/:id', loadDeviceByToken, async (c: any) => {
+  const id = parseId(c.req.param('id'))
+  const data = id ? await readThrough(artists, `/${id}`) : null
+  if (!data) return c.json({ error: 'Not found' }, 404)
+  return c.json({
+    artist: { id: data.artist.id, name: data.artist.name ?? '', image_path: data.artist.image_path ?? null },
+    albums: (data.albums ?? []).map(pickAlbum),
+    singles: (data.singles ?? []).map(pickTrack),
+  })
+})
+
+jukeboxPublic.get('/:token/album/:id', loadDeviceByToken, async (c: any) => {
+  const id = parseId(c.req.param('id'))
+  const data = id ? await readThrough(albums, `/${id}`) : null
+  if (!data) return c.json({ error: 'Not found' }, 404)
+  return c.json({
+    album: {
+      id: data.album.id,
+      title: data.album.title ?? '',
+      release_year: data.album.release_year ?? null,
+      image_path: data.album.image_path ?? null,
+    },
+    artist: pickPerson(data.artist),
+    tracks: (data.tracks ?? []).map(pickTrack),
+  })
+})
+
+jukeboxPublic.get('/:token/playlist/:id', loadDeviceByToken, async (c: any) => {
+  const id = parseId(c.req.param('id'))
+  const data = id ? await readThrough(playlists, `/${id}`) : null
+  if (!data) return c.json({ error: 'Not found' }, 404)
+  return c.json({
+    playlist: { id: data.playlist.id, name: data.playlist.name ?? '', image_path: data.playlist.image_path ?? null },
+    tracks: (data.tracks ?? []).map(pickTrack),
+  })
+})
+
+jukeboxPublic.get('/:token/collection/:id', loadDeviceByToken, async (c: any) => {
+  const id = parseId(c.req.param('id'))
+  const data = id ? await readThrough(collections, `/${id}`) : null
+  if (!data) return c.json({ error: 'Not found' }, 404)
+  return c.json({
+    collection: { id: data.collection.id, name: data.collection.name ?? '', image_path: data.collection.image_path ?? null },
+    albums: (data.albums ?? []).map(pickAlbum),
+  })
+})
+
+const pickPreview = (p: any) => ({ id: p.id, image_path: p.image_path })
+
+jukeboxPublic.get('/:token/playlists', loadDeviceByToken, async (c: any) => {
+  const rows = await listPlaylists()
+  return c.json(rows.map((r: any) => ({
+    id: r.id,
+    name: r.name ?? '',
+    image_path: r.image_path ?? null,
+    track_count: r.track_count ?? 0,
+    preview_albums: (r.preview_albums ?? []).map(pickPreview),
+  })))
+})
+
+jukeboxPublic.get('/:token/collections', loadDeviceByToken, async (c: any) => {
+  const rows = (await readThrough(collections, '/')) ?? []
+  return c.json(rows.map((r: any) => ({
+    id: r.id,
+    name: r.name ?? '',
+    image_path: r.image_path ?? null,
+    preview_albums: (r.preview_albums ?? []).map(pickPreview),
+  })))
 })
 
 export default jukeboxPublic
