@@ -189,6 +189,13 @@ export const apiService = {
   getSignups: (page = 1, limit = 25) => api.get(`/admin/signups${qs({ page, limit })}`),
   getSignupUnseenCount: () => api.get('/admin/signups/unseen-count'),
   markSignupsSeen: () => api.post('/admin/signups/seen'),
+  getAdminPhotos: () => api.get('/admin/photos'),
+  uploadPhoto: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/admin/photos', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  deletePhoto: (id) => api.delete(`/admin/photos/${id}`),
 
   // Upload
   uploadTracks: (formData) => api.post('/admin/upload', formData, {

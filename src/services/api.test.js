@@ -40,6 +40,12 @@ describe('apiService query strings are unchanged', () => {
     expect(http.get).toHaveBeenLastCalledWith('/photos/random?size=3');
   });
 
+  test('uploadPhoto posts multipart form data to /admin/photos', () => {
+    const file = new File(['x'], 'a.jpg', { type: 'image/jpeg' });
+    apiService.uploadPhoto(file);
+    expect(http.post).toHaveBeenLastCalledWith('/admin/photos', expect.any(FormData), { headers: { 'Content-Type': 'multipart/form-data' } });
+  });
+
   test('errors page with source', () => {
     apiService.getErrors(2, 25, 'upload');
     expect(http.get).toHaveBeenLastCalledWith('/admin/errors?page=2&limit=25&source=upload');

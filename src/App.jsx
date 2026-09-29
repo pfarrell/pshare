@@ -30,6 +30,7 @@ import AdminArtist from './pages/AdminArtist';
 import AdminAlbum from './pages/AdminAlbum';
 import AdminTrack from './pages/AdminTrack';
 import AdminUpload from './pages/AdminUpload';
+import AdminPhotos from './pages/AdminPhotos';
 import AdminPlaylist from './pages/AdminPlaylist';
 import AdminLogs from './pages/AdminLogs';
 import AdminTags from './pages/AdminTags';
@@ -320,6 +321,11 @@ function App() {
                       <Route path="/admin/upload" element={
                         <ProtectedRoute requireAdmin>
                           <AdminUpload />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/admin/photos" element={
+                        <ProtectedRoute requireAdmin>
+                          <AdminPhotos />
                         </ProtectedRoute>
                       } />
                       <Route path="/admin/playlist/:id" element={<AdminPlaylist />} />
