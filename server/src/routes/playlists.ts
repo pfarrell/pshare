@@ -10,6 +10,7 @@ import { loadOwned } from '../utils/http.js'
 import { downloadToDisk, ImageStorageError } from '../services/imageStorage.js'
 import { generatePlaylist } from '../services/playlistGeneratorService.js'
 import { suggestPlaylistName } from '../services/playlistNameSuggesterService.js'
+import { recentPlaylistsService } from '../services/recentPlaylistsService.js'
 import { checkAndRecordGeneration, MAX_GENERATIONS_PER_WINDOW } from '../services/playlistGenerationRateLimiter.js'
 
 const playlists = new Hono<{ Variables: Variables }>()
@@ -164,6 +165,26 @@ export async function fetchTracksForIds(trackIds: number[], c: Context) {
 }
 
 // GET /playlist/:id
+// GET /playlists/recent?size=N — gated, powers Jukebox Mode's Quick Hit grid
+// (recently played playlists, most recent first). Not profile-filtered:
+// playlists have no tags. Must stay above /:id or "recent" matches as an id.
+// See docs/superpowers/specs/2026-09-29-jukebox-recent-playlists-design.md.
+playlists.get('/recent', requireAuth, async (c) => {
+  const requested = parseInt(c.req.query('size') ?? '10')
+  const size = Math.min(Number.isNaN(requested) || requested < 1 ? 10 : requested, 200)
+
+  const rows = await recentPlaylistsService.recentlyPlayed(size)
+  const trackCounts = await countsService.trackCountsByPlaylistIds(rows.map((r) => r.id))
+
+  return c.json(rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    image_path: r.image_path,
+    track_count: trackCounts.get(r.id) ?? 0,
+    last_played: r.last_played,
+  })))
+})
+
 playlists.get('/:id', async (c) => {
   const id = parseInt(c.req.param('id'))
   if (!Number.isInteger(id)) return c.json({ error: 'Not found' }, 404)

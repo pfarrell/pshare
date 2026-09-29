@@ -71,6 +71,7 @@ albums.get('/recent', requireAuth, async (c) => {
     artist: { id: row.artist_id, name: row.artist_name },
     has_collaborators: row.has_collaborators,
     track_count: trackCounts.get(row.id) ?? 0,
+    last_played: row.last_played,
   })))
 })
 
