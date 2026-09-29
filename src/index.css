@@ -3669,7 +3669,10 @@ body:has(.jukebox-app) {
 .jukebox-app .jukebox-next-up-header {
   position: sticky;
   top: -1rem;
-  z-index: 1;
+  /* Must beat .jukebox-queue-row-content (position: relative; z-index: 1),
+     which comes later in the DOM: at an equal z-index the rows paint over
+     this header while scrolled/dragged underneath it. */
+  z-index: 2;
   margin: -1rem -1rem 1rem;
   padding: 1rem;
   background: #2a3540;
