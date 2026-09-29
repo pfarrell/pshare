@@ -368,6 +368,23 @@ describe('Track component — per-track artist display', () => {
     expect(screen.queryByText(/- Renamed Artist/)).not.toBeInTheDocument();
   });
 
+  test('showArtist forces the artist suffix even when ids match', () => {
+    renderTrack({
+      showArtist: true,
+      track: {
+        ...mockTrack,
+        artist: { id: 5, name: 'Album Artist' },
+        album: { ...mockTrack.album, artist: { id: 5, name: 'Album Artist' } },
+      },
+    });
+    expect(screen.getByText(/- Album Artist/)).toBeInTheDocument();
+  });
+
+  test('showArtist renders no suffix when the track has no artist name', () => {
+    renderTrack({ showArtist: true, track: { ...mockTrack, artist: {} } });
+    expect(screen.queryByText(/ - undefined/)).not.toBeInTheDocument();
+  });
+
   test('does not crash when the track has no album (orphaned track, no FK constraint on tracks.album_id)', () => {
     renderTrack({
       track: {

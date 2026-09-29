@@ -221,7 +221,7 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
   const renderTracks = (list) => (
     <div className="jukebox-search-tracks" onClick={() => onEnqueue?.()}>
       {list.map((track, index) => (
-        <Track key={track.id} track={track} index={index} trackCount={list.length} />
+        <Track key={track.id} track={track} index={index} trackCount={list.length} showArtist />
       ))}
     </div>
   );

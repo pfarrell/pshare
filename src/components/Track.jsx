@@ -19,7 +19,7 @@ import toast from 'react-hot-toast';
 
 // forwardRef lets Album.jsx grab the DOM node of the track that arrived
 // playing (via the mobile now-playing tap) and scroll it into view.
-const Track = forwardRef(({ track, index, trackCount, includeMeta = false, isPlaying = false, showMakeSingle = false, showEdit = false, onMadeSingle, scrollAnchor = false }, ref) => {
+const Track = forwardRef(({ track, index, trackCount, includeMeta = false, showArtist = false, isPlaying = false, showMakeSingle = false, showEdit = false, onMadeSingle, scrollAnchor = false }, ref) => {
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [pressedButton, setPressedButton] = useState(null);
@@ -262,7 +262,7 @@ const Track = forwardRef(({ track, index, trackCount, includeMeta = false, isPla
           color: isPlaying ? '#1d4ed8' : 'var(--color-text-primary)'
         }}>
           {String(index + 1).padStart(2, '0')}. {track.title}
-          {track.artist.id !== track.album?.artist?.id && (' - ' + track.artist.name)}
+          {(showArtist || track.artist.id !== track.album?.artist?.id) && track.artist.name && (' - ' + track.artist.name)}
 
           {track.duration && (
             <span style={{
