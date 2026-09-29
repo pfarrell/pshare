@@ -15,7 +15,7 @@ import { handleSearchRequest } from './search.js'
 import artists, { fetchRandomArtists } from './artists.js'
 import albums, { fetchRandomAlbums } from './albums.js'
 import collections from './collections.js'
-import playlists, { listPlaylists } from './playlists.js'
+import playlists, { listPlaylists, MAX_PLAYLIST_TRACKS } from './playlists.js'
 
 const JWT_SECRET = process.env.BEMUSED_JWT_SECRET || 'default-secret-change-me'
 
@@ -28,10 +28,30 @@ async function loadDeviceByToken(c: any, next: any) {
   await next()
 }
 
-jukeboxPublic.get('/:token/search', loadDeviceByToken, handleSearchRequest)
+// Light per-token cap on the read-only browse surface (each detail hit can
+// trigger real work, and the QR link is shared widely).
+export const GUEST_READS_PER_MINUTE = 120
+
+// Same token check as loadDeviceByToken, plus a per-token read limit. The
+// limiter is keyed only after the token is validated, so unknown tokens can't
+// grow its map.
+const readsAllowed = createFixedWindowLimiter(GUEST_READS_PER_MINUTE, 60_000)
+
+async function loadDeviceForRead(c: any, next: any) {
+  const device = await jukeboxQueueService.findDeviceByToken(c.req.param('token'))
+  if (!device) return c.json({ error: 'Not found' }, 404)
+  if (!readsAllowed(device.enqueue_token)) return c.json({ error: 'Too many requests, try again in a moment' }, 429)
+  c.set('jukeboxTokenDevice', device)
+  await next()
+}
+
+jukeboxPublic.get('/:token/search', loadDeviceForRead, handleSearchRequest)
 
 export const MAX_GUEST_QUEUE_IDS = 500
-export const GUEST_TRACKS_PER_MINUTE = 300
+// The limiter hard-rejects any single request whose cost exceeds the whole
+// window, so the window must fit the biggest thing a guest can add in one tap:
+// a max-size playlist (MAX_PLAYLIST_TRACKS), sent as 500-id chunks.
+export const GUEST_TRACKS_PER_MINUTE = 1000
 
 // Cheap abuse protection against one QR-code token spamming submissions —
 // keyed by enqueue_token, one limiter instance shared by every request this
@@ -120,7 +140,7 @@ const pickTrack = (t: any) => ({
 
 const HOME_SIZE = 30
 
-jukeboxPublic.get('/:token/home', loadDeviceByToken, async (c: any) => {
+jukeboxPublic.get('/:token/home', loadDeviceForRead, async (c: any) => {
   if (c.req.query('mode') === 'albums') {
     const rows = await fetchRandomAlbums(HOME_SIZE, null)
     return c.json(rows.map((a: any) => ({
@@ -140,7 +160,7 @@ jukeboxPublic.get('/:token/home', loadDeviceByToken, async (c: any) => {
   })))
 })
 
-jukeboxPublic.get('/:token/artist/:id', loadDeviceByToken, async (c: any) => {
+jukeboxPublic.get('/:token/artist/:id', loadDeviceForRead, async (c: any) => {
   const id = parseId(c.req.param('id'))
   const data = id ? await readThrough(artists, `/${id}`) : null
   if (!data) return c.json({ error: 'Not found' }, 404)
@@ -151,7 +171,7 @@ jukeboxPublic.get('/:token/artist/:id', loadDeviceByToken, async (c: any) => {
   })
 })
 
-jukeboxPublic.get('/:token/album/:id', loadDeviceByToken, async (c: any) => {
+jukeboxPublic.get('/:token/album/:id', loadDeviceForRead, async (c: any) => {
   const id = parseId(c.req.param('id'))
   const data = id ? await readThrough(albums, `/${id}`) : null
   if (!data) return c.json({ error: 'Not found' }, 404)
@@ -167,7 +187,7 @@ jukeboxPublic.get('/:token/album/:id', loadDeviceByToken, async (c: any) => {
   })
 })
 
-jukeboxPublic.get('/:token/playlist/:id', loadDeviceByToken, async (c: any) => {
+jukeboxPublic.get('/:token/playlist/:id', loadDeviceForRead, async (c: any) => {
   const id = parseId(c.req.param('id'))
   const data = id ? await readThrough(playlists, `/${id}`) : null
   if (!data) return c.json({ error: 'Not found' }, 404)
@@ -177,7 +197,7 @@ jukeboxPublic.get('/:token/playlist/:id', loadDeviceByToken, async (c: any) => {
   })
 })
 
-jukeboxPublic.get('/:token/collection/:id', loadDeviceByToken, async (c: any) => {
+jukeboxPublic.get('/:token/collection/:id', loadDeviceForRead, async (c: any) => {
   const id = parseId(c.req.param('id'))
   const data = id ? await readThrough(collections, `/${id}`) : null
   if (!data) return c.json({ error: 'Not found' }, 404)
@@ -189,7 +209,7 @@ jukeboxPublic.get('/:token/collection/:id', loadDeviceByToken, async (c: any) =>
 
 const pickPreview = (p: any) => ({ id: p.id, image_path: p.image_path })
 
-jukeboxPublic.get('/:token/playlists', loadDeviceByToken, async (c: any) => {
+jukeboxPublic.get('/:token/playlists', loadDeviceForRead, async (c: any) => {
   const rows = await listPlaylists()
   return c.json(rows.map((r: any) => ({
     id: r.id,
@@ -200,7 +220,7 @@ jukeboxPublic.get('/:token/playlists', loadDeviceByToken, async (c: any) => {
   })))
 })
 
-jukeboxPublic.get('/:token/collections', loadDeviceByToken, async (c: any) => {
+jukeboxPublic.get('/:token/collections', loadDeviceForRead, async (c: any) => {
   const rows = (await readThrough(collections, '/')) ?? []
   return c.json(rows.map((r: any) => ({
     id: r.id,
@@ -210,7 +230,7 @@ jukeboxPublic.get('/:token/collections', loadDeviceByToken, async (c: any) => {
   })))
 })
 
-export const MAX_GUEST_TRACKS = 500
+export const MAX_GUEST_TRACKS = MAX_PLAYLIST_TRACKS
 export const GUEST_RANDOM_TRACKS = 25
 
 const trackNo = (n: string | null) => parseInt(n ?? '0') || 0
@@ -242,7 +262,7 @@ async function trackIdsFor(kind: string, id: number): Promise<number[] | null> {
   return null
 }
 
-jukeboxPublic.get('/:token/:kind/:id/track-ids', loadDeviceByToken, async (c: any) => {
+jukeboxPublic.get('/:token/:kind/:id/track-ids', loadDeviceForRead, async (c: any) => {
   const id = parseId(c.req.param('id'))
   const ids = id ? await trackIdsFor(c.req.param('kind'), id) : null
   if (!ids) return c.json({ error: 'Not found' }, 404)
@@ -253,7 +273,7 @@ jukeboxPublic.get('/:token/:kind/:id/track-ids', loadDeviceByToken, async (c: an
 // Reuses the public POST /artist|collection/:id/tracks/random routes by
 // internal dispatch (no cookie forwarded), which already restrict to approved
 // tracks and the artist's own discography / the collection's albums.
-jukeboxPublic.post('/:token/:kind/:id/random-tracks', loadDeviceByToken, async (c: any) => {
+jukeboxPublic.post('/:token/:kind/:id/random-tracks', loadDeviceForRead, async (c: any) => {
   const kind = c.req.param('kind')
   const router = kind === 'artist' ? artists : kind === 'collection' ? collections : null
   const id = parseId(c.req.param('id'))

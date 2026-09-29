@@ -6,7 +6,8 @@ import { Hono } from 'hono'
 import jwt from 'jsonwebtoken'
 import { createArtist, createAlbum, createTrack, createUser, createJukeboxDevice, createPlaylist, createCollection, cleanupFixtures, fixtureName } from '../test/fixtures.js'
 import { db } from '../db/database.js'
-import jukeboxPublic from './jukeboxPublic.js'
+import jukeboxPublic, { MAX_GUEST_QUEUE_IDS, MAX_GUEST_TRACKS, GUEST_TRACKS_PER_MINUTE, GUEST_READS_PER_MINUTE } from './jukeboxPublic.js'
+import { MAX_PLAYLIST_TRACKS } from './playlists.js'
 
 after(cleanupFixtures)
 
@@ -130,8 +131,8 @@ test('POST /jukebox/:token/queue counts tracks, not requests, against the rate l
       body: JSON.stringify({ trackIds: Array(n).fill(track.id), name: 'Riley' }),
     })
 
-  assert.equal((await submit(250)).status, 201)
-  assert.equal((await submit(50)).status, 201)
+  assert.equal((await submit(500)).status, 201)
+  assert.equal((await submit(500)).status, 201)
   assert.equal((await submit(1)).status, 429)
 })
 
@@ -366,4 +367,47 @@ test('POST random-tracks 404s for album/playlist kinds, unknown kinds, bad ids, 
   }
   const badToken = await postRandom('not-a-real-token', 'artist/1')
   assert.equal(badToken.status, 404)
+})
+
+// A legitimate single add must never be un-addable: the limiter hard-rejects
+// any request whose cost exceeds the whole window, so the window has to fit
+// the biggest thing a guest can add in one tap.
+test('limits are consistent: a full chunk and a full playlist both fit', () => {
+  assert.ok(GUEST_TRACKS_PER_MINUTE >= MAX_GUEST_TRACKS, 'window must fit a whole max-size add')
+  assert.ok(MAX_GUEST_TRACKS >= MAX_PLAYLIST_TRACKS, 'track-ids must not truncate a max-size playlist')
+  assert.ok(MAX_GUEST_QUEUE_IDS <= GUEST_TRACKS_PER_MINUTE, 'a full request chunk must fit the window')
+})
+
+test('POST /jukebox/:token/queue accepts a full 500-id chunk from a fresh token', async () => {
+  const owner = await createUser('jpub-queue-fullchunk-owner')
+  const device = await createJukeboxDevice('jpub-queue-fullchunk-device', owner.id)
+  const artist = await createArtist('jpub-queue-fullchunk-artist')
+  const album = await createAlbum('jpub-queue-fullchunk-album', artist.id)
+  const track = await createTrack('jpub-queue-fullchunk-track', album.id, artist.id)
+  const submit = () =>
+    app().request(`/jukebox/${device.enqueue_token}/queue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trackIds: Array(500).fill(track.id), name: 'Riley' }),
+    })
+
+  assert.equal((await submit()).status, 201)
+  assert.equal((await submit()).status, 201, 'a 1000-track playlist is two 500-id chunks')
+})
+
+test('guest read endpoints are rate limited per token', async () => {
+  const device = await guestDevice('jpub-readlimit')
+  let limited = 0
+  for (let i = 0; i < GUEST_READS_PER_MINUTE + 5; i++) {
+    const res = await app().request(`/jukebox/${device.enqueue_token}/playlists`)
+    if (res.status === 429) limited++
+  }
+  assert.equal(limited, 5)
+})
+
+test('read rate limiting does not create state for unknown tokens', async () => {
+  for (let i = 0; i < GUEST_READS_PER_MINUTE + 5; i++) {
+    const res = await app().request('/jukebox/not-a-real-token/playlists')
+    assert.equal(res.status, 404)
+  }
 })
