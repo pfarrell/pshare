@@ -134,7 +134,7 @@ const JukeboxBrowsePanel = ({ activeDestination, onSelectDestination, onEnqueue,
         </div>
         {!currentView && activeDestination === 'nextup' && <JukeboxNextUpTab onSaved={onPlaylistSaved} onOpenAiMix={() => onSelectDestination?.('aimix')} />}
         {!currentView && activeDestination === 'settings' && <JukeboxSettingsTab />}
-        {!currentView && activeDestination === 'aimix' && <JukeboxAiMixTab onBack={() => onSelectDestination?.('nextup')} onEnqueue={onEnqueue} onGeneratingChange={onGeneratingChange} />}
+        {!currentView && activeDestination === 'aimix' && <JukeboxAiMixTab onPlaylistSaved={onPlaylistSaved} onBack={() => onSelectDestination?.('nextup')} onEnqueue={onEnqueue} onGeneratingChange={onGeneratingChange} />}
       </div>
       {open && selectedAlbum && (
         <JukeboxTracksPanel

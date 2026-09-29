@@ -5,6 +5,8 @@ import { useQueueActions } from '../hooks/useQueueActions';
 import { useTouchScroll } from './useTouchScroll';
 
 const DEFAULT_SIZE = 20;
+// How long the top-of-screen "Saved as ..." pill stays up for a generated mix.
+const SAVED_TOAST_MS = 5000;
 
 // The 'aimix' destination inside the drawer (reached via JukeboxDrawerMenu),
 // mounted only while activeDestination === 'aimix' by JukeboxBrowsePanel —
@@ -15,7 +17,7 @@ const DEFAULT_SIZE = 20;
 // whose drawer idle-close timer must not fire mid-generation (a real run can
 // take up to 45s with nobody touching the screen, and closing the drawer
 // unmounts this tab and discards the already-billed result).
-const JukeboxAiMixTab = ({ onBack, onEnqueue, onGeneratingChange }) => {
+const JukeboxAiMixTab = ({ onBack, onEnqueue, onGeneratingChange, onPlaylistSaved }) => {
   const [prompt, setPrompt] = useState('');
   const [data, setData] = useState(null);
   const [error, setError] = useState(false);
@@ -33,7 +35,13 @@ const JukeboxAiMixTab = ({ onBack, onEnqueue, onGeneratingChange }) => {
     setGenerating(true);
     onGeneratingChange?.(true);
     apiService.generatePlaylist(prompt.trim(), DEFAULT_SIZE)
-      .then((response) => setData(response.data))
+      .then((response) => {
+        setData(response.data);
+        // The server autosaves every non-empty generation as a real playlist
+        // and returns it; surface its name so it can be found again later.
+        const saved = response.data?.playlist;
+        if (saved?.id && response.data.tracks?.length > 0) onPlaylistSaved?.(saved.name, SAVED_TOAST_MS);
+      })
       .catch((err) => {
         if (err?.response?.status === 429) {
           setRateLimitMessage(err.response?.data?.error ?? 'Limit reached — try again later.');
@@ -98,6 +106,9 @@ const JukeboxAiMixTab = ({ onBack, onEnqueue, onGeneratingChange }) => {
 
       {!error && !rateLimitMessage && ready && (
         <>
+          {data.playlist?.id && (
+            <p className="jukebox-ai-mix-saved">Saved as playlist: "{data.playlist.name}"</p>
+          )}
           <div className="jukebox-tracks-panel-actions">
             <button type="button" onClick={() => { queue.play(); onEnqueue?.(); }}>Play mix</button>
             <button type="button" onClick={() => { queue.addToQueue(); onEnqueue?.(); }}>Add to queue</button>

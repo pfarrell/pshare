@@ -70,10 +70,10 @@ const JukeboxApp = () => {
   const [toastMessage, setToastMessage] = useState(null);
   const toastTimerRef = useRef(null);
   useEffect(() => () => clearTimeout(toastTimerRef.current), []);
-  const showToast = (message) => {
+  const showToast = (message, durationMs = TOAST_DURATION_MS) => {
     setToastMessage(message);
     clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setToastMessage(null), TOAST_DURATION_MS);
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), durationMs);
   };
   const handleEnqueue = () => {
     closeAll();
@@ -81,7 +81,9 @@ const JukeboxApp = () => {
   };
   // Saving doesn't close the drawer or interrupt playback — Next Up stays
   // open and the queue keeps playing, unlike enqueue above.
-  const handlePlaylistSaved = (name) => showToast(`Saved as "${name}"`);
+  // durationMs lets AI Mix hold the name on screen longer, since a generated
+  // playlist's name isn't one you typed and needs to be read to be remembered.
+  const handlePlaylistSaved = (name, durationMs) => showToast(`Saved as "${name}"`, durationMs);
   // "Close the album/artist page and show this item as if we'd searched" —
   // switches to Browse (a no-op if already there) and hands the item to the
   // drawer. Generic over artist/album so both the tracks panel's artist link

@@ -3635,6 +3635,12 @@ body:has(.jukebox-app) {
 .jukebox-ai-mix-partial {
   opacity: 0.7;
 }
+.jukebox-ai-mix-saved {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #86efac;
+}
 
 /* Indeterminate loading state while a generation is in flight (up to ~55s:
    45s generation + up to 10s autosave name suggestion) — honest about not

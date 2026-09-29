@@ -62,6 +62,31 @@ test('tapping Generate calls generatePlaylist with the prompt and renders result
   });
 });
 
+test('shows the autosaved playlist name and reports it up when the server saved one', async () => {
+  const onPlaylistSaved = vi.fn();
+  apiService.generatePlaylist.mockResolvedValue({
+    data: { playlist: { id: 9, name: 'Sunday Kitchen', image_path: null }, tracks: someTracks },
+  });
+  renderTab({ onPlaylistSaved });
+  fireEvent.change(screen.getByPlaceholderText(/describe what you want to hear/i), { target: { value: 'sunday' } });
+  fireEvent.click(screen.getByRole('button', { name: /generate/i }));
+
+  await waitFor(() => expect(screen.getByText(/Saved as playlist: "Sunday Kitchen"/)).toBeInTheDocument());
+  expect(onPlaylistSaved).toHaveBeenCalledWith('Sunday Kitchen', 5000);
+});
+
+test('shows no saved-name line and reports nothing when the result was not saved (no playlist id)', async () => {
+  const onPlaylistSaved = vi.fn();
+  apiService.generatePlaylist.mockResolvedValue(generateResponse(someTracks));
+  renderTab({ onPlaylistSaved });
+  fireEvent.change(screen.getByPlaceholderText(/describe what you want to hear/i), { target: { value: 'x' } });
+  fireEvent.click(screen.getByRole('button', { name: /generate/i }));
+
+  await waitFor(() => expect(screen.getByText(/Track One/)).toBeInTheDocument());
+  expect(screen.queryByText(/Saved as playlist/)).not.toBeInTheDocument();
+  expect(onPlaylistSaved).not.toHaveBeenCalled();
+});
+
 test('shows a partial-results note when fewer tracks come back than requested', async () => {
   apiService.generatePlaylist.mockResolvedValue(generateResponse([someTracks[0]]));
   renderTab();

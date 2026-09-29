@@ -55,6 +55,7 @@ vi.mock('./JukeboxBrowsePanel', () => ({
       <button onClick={() => onGeneratingChange(true)}>trigger-generating-start</button>
       <button onClick={() => onGeneratingChange(false)}>trigger-generating-end</button>
       <button onClick={() => onPlaylistSaved('Road Trip')}>trigger-playlist-saved</button>
+      <button onClick={() => onPlaylistSaved('Long Name', 5000)}>trigger-playlist-saved-long</button>
     </div>
   ),
 }));
@@ -198,6 +199,19 @@ describe('enqueue toast', () => {
     fireEvent.click(screen.getByText('trigger-enqueue'));
 
     expect(screen.getByRole('status')).toHaveTextContent('Added to queue');
+  });
+
+  test('a save reported with a longer duration outlasts the default toast', async () => {
+    vi.useFakeTimers();
+    renderApp();
+    fireEvent.click(nowPlayingTap());
+    fireEvent.click(screen.getByText('trigger-playlist-saved-long'));
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(screen.getByRole('status')).toHaveTextContent('Saved as "Long Name"');
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
   test('the toast auto-dismisses', async () => {
