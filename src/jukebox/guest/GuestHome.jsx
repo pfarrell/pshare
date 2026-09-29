@@ -5,8 +5,7 @@ import { useGuestFetch } from './useGuestFetch';
 import GuestRow from './GuestRow';
 import GuestAddButton from './GuestAddButton';
 import GuestStatus from './GuestStatus';
-
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+import { plural } from './plural';
 
 const GuestHome = () => {
   const { token, path } = useGuest();
@@ -30,7 +29,7 @@ const GuestHome = () => {
           action={<GuestAddButton itemKey={`album-${item.id}`} label={item.title ?? 'album'} kind="album" id={item.id} variant="all" />} />
       ) : (
         <GuestRow key={item.id} to={path(`artist/${item.id}`)} imageUrl={apiService.getImageUrl(item.image_path, 'artist_search')}
-          title={item.name ?? ''} subtitle={item.album_count != null ? plural(item.album_count, 'album') : ''}
+          title={item.name ?? ''} subtitle={plural(item.album_count, 'album')}
           action={<GuestAddButton itemKey={`artist-${item.id}`} label={item.name ?? 'artist'} kind="artist" id={item.id} variant="all" />} />
       )))}
     </>

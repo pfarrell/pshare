@@ -51,3 +51,9 @@ test('a null artist on an album card does not crash', async () => {
   expect(await screen.findByText('Mystery')).toBeInTheDocument();
   expect(screen.queryByText(/undefined|\[object/)).not.toBeInTheDocument();
 });
+
+test('an album count that arrives as a numeric string still pluralizes ("1 album")', async () => {
+  apiService.guestHome.mockResolvedValue({ data: [{ id: 1, name: 'ABBA', image_path: null, album_count: '1' }] });
+  renderHome();
+  expect(await screen.findByText('1 album')).toBeInTheDocument();
+});

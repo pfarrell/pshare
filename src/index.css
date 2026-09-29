@@ -3918,8 +3918,8 @@ body:has(.jukebox-app) {
 
 .jukebox-guest-add-all {
   min-width: 0;
-  min-height: 2.25rem;
-  margin: 0.25rem 0;
+  min-height: 2.75rem;  /* iOS minimum touch target */
+  margin: 0;
   padding: 0 0.9rem;
   background: var(--color-bg-surface-muted);
   font-size: 0.85rem;

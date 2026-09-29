@@ -6,10 +6,10 @@ import { useGuestFetch } from './useGuestFetch';
 import GuestRow from './GuestRow';
 import GuestAddButton from './GuestAddButton';
 import GuestStatus from './GuestStatus';
+import { plural } from './plural';
 
 const MIN_QUERY = 3;
 const PREVIEW = 5;
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 const Section = ({ title, items, render }) => {
   const [showAll, setShowAll] = useState(false);
@@ -58,7 +58,7 @@ const GuestSearch = () => {
     <>
       <Section title="Artists" items={artists} render={(a) => (
         <GuestRow key={a.id} to={path(`artist/${a.id}`)} imageUrl={apiService.getImageUrl(a.image_path, 'artist_search')}
-          title={a.name ?? ''} subtitle={a.album_count != null ? plural(a.album_count, 'album') : ''}
+          title={a.name ?? ''} subtitle={plural(a.album_count, 'album')}
           action={<GuestAddButton itemKey={`artist-${a.id}`} label={a.name ?? 'artist'} kind="artist" id={a.id} variant="all" />} />
       )} />
       <Section title="Albums" items={albums} render={(a) => (
@@ -68,12 +68,12 @@ const GuestSearch = () => {
       )} />
       <Section title="Playlists" items={playlists} render={(p) => (
         <GuestRow key={p.id} to={path(`playlist/${p.id}`)} imageUrl={apiService.getImageUrl(p.image_path, 'album_small')}
-          title={p.name ?? ''} subtitle={p.track_count != null ? plural(p.track_count, 'track') : ''}
+          title={p.name ?? ''} subtitle={plural(p.track_count, 'track')}
           action={<GuestAddButton itemKey={`playlist-${p.id}`} label={p.name ?? 'playlist'} kind="playlist" id={p.id} variant="all" />} />
       )} />
       <Section title="Collections" items={collections} render={(c) => (
         <GuestRow key={c.id} to={path(`collection/${c.id}`)} imageUrl={apiService.getImageUrl(c.image_path, 'album_small')}
-          title={c.name ?? ''} subtitle={c.album_count != null ? plural(c.album_count, 'album') : ''}
+          title={c.name ?? ''} subtitle={plural(c.album_count, 'album')}
           action={<GuestAddButton itemKey={`collection-${c.id}`} label={c.name ?? 'collection'} kind="collection" id={c.id} variant="all" />} />
       )} />
       <Section title="Tracks" items={tracks} render={(t) => (

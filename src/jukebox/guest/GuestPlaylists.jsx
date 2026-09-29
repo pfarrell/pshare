@@ -4,6 +4,7 @@ import { useGuestFetch } from './useGuestFetch';
 import GuestRow from './GuestRow';
 import GuestAddButton from './GuestAddButton';
 import GuestStatus from './GuestStatus';
+import { plural } from './plural';
 
 const GuestPlaylists = () => {
   const { token, path } = useGuest();
@@ -16,14 +17,11 @@ const GuestPlaylists = () => {
       <h1 className="jukebox-guest-heading">Playlists</h1>
       <GuestStatus loading={loading} error={error} notFound={notFound} onRetry={retry} />
       {!loading && !error && !notFound && items.length === 0 && <div className="jukebox-guest-message">No playlists yet.</div>}
-      {items.map((p) => {
-        const count = p.track_count ?? 0;
-        return (
-          <GuestRow key={p.id} to={path(`playlist/${p.id}`)} imageUrl={apiService.getImageUrl(cover(p), 'album_small')}
-            title={p.name ?? ''} subtitle={`${count} ${count === 1 ? 'track' : 'tracks'}`}
-            action={<GuestAddButton itemKey={`playlist-${p.id}`} label={p.name ?? 'playlist'} kind="playlist" id={p.id} variant="all" />} />
-        );
-      })}
+      {items.map((p) => (
+        <GuestRow key={p.id} to={path(`playlist/${p.id}`)} imageUrl={apiService.getImageUrl(cover(p), 'album_small')}
+          title={p.name ?? ''} subtitle={plural(p.track_count ?? 0, 'track')}
+          action={<GuestAddButton itemKey={`playlist-${p.id}`} label={p.name ?? 'playlist'} kind="playlist" id={p.id} variant="all" />} />
+      ))}
     </>
   );
 };

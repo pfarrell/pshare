@@ -5,6 +5,7 @@ import { useGuestFetch } from './useGuestFetch';
 import GuestTrackList from './GuestTrackList';
 import GuestAddButton from './GuestAddButton';
 import GuestStatus from './GuestStatus';
+import { plural } from './plural';
 
 const GuestPlaylist = () => {
   const { id } = useParams();
@@ -23,7 +24,7 @@ const GuestPlaylist = () => {
       <div className="jukebox-guest-detail-header">
         <div className="jukebox-guest-detail-text">
           <h1>{playlist?.name ?? ''}</h1>
-          <span className="jukebox-guest-detail-meta">{trackIds.length} {trackIds.length === 1 ? 'track' : 'tracks'}</span>
+          <span className="jukebox-guest-detail-meta">{plural(trackIds.length, 'track')}</span>
         </div>
         <GuestAddButton itemKey={`playlist-${playlist?.id}`} label={playlist?.name ?? 'playlist'} trackIds={trackIds} variant="all" />
       </div>
