@@ -9,7 +9,6 @@ import JukeboxKeyboard from './JukeboxKeyboard';
 import { useJukeboxKeyboardFocus } from './useJukeboxKeyboardFocus';
 import { useJukeboxQueueEvents } from './useJukeboxQueueEvents';
 import MusicPlayerWrapper from '../components/player/MusicPlayerWrapper';
-import { usePlayerStore } from '../stores/playerStore';
 import { useJukeboxScreensaverStore } from '../stores/jukeboxScreensaverStore';
 import JukeboxScreensaver from './JukeboxScreensaver';
 
@@ -18,9 +17,9 @@ import JukeboxScreensaver from './JukeboxScreensaver';
 const IDLE_CLOSE_MS = 15000;
 // How long the enqueue confirmation toast stays visible.
 const TOAST_DURATION_MS = 2500;
-// How long the kiosk must sit idle (drawer closed, nothing playing) before
-// the screensaver takes over.
-const SCREENSAVER_IDLE_MS = 5 * 60 * 1000;
+// How long the kiosk must sit untouched (drawer closed; playback or not)
+// before the screensaver takes over.
+const SCREENSAVER_IDLE_MS = 2 * 60 * 1000;
 
 const JukeboxApp = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -48,7 +47,6 @@ const JukeboxApp = () => {
   // until jukeboxDeviceId is known (pre-login). Called unconditionally, like
   // useJukeboxKeyboardFocus above, since it's a hook.
   useJukeboxQueueEvents(jukeboxDeviceId);
-  const isPlaying = usePlayerStore((s) => s.isPlaying);
   const screensaverMode = useJukeboxScreensaverStore((s) => s.mode);
 
   // Enqueueing something (a track, an album, an artist/collection shuffle)
@@ -131,15 +129,16 @@ const JukeboxApp = () => {
   }, [activeDestination, aiMixGenerating]);
 
   // Idle screensaver: armed only from the closed-drawer Now Playing screen
-  // with nothing playing (never while a drawer destination is open — see
-  // the drawer's own idle-close effect above, which returns here first).
-  // Any pointerdown anywhere resets the timer; playback starting, the
-  // drawer opening, or the feature being turned off in Settings all force
-  // it off immediately, not just block future activations.
+  // (never while a drawer destination is open — see the drawer's own
+  // idle-close effect above, which returns here first). Playback does not
+  // matter: art shows over a playing kiosk too, and audio keeps going
+  // underneath. Any pointerdown anywhere resets the timer; the drawer
+  // opening or the feature being turned off in Settings force it off
+  // immediately, not just block future activations.
   const [screensaverActive, setScreensaverActive] = useState(false);
   const screensaverTimerRef = useRef(null);
   useEffect(() => {
-    if (activeDestination !== null || isPlaying || screensaverMode === 'off') {
+    if (activeDestination !== null || screensaverMode === 'off') {
       clearTimeout(screensaverTimerRef.current);
       setScreensaverActive(false);
       return undefined;
@@ -154,7 +153,7 @@ const JukeboxApp = () => {
       clearTimeout(screensaverTimerRef.current);
       document.removeEventListener('pointerdown', arm);
     };
-  }, [activeDestination, isPlaying, screensaverMode]);
+  }, [activeDestination, screensaverMode]);
 
   // Explicit alongside the effect's own teardown above (which fires once
   // activeDestination changes) so the dismissal is immediate rather than

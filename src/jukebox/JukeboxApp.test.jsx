@@ -412,9 +412,9 @@ describe('drawer inactivity auto-close', () => {
 });
 
 describe('idle screensaver', () => {
-  const SCREENSAVER_IDLE_MS = 5 * 60 * 1000;
+  const SCREENSAVER_IDLE_MS = 2 * 60 * 1000;
 
-  test('activates after 5 minutes idle with the drawer closed and nothing playing', async () => {
+  test('activates after 2 minutes idle with the drawer closed and nothing playing', async () => {
     vi.useFakeTimers();
     renderApp();
 
@@ -423,7 +423,7 @@ describe('idle screensaver', () => {
     expect(screen.getByTestId('jukebox-screensaver')).toBeInTheDocument();
   });
 
-  test('does not activate before 5 minutes have passed', async () => {
+  test('does not activate before 2 minutes have passed', async () => {
     vi.useFakeTimers();
     renderApp();
 
@@ -436,13 +436,13 @@ describe('idle screensaver', () => {
     vi.useFakeTimers();
     renderApp();
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(4 * 60 * 1000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(90 * 1000); });
     fireEvent.pointerDown(document.body);
-    await act(async () => { await vi.advanceTimersByTimeAsync(4 * 60 * 1000); }); // 8 min total, 4 min since the reset
+    await act(async () => { await vi.advanceTimersByTimeAsync(90 * 1000); }); // 3 min total, 90s since the reset
 
     expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(60 * 1000); }); // 5 min since the reset
+    await act(async () => { await vi.advanceTimersByTimeAsync(30 * 1000); }); // 2 min since the reset
 
     expect(screen.getByTestId('jukebox-screensaver')).toBeInTheDocument();
   });
@@ -457,14 +457,31 @@ describe('idle screensaver', () => {
     expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
   });
 
-  test('does not arm while something is playing', async () => {
+  test('arms while something is playing, so art shows over playback', async () => {
     vi.useFakeTimers();
     usePlayerStore.mockReturnValue(true);
     renderApp();
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
-
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS - 1000); });
     expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(screen.getByTestId('jukebox-screensaver')).toBeInTheDocument();
+  });
+
+  test('dismissing during playback hides it and re-arms a fresh timer', async () => {
+    vi.useFakeTimers();
+    usePlayerStore.mockReturnValue(true);
+    renderApp();
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
+    expect(screen.getByTestId('jukebox-screensaver')).toBeInTheDocument();
+
+    fireEvent.pointerDown(screen.getByText('trigger-screensaver-dismiss'));
+    fireEvent.click(screen.getByText('trigger-screensaver-dismiss'));
+    expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
+    expect(screen.getByTestId('jukebox-screensaver')).toBeInTheDocument();
   });
 
   test('does not arm when the mode is off', async () => {
@@ -510,7 +527,7 @@ describe('idle screensaver', () => {
     expect(screen.getByTestId('jukebox-screensaver')).toBeInTheDocument();
   });
 
-  test('playback starting while the screensaver is active dismisses it automatically', async () => {
+  test('playback starting while the screensaver is active leaves it up', async () => {
     vi.useFakeTimers();
     const { rerender } = renderApp();
     await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
@@ -519,7 +536,7 @@ describe('idle screensaver', () => {
     usePlayerStore.mockReturnValue(true);
     rerender(<MemoryRouter><JukeboxApp /></MemoryRouter>);
 
-    expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+    expect(screen.getByTestId('jukebox-screensaver')).toBeInTheDocument();
   });
 
   test('choosing View from the screensaver closes it, opens Browse, and carries the item along', async () => {

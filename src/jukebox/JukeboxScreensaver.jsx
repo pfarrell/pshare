@@ -30,8 +30,8 @@ const interleave = (a, b) => {
   return out;
 };
 
-// Idle screensaver: cycles full-bleed art while the kiosk sits untouched
-// with nothing playing. JukeboxApp owns activation/deactivation and which
+// Idle screensaver: cycles full-bleed art while the kiosk sits untouched,
+// whether or not music is playing. JukeboxApp owns activation/deactivation and which
 // mode is active (see its idle-trigger effect) — this component is mounted
 // only while active, so every mount starts a fresh fetch; there's no state
 // worth preserving across dismissals. Renders null whenever it has no
