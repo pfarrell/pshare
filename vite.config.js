@@ -50,7 +50,10 @@ export default defineConfig({
         // successfully installed stays in control indefinitely, serving an
         // increasingly stale app shell/JS as later deploys rsync --delete the
         // old asset files that stale shell still references.
-        globIgnores: ['images/**'],
+        // The visualizer chunk is lazily imported and only ever reachable from
+        // the jukebox kiosk. Precaching it would push ~800KB into every PWA
+        // install, including the iOS phones that never mount the visualizer.
+        globIgnores: ['images/**', 'assets/visualizer-*.js'],
         navigateFallback: '/pshare/app/index.html',
         runtimeCaching: [
           {
@@ -114,7 +117,13 @@ export default defineConfig({
     assetsDir: 'assets',
     rollupOptions: {
       output: {
-        manualChunks: undefined,
+        // Keep butterchurn and its preset pack (~800KB combined) in one
+        // predictably-named chunk so workbox.globIgnores above can exclude it
+        // from the precache manifest by filename.
+        manualChunks(id) {
+          if (id.includes('butterchurn')) return 'visualizer';
+          return undefined;
+        },
       },
     },
   },
