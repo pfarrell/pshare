@@ -600,6 +600,55 @@ test('tapping the footer queue button while on Next Up returns to Browse', () =>
   expect(activeDestination()).toBe('browse');
 });
 
+// A testing aid: localStorage 'jukebox-screensaver-idle-seconds' shortens the
+// idle delay without a redeploy. The default stays 2 minutes.
+describe('screensaver idle override', () => {
+  const KEY = 'jukebox-screensaver-idle-seconds';
+  const DEFAULT_MS = 2 * 60 * 1000;
+
+  afterEach(() => {
+    localStorage.removeItem(KEY);
+  });
+
+  test('a stored override shortens the idle delay', async () => {
+    localStorage.setItem(KEY, '15');
+    vi.useFakeTimers();
+    renderApp();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(14000); });
+    expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(screen.getByTestId('jukebox-screensaver')).toBeInTheDocument();
+  });
+
+  test.each([
+    ['not a number', 'soon'],
+    ['zero', '0'],
+    ['negative', '-5'],
+    ['below the 5 second floor', '2'],
+  ])('an override that is %s falls back to the 2 minute default', async (_label, value) => {
+    localStorage.setItem(KEY, value);
+    vi.useFakeTimers();
+    renderApp();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(DEFAULT_MS - 1000); });
+    expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(screen.getByTestId('jukebox-screensaver')).toBeInTheDocument();
+  });
+
+  test('with no override the default is still 2 minutes', async () => {
+    vi.useFakeTimers();
+    renderApp();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
+
+    expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+  });
+});
+
 describe('visualizer screensaver', () => {
   const SCREENSAVER_IDLE_MS = 2 * 60 * 1000;
 

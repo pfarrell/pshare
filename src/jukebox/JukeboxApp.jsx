@@ -22,6 +22,22 @@ const TOAST_DURATION_MS = 2500;
 // How long the kiosk must sit untouched (drawer closed; playback or not)
 // before the screensaver takes over.
 const SCREENSAVER_IDLE_MS = 2 * 60 * 1000;
+// Testing aid: a whole number of seconds in localStorage under this key
+// shortens the idle delay without a redeploy (e.g. to watch the screensaver
+// without waiting two minutes). Anything unusable, or under the floor, is
+// ignored so a typo can never make the screensaver fire constantly.
+const SCREENSAVER_IDLE_OVERRIDE_KEY = 'jukebox-screensaver-idle-seconds';
+const SCREENSAVER_IDLE_MIN_SECONDS = 5;
+
+const screensaverIdleMs = () => {
+  try {
+    const seconds = Number(localStorage.getItem(SCREENSAVER_IDLE_OVERRIDE_KEY));
+    if (Number.isFinite(seconds) && seconds >= SCREENSAVER_IDLE_MIN_SECONDS) return seconds * 1000;
+  } catch {
+    // localStorage can throw (private windows, blocked site data); use the default.
+  }
+  return SCREENSAVER_IDLE_MS;
+};
 
 const JukeboxApp = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -153,7 +169,7 @@ const JukeboxApp = () => {
     }
     const arm = () => {
       clearTimeout(screensaverTimerRef.current);
-      screensaverTimerRef.current = setTimeout(() => setScreensaverActive(true), SCREENSAVER_IDLE_MS);
+      screensaverTimerRef.current = setTimeout(() => setScreensaverActive(true), screensaverIdleMs());
     };
     arm();
     document.addEventListener('pointerdown', arm);
