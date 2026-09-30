@@ -111,6 +111,18 @@ describe('screensaver mode selector', () => {
     expect(musicButton.parentElement).not.toBe(allButton.parentElement);
   });
 
+  test('offers a Visualizer screensaver option and selects it on click', async () => {
+    render(<JukeboxSettingsTab />);
+    await waitFor(() => screen.getByText('Kids'));
+
+    expect(screen.getByRole('button', { name: 'Visualizer' })).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Visualizer' }));
+
+    expect(useJukeboxScreensaverStore.getState().mode).toBe('visualizer');
+    expect(screen.getByRole('button', { name: 'Visualizer' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   describe('Exit kiosk', () => {
     afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
