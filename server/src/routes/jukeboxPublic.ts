@@ -297,10 +297,11 @@ jukeboxPublic.post('/:token/:kind/:id/random-tracks', loadDeviceForRead, async (
 // --- Remote control ------------------------------------------------------
 // A logged-in user (valid auth cookie) can drive the kiosk's transport. Guests
 // cannot: the cookie is required, unlike the queue endpoint. No seeking, and
-// no state comes back: the phone never learns whether the kiosk is playing,
-// so "toggle" is deliberately a blind toggle.
+// no play state comes back: "toggle" is deliberately a blind toggle. jump and
+// remove address a queue row (see GET /:token/queue).
 export const GUEST_COMMANDS_PER_MINUTE = 30
-const PLAYBACK_COMMANDS = ['toggle', 'next', 'prev']
+const PLAYBACK_COMMANDS = ['toggle', 'next', 'prev', 'jump', 'remove']
+const INDEXED_COMMANDS = ['jump', 'remove']
 const commandsAllowed = createFixedWindowLimiter(GUEST_COMMANDS_PER_MINUTE, 60_000)
 
 jukeboxPublic.post('/:token/command', loadDeviceByToken, async (c: any) => {
@@ -314,11 +315,22 @@ jukeboxPublic.post('/:token/command', loadDeviceByToken, async (c: any) => {
     return c.json({ error: `command must be one of ${PLAYBACK_COMMANDS.join(', ')}` }, 400)
   }
 
+  // jump/remove address a queue row: the kiosk checks that row still holds
+  // trackId before acting, so a stale phone view can never hit the wrong track.
+  let payload: { command: string; index?: number; trackId?: number } = { command }
+  if (INDEXED_COMMANDS.includes(command)) {
+    const { index, trackId } = body
+    if (!Number.isInteger(index) || index < 0 || !Number.isInteger(trackId)) {
+      return c.json({ error: 'index (non-negative integer) and trackId (integer) are required' }, 400)
+    }
+    payload = { command, index, trackId }
+  }
+
   if (!commandsAllowed(device.enqueue_token)) {
     return c.json({ error: 'Too many commands, try again in a moment' }, 429)
   }
 
-  if (sseBroadcaster.broadcastPlaybackCommand(device.id, { command }) === 0) {
+  if (sseBroadcaster.broadcastPlaybackCommand(device.id, payload) === 0) {
     return c.json({ error: 'The jukebox is not connected' }, 409)
   }
 

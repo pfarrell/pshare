@@ -498,3 +498,72 @@ test('POST /jukebox/:token/command is rate limited per token', async () => {
   assert.equal(limited, 3)
   unsub()
 })
+
+const postCommandBody = (token: string, body: unknown, cookie?: string) =>
+  app().request(`/jukebox/${token}/command`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(cookie ? { cookie } : {}) },
+    body: JSON.stringify(body),
+  })
+
+test('POST command jump and remove broadcast the row index and track id', async () => {
+  const device = await guestDevice('jpub-cmd-indexed')
+  const user = await createUser('jpub-cmd-indexed-user')
+  const received: unknown[] = []
+  const unsub = sseBroadcaster.subscribeToCommands(device.id, (p) => received.push(p))
+
+  for (const command of ['jump', 'remove']) {
+    const res = await postCommandBody(device.enqueue_token, { command, index: 3, trackId: 42 }, authCookieFor(user))
+    assert.equal(res.status, 200, command)
+  }
+
+  assert.deepEqual(received, [
+    { command: 'jump', index: 3, trackId: 42 },
+    { command: 'remove', index: 3, trackId: 42 },
+  ])
+  unsub()
+})
+
+test('POST command jump and remove 400 without a valid non-negative integer index and an integer trackId', async () => {
+  const device = await guestDevice('jpub-cmd-indexed-bad')
+  const user = await createUser('jpub-cmd-indexed-bad-user')
+  const received: unknown[] = []
+  const unsub = sseBroadcaster.subscribeToCommands(device.id, (p) => received.push(p))
+
+  const bodies = [
+    { command: 'jump' },
+    { command: 'jump', index: 0 },
+    { command: 'jump', trackId: 1 },
+    { command: 'jump', index: -1, trackId: 1 },
+    { command: 'remove', index: 1.5, trackId: 1 },
+    { command: 'remove', index: '2', trackId: 1 },
+    { command: 'remove', index: 2, trackId: '1' },
+    { command: 'remove', index: 2, trackId: null },
+  ]
+  for (const body of bodies) {
+    const res = await postCommandBody(device.enqueue_token, body, authCookieFor(user))
+    assert.equal(res.status, 400, JSON.stringify(body))
+  }
+  assert.deepEqual(received, [])
+  unsub()
+})
+
+test('POST command toggle/next/prev drop any extra index or trackId', async () => {
+  const device = await guestDevice('jpub-cmd-extra')
+  const user = await createUser('jpub-cmd-extra-user')
+  const received: unknown[] = []
+  const unsub = sseBroadcaster.subscribeToCommands(device.id, (p) => received.push(p))
+
+  await postCommandBody(device.enqueue_token, { command: 'next', index: 7, trackId: 8 }, authCookieFor(user))
+
+  assert.deepEqual(received, [{ command: 'next' }])
+  unsub()
+})
+
+test('POST command jump requires a login like every other command', async () => {
+  const device = await guestDevice('jpub-cmd-indexed-anon')
+  const unsub = sseBroadcaster.subscribeToCommands(device.id, () => {})
+  const res = await postCommandBody(device.enqueue_token, { command: 'jump', index: 1, trackId: 2 })
+  assert.equal(res.status, 401)
+  unsub()
+})
