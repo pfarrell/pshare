@@ -321,3 +321,30 @@ describe('jump and remove commands (queue control from a logged-in phone)', () =
     expect(requestJukeboxStatePublish).toHaveBeenCalledTimes(1);
   });
 });
+
+test('rebuilds the EventSource after the browser gives up on it (CLOSED), e.g. a 502 during a deploy', () => {
+  vi.useFakeTimers();
+  try {
+    const { unmount } = renderHook(() => useJukeboxQueueEvents(7));
+    expect(FakeEventSource.instances.length).toBe(1);
+    const first = FakeEventSource.instances[0];
+
+    first.readyState = 2;
+    first.emit('error');
+    vi.advanceTimersByTime(2000);
+    expect(first.closed).toBe(true);
+    expect(FakeEventSource.instances.length).toBe(2);
+
+    // a transient error while the browser is still retrying (CONNECTING) must not spawn another
+    const second = FakeEventSource.instances[1];
+    second.readyState = 0;
+    second.emit('error');
+    vi.advanceTimersByTime(60000);
+    expect(FakeEventSource.instances.length).toBe(2);
+
+    unmount();
+    expect(second.closed).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
+});

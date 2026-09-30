@@ -101,17 +101,39 @@ export const useJukeboxQueueEvents = (deviceId) => {
       }
     };
 
-    const source = new EventSource(jukeboxEventsUrl(deviceId), { withCredentials: true });
-    // 'open' fires on the initial connection and every reconnect (including
-    // after a server restart, which drops the in-memory queue snapshot).
-    source.addEventListener('open', () => {
-      fetchPending();
-      requestJukeboxStatePublish();
-    });
-    source.addEventListener('queue-item-added', (event) => deliverBatch([JSON.parse(event.data)]));
-    source.addEventListener('profiles-changed', () => invalidateProfilesCache());
-    source.addEventListener('playback-command', handlePlaybackCommand);
+    // The browser only retries on its own for dropped connections. If the server
+    // answers with a non-200 (nginx returns 502 while the API restarts on a
+    // deploy), the EventSource goes CLOSED for good and the kiosk silently stops
+    // listening, so phones see "not connected". Rebuild it ourselves with backoff.
+    const EVENT_SOURCE_CLOSED = 2;
+    let source = null;
+    let retryTimer = null;
+    let retryDelay = 2000;
 
-    return () => source.close();
+    const connect = () => {
+      source = new EventSource(jukeboxEventsUrl(deviceId), { withCredentials: true });
+      // 'open' fires on the initial connection and every reconnect (including
+      // after a server restart, which drops the in-memory queue snapshot).
+      source.addEventListener('open', () => {
+        retryDelay = 2000;
+        fetchPending();
+        requestJukeboxStatePublish();
+      });
+      source.addEventListener('error', () => {
+        if (source.readyState !== EVENT_SOURCE_CLOSED) return; // browser is retrying
+        source.close();
+        retryTimer = setTimeout(connect, retryDelay);
+        retryDelay = Math.min(retryDelay * 2, 30000);
+      });
+      source.addEventListener('queue-item-added', (event) => deliverBatch([JSON.parse(event.data)]));
+      source.addEventListener('profiles-changed', () => invalidateProfilesCache());
+      source.addEventListener('playback-command', handlePlaybackCommand);
+    };
+    connect();
+
+    return () => {
+      clearTimeout(retryTimer);
+      source.close();
+    };
   }, [deviceId]);
 };
