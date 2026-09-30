@@ -58,3 +58,9 @@ test('always shows the jukebox remote, on every guest page', () => {
   renderShell('/jukebox/tok/playlists');
   expect(screen.getByRole('button', { name: 'Jukebox play or pause' })).toBeInTheDocument();
 });
+
+test('the menu links to the Queue page', () => {
+  renderShell();
+  fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+  expect(screen.getByRole('link', { name: 'Queue' })).toHaveAttribute('href', '/jukebox/tok/queue');
+});

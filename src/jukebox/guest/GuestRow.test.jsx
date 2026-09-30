@@ -32,3 +32,16 @@ test('does not throw or print "undefined" when subtitle is missing', () => {
   renderRow({ title: 'Song' });
   expect(screen.queryByText(/undefined/)).not.toBeInTheDocument();
 });
+
+test('onSelect renders the main area as a button and calls it on tap', () => {
+  const onSelect = vi.fn();
+  renderRow({ title: 'Song', onSelect });
+  fireEvent.click(screen.getByRole('button', { name: /Song/ }));
+  expect(onSelect).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole('link')).not.toBeInTheDocument();
+});
+
+test('className is added to the row', () => {
+  const { container } = renderRow({ title: 'Song', className: 'jukebox-guest-row-current' });
+  expect(container.querySelector('.jukebox-guest-row.jukebox-guest-row-current')).not.toBeNull();
+});

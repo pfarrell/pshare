@@ -14,6 +14,7 @@ import GuestArtist from './GuestArtist';
 import GuestAlbum from './GuestAlbum';
 import GuestPlaylist from './GuestPlaylist';
 import GuestCollection from './GuestCollection';
+import GuestQueue from './GuestQueue';
 
 const GuestNotFound = () => {
   const { path } = useGuest();
@@ -48,6 +49,7 @@ const GuestApp = ({ token }) => {
           <Route path="collection/:id" element={<GuestCollection />} />
           <Route path="playlists" element={<GuestPlaylists />} />
           <Route path="collections" element={<GuestCollections />} />
+          <Route path="queue" element={<GuestQueue />} />
           <Route path="*" element={<GuestNotFound />} />
         </Route>
         <Route path="*" element={<GuestNotFound />} />

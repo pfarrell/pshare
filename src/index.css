@@ -4073,3 +4073,22 @@ body:has(.jukebox-app) {
   font-size: 1rem;
   font-weight: 600;
 }
+
+/* Phone Queue page */
+.jukebox-guest-row-button {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.jukebox-guest-row-current {
+  background: var(--color-bg-surface-muted);
+  border-left: 3px solid var(--color-link-accent);
+  padding-left: 0.5rem;
+}
+.jukebox-guest-remove {
+  min-width: 2.75rem;
+  font-size: 1.5rem;
+  color: var(--color-text-muted);
+}

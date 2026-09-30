@@ -48,6 +48,7 @@ const GuestShell = () => {
             <Link to={path('')}>Home</Link>
             <Link to={path('playlists')}>Playlists</Link>
             <Link to={path('collections')}>Collections</Link>
+            <Link to={path('queue')}>Queue</Link>
           </nav>
         )}
       </header>

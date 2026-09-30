@@ -11,7 +11,7 @@ const GuestArt = ({ imageUrl }) => {
 
 // One browse/search row: art, title, optional subtitle, and an action slot.
 // Title and subtitle are strings; callers own the fallbacks.
-const GuestRow = ({ to, imageUrl, title, subtitle, action }) => {
+const GuestRow = ({ to, onSelect, className, imageUrl, title, subtitle, action }) => {
   const body = (
     <>
       <GuestArt imageUrl={imageUrl} />
@@ -22,9 +22,18 @@ const GuestRow = ({ to, imageUrl, title, subtitle, action }) => {
     </>
   );
 
+  let main;
+  if (onSelect) {
+    main = <button type="button" className="jukebox-guest-row-main jukebox-guest-row-button" onClick={onSelect}>{body}</button>;
+  } else if (to) {
+    main = <Link className="jukebox-guest-row-main" to={to}>{body}</Link>;
+  } else {
+    main = <div className="jukebox-guest-row-main">{body}</div>;
+  }
+
   return (
-    <div className="jukebox-guest-row">
-      {to ? <Link className="jukebox-guest-row-main" to={to}>{body}</Link> : <div className="jukebox-guest-row-main">{body}</div>}
+    <div className={`jukebox-guest-row${className ? ` ${className}` : ''}`}>
+      {main}
       {action}
     </div>
   );
