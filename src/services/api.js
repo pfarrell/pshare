@@ -139,8 +139,12 @@ export const apiService = {
   guestCollections: (token) => api.get(`/jukebox/${token}/collections`),
   guestTrackIds: (token, kind, id) => api.get(`/jukebox/${token}/${kind}/${id}/track-ids`),
   guestRandomTracks: (token, kind, id) => api.post(`/jukebox/${token}/${kind}/${id}/random-tracks`),
-  // Remote control: a logged-in user drives the kiosk's transport. command is 'toggle' | 'next' | 'prev'.
-  sendJukeboxCommand: (token, command) => api.post(`/jukebox/${token}/command`, { command }),
+  // Remote control: a logged-in user drives the kiosk. command is 'toggle' | 'next' | 'prev',
+  // or 'jump' | 'remove' with params { index, trackId } naming a queue row.
+  sendJukeboxCommand: (token, command, params = {}) => api.post(`/jukebox/${token}/command`, { command, ...params }),
+  // Phone queue: the kiosk publishes its queue, phones read it.
+  publishJukeboxState: (deviceId, snapshot) => api.post(`/jukebox/devices/${deviceId}/state`, snapshot),
+  getJukeboxQueue: (token) => api.get(`/jukebox/${token}/queue`),
   getJukeboxPendingQueue: (deviceId) => api.get(`/jukebox/devices/${deviceId}/queue/pending`),
   markJukeboxDelivered: (deviceId, submissionId) => api.post(`/jukebox/devices/${deviceId}/queue/${submissionId}/delivered`),
   rotateJukeboxToken: (deviceId) => api.post(`/jukebox/devices/${deviceId}/rotate-token`),

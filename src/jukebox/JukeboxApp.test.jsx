@@ -63,6 +63,13 @@ vi.mock('./JukeboxKeyboard', () => ({
   default: ({ targetElement }) => (targetElement ? <div className="jukebox-keyboard" data-testid="jukebox-keyboard" /> : null),
 }));
 vi.mock('../stores/playerStore', () => ({ usePlayerStore: vi.fn() }));
+// The queue publisher subscribes to the real playerStore, which is a bare vi.fn()
+// here. Mocked with BOTH exports: useJukeboxQueueEvents imports
+// requestJukeboxStatePublish from the same module.
+vi.mock('./jukeboxStatePublisher', () => ({
+  useJukeboxStatePublisher: vi.fn(),
+  requestJukeboxStatePublish: vi.fn(),
+}));
 vi.mock('../stores/jukeboxScreensaverStore', () => ({ useJukeboxScreensaverStore: vi.fn() }));
 vi.mock('./JukeboxScreensaver', () => ({
   default: ({ mode, onDismiss, onView }) => (
@@ -77,6 +84,7 @@ vi.mock('./useJukeboxKeyboardFocus', () => ({ useJukeboxKeyboardFocus: vi.fn() }
 import { useAuthStore } from '../stores/authStore';
 import { useJukeboxKeyboardFocus } from './useJukeboxKeyboardFocus';
 import { usePlayerStore } from '../stores/playerStore';
+import { useJukeboxStatePublisher } from './jukeboxStatePublisher';
 import { useJukeboxScreensaverStore } from '../stores/jukeboxScreensaverStore';
 
 const renderApp = () => render(<MemoryRouter><JukeboxApp /></MemoryRouter>);
@@ -102,6 +110,11 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+test('mounts the queue publisher for phones once authenticated', () => {
+  renderApp();
+  expect(useJukeboxStatePublisher).toHaveBeenCalled();
 });
 
 test('shows JukeboxLogin when not authenticated', () => {

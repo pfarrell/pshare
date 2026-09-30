@@ -8,6 +8,7 @@ import JukeboxToast from './JukeboxToast';
 import JukeboxKeyboard from './JukeboxKeyboard';
 import { useJukeboxKeyboardFocus } from './useJukeboxKeyboardFocus';
 import { useJukeboxQueueEvents } from './useJukeboxQueueEvents';
+import { useJukeboxStatePublisher } from './jukeboxStatePublisher';
 import MusicPlayerWrapper from '../components/player/MusicPlayerWrapper';
 import { useJukeboxScreensaverStore } from '../stores/jukeboxScreensaverStore';
 import JukeboxScreensaver from './JukeboxScreensaver';
@@ -47,6 +48,8 @@ const JukeboxApp = () => {
   // until jukeboxDeviceId is known (pre-login). Called unconditionally, like
   // useJukeboxKeyboardFocus above, since it's a hook.
   useJukeboxQueueEvents(jukeboxDeviceId);
+  // Publishes the queue for the phone Queue page. Same null-until-known rule.
+  useJukeboxStatePublisher(jukeboxDeviceId);
   const screensaverMode = useJukeboxScreensaverStore((s) => s.mode);
 
   // Enqueueing something (a track, an album, an artist/collection shuffle)
