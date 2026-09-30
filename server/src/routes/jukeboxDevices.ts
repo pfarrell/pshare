@@ -11,6 +11,7 @@ import { requireOwnJukeboxDevice } from '../middleware/auth.js'
 import { jukeboxQueueService } from '../services/jukeboxQueueService.js'
 import { sseBroadcaster } from '../services/sseBroadcaster.js'
 import { jukeboxStateService, parseKioskState } from '../services/jukeboxStateService.js'
+import { readJsonBounded } from '../utils/readJsonBounded.js'
 
 const jukeboxDevices = new Hono()
 
@@ -78,9 +79,19 @@ jukeboxDevices.get('/:id/events', requireOwnJukeboxDevice, async (c) => {
 
 // The kiosk publishes what it has queued so phones can show it. A malformed or
 // oversized body is rejected and never replaces the previous snapshot.
+// A maximum-size legitimate snapshot (300 rows of 200-char text) is about 130 KB, so
+// 256 KB is generous; the cap is enforced while reading, before anything is parsed.
+const MAX_STATE_BODY_BYTES = 256 * 1024
+
 jukeboxDevices.post('/:id/state', requireOwnJukeboxDevice, async (c) => {
   const deviceId = parseInt(c.req.param('id'))
-  const state = parseKioskState(await c.req.json().catch(() => null))
+  const body = await readJsonBounded(c.req.raw, MAX_STATE_BODY_BYTES)
+  if (body.ok === false) {
+    return body.reason === 'too-large'
+      ? c.json({ error: 'State too large' }, 413)
+      : c.json({ error: 'Invalid state' }, 400)
+  }
+  const state = parseKioskState(body.value)
   if (!state) return c.json({ error: 'Invalid state' }, 400)
   jukeboxStateService.set(deviceId, state)
   return c.json({ ok: true })

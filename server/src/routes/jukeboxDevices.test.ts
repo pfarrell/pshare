@@ -211,6 +211,7 @@ const validState = () => ({
   queue: [{ index: 1, id: 7, title: 'Song', artist: 'Band' }],
   currentIndex: 1,
   isPlaying: true,
+  playbackMode: 'shuffle',
 })
 
 const postState = (deviceId: number, cookie: string | undefined, body: unknown) =>
@@ -262,4 +263,31 @@ test('POST /jukebox/devices/:id/state 403s for a different device and 401s witho
   assert.equal(wrong.status, 403)
   assert.equal(anon.status, 401)
   assert.equal(jukeboxStateService.get(other.id), undefined)
+})
+
+test('POST /jukebox/devices/:id/state 413s on an oversized body before parsing it, and keeps the previous snapshot', async () => {
+  const owner = await createUser('jdev-state-big-owner')
+  const device = await createJukeboxDevice('jdev-state-big-device', owner.id)
+  const cookie = deviceCookie(owner.id, owner.username, device.id)
+  await postState(device.id, cookie, validState())
+
+  const huge = await app().request(`/jukebox/devices/${device.id}/state`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ queue: [], currentIndex: -1, isPlaying: false, padding: 'x'.repeat(400 * 1024) }),
+  })
+
+  assert.equal(huge.status, 413)
+  assert.deepEqual(jukeboxStateService.get(device.id), validState())
+})
+
+test('POST /jukebox/devices/:id/state still accepts a maximum-size legitimate snapshot', async () => {
+  const owner = await createUser('jdev-state-max-owner')
+  const device = await createJukeboxDevice('jdev-state-max-device', owner.id)
+  const longText = 'x'.repeat(200)
+  const queue = Array.from({ length: 300 }, (_, i) => ({ index: i, id: i + 1, title: longText, artist: longText }))
+
+  const res = await postState(device.id, deviceCookie(owner.id, owner.username, device.id), { queue, currentIndex: 0, isPlaying: true, playbackMode: 'off' })
+
+  assert.equal(res.status, 200)
 })

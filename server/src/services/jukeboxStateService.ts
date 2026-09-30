@@ -2,7 +2,11 @@
 // read by phones. Latest write wins; nothing is persisted (a server restart
 // drops it and the kiosk republishes when its event stream reconnects).
 export type QueueEntry = { index: number; id: number; title: string; artist: string | null }
-export type KioskState = { queue: QueueEntry[]; currentIndex: number; isPlaying: boolean }
+// Mirrors playerStore.playbackMode. The phone needs it because 'shuffle' does not
+// play in queue order (and repeat-one replays the current track).
+export const PLAYBACK_MODES = ['off', 'shuffle', 'shuffle-scope', 'repeat-all', 'repeat-one'] as const
+export type PlaybackMode = (typeof PLAYBACK_MODES)[number]
+export type KioskState = { queue: QueueEntry[]; currentIndex: number; isPlaying: boolean; playbackMode: PlaybackMode }
 
 export const MAX_QUEUE_ENTRIES = 300
 export const MAX_TEXT_LENGTH = 200
@@ -27,6 +31,10 @@ function parseEntry(raw: any): QueueEntry | null {
 export function parseKioskState(body: unknown): KioskState | null {
   if (!body || typeof body !== 'object') return null
   const { queue, currentIndex, isPlaying } = body as any
+  // Optional so a kiosk page that has not reloaded yet still works: 'off'.
+  const rawMode = (body as any).playbackMode
+  const playbackMode = rawMode === undefined ? 'off' : rawMode
+  if (!PLAYBACK_MODES.includes(playbackMode)) return null
   if (!Array.isArray(queue) || queue.length > MAX_QUEUE_ENTRIES) return null
   if (!Number.isInteger(currentIndex) || currentIndex < -1) return null
   if (typeof isPlaying !== 'boolean') return null
@@ -37,7 +45,7 @@ export function parseKioskState(body: unknown): KioskState | null {
     if (!entry) return null
     entries.push(entry)
   }
-  return { queue: entries, currentIndex, isPlaying }
+  return { queue: entries, currentIndex, isPlaying, playbackMode }
 }
 
 const snapshots = new Map<number, KioskState>()

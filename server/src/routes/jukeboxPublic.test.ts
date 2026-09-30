@@ -577,6 +577,7 @@ const snapshot = () => ({
   ],
   currentIndex: 4,
   isPlaying: true,
+  playbackMode: 'shuffle' as const,
 })
 
 test('GET /jukebox/:token/queue 404s for an unknown token', async () => {
@@ -603,7 +604,7 @@ test('GET /jukebox/:token/queue never returns a stale queue when no kiosk is con
 
   const { body } = await getJson(`/jukebox/${device.enqueue_token}/queue`)
 
-  assert.deepEqual(body, { connected: false, queue: [], currentIndex: -1, isPlaying: false })
+  assert.deepEqual(body, { connected: false, queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off' })
 })
 
 test('GET /jukebox/:token/queue is connected with an empty queue before the kiosk has published', async () => {
@@ -612,7 +613,7 @@ test('GET /jukebox/:token/queue is connected with an empty queue before the kios
 
   const { body } = await getJson(`/jukebox/${device.enqueue_token}/queue`)
 
-  assert.deepEqual(body, { connected: true, queue: [], currentIndex: -1, isPlaying: false })
+  assert.deepEqual(body, { connected: true, queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off' })
   unsub()
 })
 

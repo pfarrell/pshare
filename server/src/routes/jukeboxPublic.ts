@@ -316,9 +316,9 @@ async function loadDeviceForQueue(c: any, next: any) {
 jukeboxPublic.get('/:token/queue', loadDeviceForQueue, async (c: any) => {
   const device = c.get('jukeboxTokenDevice')
   if (sseBroadcaster.commandListenerCount(device.id) === 0) {
-    return c.json({ connected: false, queue: [], currentIndex: -1, isPlaying: false })
+    return c.json({ connected: false, queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off' })
   }
-  const state = jukeboxStateService.get(device.id) ?? { queue: [], currentIndex: -1, isPlaying: false }
+  const state = jukeboxStateService.get(device.id) ?? { queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off' }
   return c.json({ connected: true, ...state })
 })
 

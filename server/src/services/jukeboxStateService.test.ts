@@ -11,12 +11,21 @@ const valid = () => ({
   isPlaying: true,
 })
 
-test('parses a valid snapshot', () => {
-  assert.deepEqual(parseKioskState(valid()), valid())
+test('parses a valid snapshot, defaulting the playback mode to off', () => {
+  assert.deepEqual(parseKioskState(valid()), { ...valid(), playbackMode: 'off' })
+})
+
+test('accepts every known playback mode and rejects anything else', () => {
+  for (const playbackMode of ['off', 'shuffle', 'shuffle-scope', 'repeat-all', 'repeat-one']) {
+    assert.equal(parseKioskState({ ...valid(), playbackMode })!.playbackMode, playbackMode)
+  }
+  for (const playbackMode of ['random', '', 5, null, {}]) {
+    assert.equal(parseKioskState({ ...valid(), playbackMode }), null, String(playbackMode))
+  }
 })
 
 test('accepts an empty queue with nothing playing', () => {
-  assert.deepEqual(parseKioskState({ queue: [], currentIndex: -1, isPlaying: false }), { queue: [], currentIndex: -1, isPlaying: false })
+  assert.deepEqual(parseKioskState({ queue: [], currentIndex: -1, isPlaying: false }), { queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off' })
 })
 
 test('trims over-long text and drops unknown fields', () => {
@@ -30,7 +39,7 @@ test('trims over-long text and drops unknown fields', () => {
   assert.equal(parsed.queue[0].title.length, MAX_TEXT_LENGTH)
   assert.equal(parsed.queue[0].artist!.length, MAX_TEXT_LENGTH)
   assert.deepEqual(Object.keys(parsed.queue[0]).sort(), ['artist', 'id', 'index', 'title'])
-  assert.deepEqual(Object.keys(parsed).sort(), ['currentIndex', 'isPlaying', 'queue'])
+  assert.deepEqual(Object.keys(parsed).sort(), ['currentIndex', 'isPlaying', 'playbackMode', 'queue'])
 })
 
 test('rejects malformed snapshots', () => {
@@ -57,10 +66,12 @@ test('accepts exactly the maximum number of entries', () => {
 })
 
 test('the store keeps only the latest snapshot per device', () => {
-  jukeboxStateService.set(901, valid())
-  jukeboxStateService.set(901, { queue: [], currentIndex: -1, isPlaying: false })
-  jukeboxStateService.set(902, valid())
-  assert.deepEqual(jukeboxStateService.get(901), { queue: [], currentIndex: -1, isPlaying: false })
-  assert.deepEqual(jukeboxStateService.get(902), valid())
+  const empty = { queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off' as const }
+  const full = { ...valid(), playbackMode: 'off' as const }
+  jukeboxStateService.set(901, full)
+  jukeboxStateService.set(901, empty)
+  jukeboxStateService.set(902, full)
+  assert.deepEqual(jukeboxStateService.get(901), empty)
+  assert.deepEqual(jukeboxStateService.get(902), full)
   assert.equal(jukeboxStateService.get(903), undefined)
 })
