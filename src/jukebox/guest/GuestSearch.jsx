@@ -54,8 +54,14 @@ const GuestSearch = () => {
     return <div className="jukebox-guest-message">No results for "{query}".</div>;
   }
 
+  // Tracks lead: a song-title search is the common case on a phone, and the
+  // fuzzy artist/album matches above them pushed tracks off the first screens.
   return (
     <>
+      <Section title="Tracks" items={tracks} render={(t) => (
+        <GuestRow key={t.id} title={t.artist?.name ? `${t.title ?? ''} - ${t.artist.name}` : (t.title ?? '')} subtitle={t.album?.title ?? ''}
+          action={<GuestAddButton itemKey={`track-${t.id}`} label={t.title ?? 'track'} trackIds={[t.id]} />} />
+      )} />
       <Section title="Artists" items={artists} render={(a) => (
         <GuestRow key={a.id} to={path(`artist/${a.id}`)} imageUrl={apiService.getImageUrl(a.image_path, 'artist_search')}
           title={a.name ?? ''} subtitle={plural(a.album_count, 'album')}
@@ -75,10 +81,6 @@ const GuestSearch = () => {
         <GuestRow key={c.id} to={path(`collection/${c.id}`)} imageUrl={apiService.getImageUrl(c.image_path, 'album_small')}
           title={c.name ?? ''} subtitle={plural(c.album_count, 'album')}
           action={<GuestAddButton itemKey={`collection-${c.id}`} label={c.name ?? 'collection'} kind="collection" id={c.id} variant="all" />} />
-      )} />
-      <Section title="Tracks" items={tracks} render={(t) => (
-        <GuestRow key={t.id} title={t.artist?.name ? `${t.title ?? ''} - ${t.artist.name}` : (t.title ?? '')} subtitle={t.album?.title ?? ''}
-          action={<GuestAddButton itemKey={`track-${t.id}`} label={t.title ?? 'track'} trackIds={[t.id]} />} />
       )} />
     </>
   );

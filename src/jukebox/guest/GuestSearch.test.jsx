@@ -112,3 +112,11 @@ test('long track lists show a preview with a show-all toggle', async () => {
   fireEvent.click(screen.getByRole('button', { name: /show all 12/i }));
   expect(screen.getByText('Song 12 - A')).toBeInTheDocument();
 });
+
+test('the Tracks section comes before Artists and Albums so song searches are not buried', async () => {
+  renderSearch();
+  await screen.findByText('Dancing Queen - ABBA');
+  const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+  expect(headings.indexOf('Tracks')).toBe(0);
+  expect(headings.indexOf('Tracks')).toBeLessThan(headings.indexOf('Artists'));
+});
