@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { usePlayerStore } from '../stores/playerStore';
 import { apiService } from '../services/api';
 import ImageLightbox from './ImageLightbox';
+import VisualizerToggle from './visualizer/VisualizerToggle';
 
 const NowPlaying = () => {
   const navigate = useNavigate();
@@ -85,6 +86,7 @@ const NowPlaying = () => {
           <span className="now-playing-title-artist"> — {artistName}</span>
         </div>
       </div>
+      <VisualizerToggle />
       {showArtModal && (
         <ImageLightbox
           imageUrl={apiService.getImageUrl(currentTrack.image_path, 'album_page')}
