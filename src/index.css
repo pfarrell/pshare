@@ -3004,6 +3004,11 @@ body:has(.jukebox-app) {
   border-color: rgba(147, 197, 253, 0.4);
   font-weight: 600;
 }
+.jukebox-app .jukebox-settings-tab-error {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #f87171;
+}
 .jukebox-app .jukebox-settings-tab-divider {
   height: 1px;
   background: rgba(255, 255, 255, 0.12);
@@ -3208,7 +3213,7 @@ body:has(.jukebox-app) {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 80;
+  z-index: var(--z-modal-top);
   background: #1a252f;
   border-top: 1px solid #2c3e50;
   padding: 0.5rem;

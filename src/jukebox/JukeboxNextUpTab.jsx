@@ -26,10 +26,12 @@ import JukeboxSavePlaylistModal from './JukeboxSavePlaylistModal';
 // earlier track included can rewind with the transport before saving.
 const CLEAR_CONFIRM_MS = 3000;
 
+// Floppy-disk save glyph.
 const DiscIcon = () => (
-  <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-    <circle cx="12" cy="12" r="9" />
-    <circle cx="12" cy="12" r="2.5" />
+  <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
+    <path d="M5 3h11l4 4v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+    <path d="M8 3v5h7V3" />
+    <rect x="7" y="13" width="10" height="8" />
   </svg>
 );
 
