@@ -1,7 +1,7 @@
 import { takeShaderFailures } from './shaderDiagnostics';
 
 export const CYCLE_MS = 30000;
-const BLEND_SECONDS = 2.0;
+export const BLEND_SECONDS = 2.0;
 
 // Picks and loads presets, skipping any whose shaders fail to compile.
 //

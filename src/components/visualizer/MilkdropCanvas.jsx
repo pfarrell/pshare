@@ -4,10 +4,15 @@ import { ensureAnalyserGraph } from '../../utils/analyserGraph';
 import { installShaderDiagnostics } from './shaderDiagnostics';
 import { createResolutionState, recordFrame } from './resolutionPolicy';
 import { loadPresets } from './loadPresets';
-import { createPresetCycle, CYCLE_MS } from './presetCycle';
+import { createPresetCycle, BLEND_SECONDS, CYCLE_MS } from './presetCycle';
 
 const BASE_WIDTH = 1280;
 const BASE_HEIGHT = 800;
+// Frames right after a preset change are unrepresentative: the new preset's
+// shaders compile, and for BLEND_SECONDS both presets render at once. Counting
+// them dropped the real kiosk to half resolution about a second after it
+// started, so the resolution policy ignores frames until this has passed.
+const SETTLE_MS = (BLEND_SECONDS + 0.5) * 1000;
 
 // butterchurn is ~188KB, so it is imported lazily and lands in the `visualizer`
 // chunk. Injectable so the component can be tested without WebGL, which jsdom
@@ -71,8 +76,15 @@ const MilkdropCanvas = ({
       visualizer.connectAudio(graph.sourceNode);
 
       const cycle = createPresetCycle({ presets, visualizer });
-      cycleRef.current = cycle;
-      cycle.next();
+      let settleUntil = 0;
+      // Every preset change (timer, track change, initial) goes through here so
+      // each one opens a settle window.
+      const changePreset = () => {
+        cycle.next();
+        settleUntil = performance.now() + SETTLE_MS;
+      };
+      cycleRef.current = { next: changePreset };
+      changePreset();
 
       let resolution = createResolutionState();
       let appliedScale = null;
@@ -82,12 +94,22 @@ const MilkdropCanvas = ({
         frameRef.current = requestAnimationFrame(loop);
 
         const now = performance.now();
-        resolution = recordFrame(resolution, now - lastFrameAt);
+        if (now >= settleUntil) {
+          resolution = recordFrame(resolution, now - lastFrameAt);
+        }
         lastFrameAt = now;
 
         if (resolution.scale !== appliedScale) {
           appliedScale = resolution.scale;
-          visualizer.setRendererSize(BASE_WIDTH * appliedScale, BASE_HEIGHT * appliedScale);
+          const width = Math.round(BASE_WIDTH * appliedScale);
+          const height = Math.round(BASE_HEIGHT * appliedScale);
+          // butterchurn's setRendererSize only resizes its internal textures and
+          // GL viewport, never the canvas element. The backing store has to
+          // match, or a half-size viewport lands in one corner of a full-size
+          // canvas. CSS stretches the smaller canvas back over the screen.
+          canvas.width = width;
+          canvas.height = height;
+          visualizer.setRendererSize(width, height);
         }
 
         visualizer.render();

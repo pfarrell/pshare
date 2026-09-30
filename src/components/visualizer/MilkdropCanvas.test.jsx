@@ -144,6 +144,97 @@ describe('MilkdropCanvas', () => {
     expect(fakeContext.close).not.toHaveBeenCalled();
   });
 
+  // The render loop is driven by hand with a fake clock, so frame timing (and
+  // therefore the adaptive resolution policy) is deterministic.
+  describe('adaptive resolution', () => {
+    let now;
+    let frameCallback;
+
+    const runFrames = (count, frameMs) => {
+      for (let i = 0; i < count; i += 1) {
+        now += frameMs;
+        act(() => { frameCallback(now); });
+      }
+    };
+
+    // Enough frames to get past the settle window that follows a preset load.
+    const pastSettle = () => runFrames(200, 16);
+
+    beforeEach(() => {
+      now = 0;
+      frameCallback = null;
+      vi.spyOn(performance, 'now').mockImplementation(() => now);
+      window.requestAnimationFrame.mockImplementation((cb) => { frameCallback = cb; return 1; });
+    });
+
+    const mountAndStart = async () => {
+      const result = renderCanvas();
+      await waitFor(() => expect(visualizer.connectAudio).toHaveBeenCalled());
+      await waitFor(() => expect(frameCallback).not.toBeNull());
+      return result;
+    };
+
+    // butterchurn's setRendererSize only resizes its internal textures and GL
+    // viewport; it never touches the canvas element. If the canvas backing
+    // store keeps its old size, a 640x400 viewport lands in the bottom-left
+    // quarter of a 1280x800 canvas (seen on the real kiosk).
+    test('halving the render size also halves the canvas backing store', async () => {
+      await mountAndStart();
+      pastSettle();
+
+      runFrames(60, 30);
+
+      const canvas = document.querySelector('canvas');
+      expect(visualizer.setRendererSize).toHaveBeenLastCalledWith(640, 400);
+      expect(canvas.width).toBe(640);
+      expect(canvas.height).toBe(400);
+    });
+
+    test('recovering restores the full canvas backing store', async () => {
+      await mountAndStart();
+      pastSettle();
+      runFrames(60, 30);
+      expect(document.querySelector('canvas').width).toBe(640);
+
+      // Recovery needs three consecutive good 60-frame windows, plus up to one
+      // window's worth of frames to flush slow samples left over from the
+      // degrade above. 300 frames clears that with room to spare.
+      runFrames(300, 12);
+
+      const canvas = document.querySelector('canvas');
+      expect(visualizer.setRendererSize).toHaveBeenLastCalledWith(1280, 800);
+      expect(canvas.width).toBe(1280);
+      expect(canvas.height).toBe(800);
+    });
+
+    // Shader compilation and the blend between presets make the frames right
+    // after a preset change unrepresentative; counting them dropped the real
+    // kiosk to half resolution about a second after it started.
+    test('slow frames right after the first preset loads do not cause a downscale', async () => {
+      await mountAndStart();
+
+      // 61 frames fills the 60-sample window, but 61 * 40ms = 2440ms is still
+      // inside the 2500ms settle window, so none of them may be counted.
+      runFrames(61, 40);
+
+      const sizes = visualizer.setRendererSize.mock.calls;
+      expect(sizes.every(([w, h]) => w === 1280 && h === 800)).toBe(true);
+    });
+
+    test('a track change starts a new settle window too', async () => {
+      await mountAndStart();
+      pastSettle();
+      visualizer.setRendererSize.mockClear();
+
+      act(() => {
+        usePlayerStore.setState({ currentTrack: { id: 2, title: 'Two' } });
+      });
+      runFrames(61, 40);
+
+      expect(visualizer.setRendererSize).not.toHaveBeenCalledWith(640, 400);
+    });
+  });
+
   test('remounting does not create a second audio context', async () => {
     const { unmount } = renderCanvas();
     await waitFor(() => expect(visualizer.connectAudio).toHaveBeenCalled());
