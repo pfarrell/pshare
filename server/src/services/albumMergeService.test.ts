@@ -29,3 +29,16 @@ test('regression: musicbrainz tags move to the target, deduping shared tags (the
   // target's own row for the shared tag must survive untouched, not the loser's
   assert.equal(rows.find((r) => r.name === sharedTag)!.tag_count, 7)
 })
+
+test('regression: merging into a compilation re-roles the loser\'s primary credit so the artist still sees it', async () => {
+  const various = await createArtist('compmerge-various')
+  const dubliners = await createArtist('compmerge-dubliners')
+  const target = await createAlbum('compmerge-target', various.id)
+  await db.updateTable('albums').set({ is_compilation: true }).where('id', '=', target.id).execute()
+  const loser = await createAlbum('compmerge-loser', dubliners.id)
+
+  await db.transaction().execute((trx) => mergeAlbumInto(target.id, loser.id, trx))
+
+  const rows = await db.selectFrom('artist_albums').select(['artist_id', 'role']).where('album_id', '=', target.id).where('artist_id', '=', dubliners.id).execute()
+  assert.deepEqual(rows, [{ artist_id: dubliners.id, role: 'compilation' }])
+})

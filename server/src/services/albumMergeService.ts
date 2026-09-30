@@ -134,7 +134,13 @@ export async function mergeAlbumInto(
       eb('artist_id', 'in', trx.selectFrom('artist_albums').select('artist_id').where('album_id', '=', targetId)),
     ]))
     .execute()
-  await trx.updateTable('artist_albums').set({ album_id: targetId }).where('album_id', '=', loserId).execute()
+  // Merging into a compilation: the loser's 'primary' row would otherwise land on an
+  // album that artist doesn't own, which no artist-page list surfaces (not their albums,
+  // and excluded from appears_on). Re-role it as 'compilation' so it shows as an appearance.
+  const loserRole = destAlbum.is_compilation
+    ? sql<'primary' | 'compilation'>`CASE WHEN role = 'primary' THEN 'compilation' ELSE role END`
+    : sql<never>`role`
+  await trx.updateTable('artist_albums').set({ album_id: targetId, role: loserRole }).where('album_id', '=', loserId).execute()
 
   // album_mb_tags (MusicBrainz-sourced tags): dedup by tag_id, then redirect the rest.
   // Keep the target's own row where both sides already have the same tag — its

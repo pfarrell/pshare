@@ -201,7 +201,12 @@ artists.get('/:id', async (c) => {
       'al_artist.name as primary_artist_name',
     ])
     .where('artist_albums.artist_id', '=', id)
-    .where('artist_albums.role', 'not in', ['primary', 'collaborator', 'composer', 'performer'])
+    .where((eb) => eb.or([
+      eb('artist_albums.role', 'not in', ['primary', 'collaborator', 'composer', 'performer']),
+      // A 'primary' credit on an album someone else owns (e.g. left by an older
+      // compilation merge) is still an appearance, not a dead row.
+      eb.and([eb('artist_albums.role', '=', 'primary'), eb('albums.artist_id', '!=', id)]),
+    ]))
     .orderBy('albums.release_year', 'asc')
     .execute()
 

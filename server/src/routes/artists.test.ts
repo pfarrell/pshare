@@ -47,3 +47,14 @@ test('GET /artists/random?profileId= with a non-numeric value returns no artists
   assert.equal(res.status, 200)
   assert.deepEqual(await res.json(), [])
 })
+
+test('GET /artists/:id lists an album in appears_on when the artist has a stray primary credit on someone else\'s album', async () => {
+  const various = await createArtist('appears-various')
+  const member = await createArtist('appears-member')
+  const album = await createAlbum('appears-comp', various.id)
+  await db.insertInto('artist_albums').values({ artist_id: member.id, album_id: album.id, role: 'primary' }).execute()
+
+  const res = await appWithUser().request(`/artists/${member.id}`)
+  const body = await res.json()
+  assert.ok(body.appears_on.some((a: any) => a.id === album.id))
+})
