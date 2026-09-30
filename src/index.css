@@ -2802,6 +2802,22 @@ body:has(.jukebox-app) {
   cursor: pointer;
 }
 
+/* Visualizer screensaver (MilkdropCanvas.jsx): the Milkdrop alternative to the
+   art-rotation screensaver above. Same stacking (z-index 75) and dismiss-on-tap
+   behavior, so JukeboxApp can swap one for the other at the same mount point. */
+.jukebox-app .jukebox-visualizer {
+  position: fixed;
+  inset: 0;
+  z-index: 75;
+  background: #000;
+  cursor: pointer;
+}
+.jukebox-app .jukebox-visualizer-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 /* Login: the first (and normally only) screen a fresh kiosk shows. */
 .jukebox-app .jukebox-login {
   flex: 1;
