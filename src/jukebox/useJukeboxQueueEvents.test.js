@@ -3,6 +3,7 @@ import { useJukeboxQueueEvents } from './useJukeboxQueueEvents';
 import { usePlayerStore } from '../stores/playerStore';
 import { apiService, jukeboxEventsUrl } from '../services/api';
 import { invalidateProfilesCache } from '../utils/profilesCache';
+import { requestJukeboxStatePublish } from './jukeboxStatePublisher';
 
 vi.mock('../services/api', () => ({
   apiService: {
@@ -12,6 +13,8 @@ vi.mock('../services/api', () => ({
   },
   jukeboxEventsUrl: vi.fn((id) => `/api/jukebox/devices/${id}/events`),
 }));
+
+vi.mock('./jukeboxStatePublisher', () => ({ requestJukeboxStatePublish: vi.fn() }));
 
 vi.mock('../utils/profilesCache', () => ({
   invalidateProfilesCache: vi.fn(),
@@ -234,5 +237,87 @@ describe('playback-command events (remote control from a logged-in phone)', () =
     expect(actions.togglePlayPause).not.toHaveBeenCalled();
     expect(actions.playNext).not.toHaveBeenCalled();
     expect(actions.playPrev).not.toHaveBeenCalled();
+  });
+});
+
+describe('jump and remove commands (queue control from a logged-in phone)', () => {
+  const track = (id) => ({ id, title: `Song ${id}` });
+  const setup = (playlist) => {
+    const actions = { playTrackAtIndex: vi.fn(), removeTrackFromPlaylist: vi.fn() };
+    usePlayerStore.setState({ playlist, ...actions });
+    renderHook(() => useJukeboxQueueEvents(5));
+    return { actions, source: FakeEventSource.instances[0] };
+  };
+
+  test('jump plays the row when it still holds that track, then republishes', () => {
+    const { actions, source } = setup([track(1), track(2), track(3)]);
+    requestJukeboxStatePublish.mockClear();
+
+    source.emit('playback-command', { command: 'jump', index: 2, trackId: 3 });
+
+    expect(actions.playTrackAtIndex).toHaveBeenCalledWith(2);
+    expect(requestJukeboxStatePublish).toHaveBeenCalled();
+  });
+
+  test('remove removes the row when it still holds that track, then republishes', () => {
+    const { actions, source } = setup([track(1), track(2), track(3)]);
+    requestJukeboxStatePublish.mockClear();
+
+    source.emit('playback-command', { command: 'remove', index: 1, trackId: 2 });
+
+    expect(actions.removeTrackFromPlaylist).toHaveBeenCalledWith(1);
+    expect(requestJukeboxStatePublish).toHaveBeenCalled();
+  });
+
+  test('a stale command (the row now holds a different track) does nothing but republish', () => {
+    const { actions, source } = setup([track(1), track(9), track(3)]);
+    requestJukeboxStatePublish.mockClear();
+
+    source.emit('playback-command', { command: 'jump', index: 1, trackId: 2 });
+    source.emit('playback-command', { command: 'remove', index: 1, trackId: 2 });
+
+    expect(actions.playTrackAtIndex).not.toHaveBeenCalled();
+    expect(actions.removeTrackFromPlaylist).not.toHaveBeenCalled();
+    expect(requestJukeboxStatePublish).toHaveBeenCalledTimes(2);
+  });
+
+  test('with duplicate tracks the command hits the addressed row, not the first match', () => {
+    const { actions, source } = setup([track(7), track(4), track(7)]);
+
+    source.emit('playback-command', { command: 'remove', index: 2, trackId: 7 });
+
+    expect(actions.removeTrackFromPlaylist).toHaveBeenCalledTimes(1);
+    expect(actions.removeTrackFromPlaylist).toHaveBeenCalledWith(2);
+  });
+
+  test('an index past the end of the queue is ignored', () => {
+    const { actions, source } = setup([track(1)]);
+    source.emit('playback-command', { command: 'jump', index: 5, trackId: 1 });
+    expect(actions.playTrackAtIndex).not.toHaveBeenCalled();
+  });
+
+  test('missing, negative, fractional or string fields are ignored without throwing', () => {
+    const { actions, source } = setup([track(1), track(2)]);
+    const bad = [
+      { command: 'jump' },
+      { command: 'jump', index: 0 },
+      { command: 'jump', trackId: 1 },
+      { command: 'jump', index: -1, trackId: 1 },
+      { command: 'remove', index: 0.5, trackId: 1 },
+      { command: 'remove', index: '0', trackId: 1 },
+    ];
+    for (const payload of bad) source.emit('playback-command', payload);
+    expect(actions.playTrackAtIndex).not.toHaveBeenCalled();
+    expect(actions.removeTrackFromPlaylist).not.toHaveBeenCalled();
+  });
+
+  test('every event-stream open (connect and reconnect) republishes the queue', async () => {
+    setup([track(1)]);
+    await waitFor(() => expect(requestJukeboxStatePublish).toHaveBeenCalled());
+    requestJukeboxStatePublish.mockClear();
+
+    FakeEventSource.instances[0].emit('open');
+
+    expect(requestJukeboxStatePublish).toHaveBeenCalledTimes(1);
   });
 });

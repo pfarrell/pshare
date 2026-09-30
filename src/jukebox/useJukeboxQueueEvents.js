@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { usePlayerStore } from '../stores/playerStore';
 import { apiService, jukeboxEventsUrl } from '../services/api';
 import { invalidateProfilesCache } from '../utils/profilesCache';
+import { requestJukeboxStatePublish } from './jukeboxStatePublisher';
 
 // Opens one EventSource for the kiosk's own device and reconciles both event
 // types the stream carries — see
@@ -74,20 +75,39 @@ export const useJukeboxQueueEvents = (deviceId) => {
     // the footer buttons call, and nothing else. Anything unrecognized or
     // malformed is dropped silently; the kiosk must never throw on a stray event.
     const handlePlaybackCommand = (event) => {
-      let command;
+      let payload;
       try {
-        command = JSON.parse(event.data)?.command;
+        payload = JSON.parse(event.data);
       } catch {
         return;
       }
-      const { togglePlayPause, playNext, playPrev } = usePlayerStore.getState();
+      const command = payload?.command;
+      const { togglePlayPause, playNext, playPrev, playTrackAtIndex, removeTrackFromPlaylist, playlist } = usePlayerStore.getState();
+
       if (command === 'toggle') togglePlayPause();
       else if (command === 'next') playNext({ manual: true });
       else if (command === 'prev') playPrev();
+      else if (command === 'jump' || command === 'remove') {
+        const { index, trackId } = payload;
+        // The phone addressed a row it saw a moment ago. Act only if that row
+        // still holds that exact track (duplicates and reshuffles can't fool
+        // this); otherwise do nothing and republish so the phone shows the truth.
+        const valid = Number.isInteger(index) && index >= 0 && Number.isInteger(trackId) && playlist[index]?.id === trackId;
+        if (valid) {
+          if (command === 'jump') playTrackAtIndex(index);
+          else removeTrackFromPlaylist(index);
+        }
+        requestJukeboxStatePublish();
+      }
     };
 
     const source = new EventSource(jukeboxEventsUrl(deviceId), { withCredentials: true });
-    source.addEventListener('open', fetchPending);
+    // 'open' fires on the initial connection and every reconnect (including
+    // after a server restart, which drops the in-memory queue snapshot).
+    source.addEventListener('open', () => {
+      fetchPending();
+      requestJukeboxStatePublish();
+    });
     source.addEventListener('queue-item-added', (event) => deliverBatch([JSON.parse(event.data)]));
     source.addEventListener('profiles-changed', () => invalidateProfilesCache());
     source.addEventListener('playback-command', handlePlaybackCommand);
