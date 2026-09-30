@@ -4,6 +4,8 @@
 // need for a cross-process broker.
 type Listener = (payload: unknown) => void
 
+export type PlaybackCommandPayload = { command: string; index?: number; trackId?: number }
+
 const deviceListeners = new Map<number, Set<Listener>>()
 const profileListeners = new Set<() => void>()
 // Remote-control commands (toggle/next/prev) are kept apart from queue items so
@@ -43,10 +45,14 @@ export const sseBroadcaster = {
 
   // Returns how many kiosks received it: 0 means nothing is listening, which
   // the caller reports as "not connected" instead of pretending it worked.
-  broadcastPlaybackCommand(deviceId: number, command: unknown): number {
+  broadcastPlaybackCommand(deviceId: number, payload: PlaybackCommandPayload): number {
     const listeners = commandListeners.get(deviceId)
-    listeners?.forEach((listener) => listener(command))
+    listeners?.forEach((listener) => listener(payload))
     return listeners?.size ?? 0
+  },
+
+  commandListenerCount(deviceId: number): number {
+    return commandListeners.get(deviceId)?.size ?? 0
   },
 
   broadcastProfilesChanged(): void {

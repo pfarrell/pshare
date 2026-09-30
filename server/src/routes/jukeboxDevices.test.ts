@@ -183,13 +183,14 @@ test('GET /jukebox/devices/:id/events streams a playback-command event on broadc
   const decoder = new TextDecoder()
 
   await new Promise((resolve) => setTimeout(resolve, 10))
-  sseBroadcaster.broadcastPlaybackCommand(device.id, 'next')
+  sseBroadcaster.broadcastPlaybackCommand(device.id, { command: 'next' })
 
   const { value } = await reader.read()
   const text = decoder.decode(value)
 
   assert.match(text, /event: playback-command/)
   assert.match(text, /"command":"next"/)
+  assert.doesNotMatch(text, /"command":\{/)
   await reader.cancel()
 })
 

@@ -47,7 +47,7 @@ jukeboxDevices.get('/:id/events', requireOwnJukeboxDevice, async (c) => {
 
     const unsubQueue = sseBroadcaster.subscribeToDevice(deviceId, (payload) => push('queue-item-added', payload))
     const unsubProfiles = sseBroadcaster.subscribeToProfiles(() => push('profiles-changed', {}))
-    const unsubCommands = sseBroadcaster.subscribeToCommands(deviceId, (command) => push('playback-command', { command }))
+    const unsubCommands = sseBroadcaster.subscribeToCommands(deviceId, (payload) => push('playback-command', payload))
 
     stream.onAbort(() => {
       unsubQueue()

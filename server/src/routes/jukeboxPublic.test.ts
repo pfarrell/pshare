@@ -436,7 +436,7 @@ test('POST /jukebox/:token/command broadcasts to the kiosk for a logged-in user'
     assert.deepEqual(await res.json(), { ok: true })
   }
 
-  assert.deepEqual(received, ['toggle', 'next', 'prev'])
+  assert.deepEqual(received, [{ command: 'toggle' }, { command: 'next' }, { command: 'prev' }])
   unsub()
 })
 

@@ -318,7 +318,7 @@ jukeboxPublic.post('/:token/command', loadDeviceByToken, async (c: any) => {
     return c.json({ error: 'Too many commands, try again in a moment' }, 429)
   }
 
-  if (sseBroadcaster.broadcastPlaybackCommand(device.id, command) === 0) {
+  if (sseBroadcaster.broadcastPlaybackCommand(device.id, { command }) === 0) {
     return c.json({ error: 'The jukebox is not connected' }, 409)
   }
 
