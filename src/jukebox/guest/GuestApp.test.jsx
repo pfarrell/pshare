@@ -46,3 +46,8 @@ test('an unknown guest sub-route shows a way back home instead of a blank page',
   renderApp('/jukebox/tok/nope/nothing');
   expect(screen.getByRole('link', { name: /home/i })).toHaveAttribute('href', '/jukebox/tok');
 });
+
+test('remembers the jukebox token so the main app can offer Send to Jukebox and its remote', () => {
+  renderApp();
+  expect(localStorage.getItem('jukebox-enqueue-token')).toBe('tok');
+});

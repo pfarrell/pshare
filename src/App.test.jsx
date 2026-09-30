@@ -55,14 +55,13 @@ describe('ScrollToTop', () => {
   });
 });
 
-// Task 12's JukeboxEnqueuePage test and Task 13's JukeboxEnqueueRoute test
-// each render their subject in isolation, so neither can catch a regression
-// where the real App tree wraps /jukebox/:token in the app header/hamburger
-// menu and the persistent audio-player footer (rendered unconditionally,
-// outside <Routes>, for every route in the normal tree — see App.jsx). This
-// renders the real App component, with window.location pointing at a guest
-// enqueue link, to prove the chrome-free early-return branch is actually
-// what an anonymous visitor gets.
+// The guest components' own tests render them in isolation, so none can catch a
+// regression where the real App tree wraps /jukebox/:token in the app
+// header/hamburger menu and the persistent audio-player footer (rendered
+// unconditionally, outside <Routes>, for every route in the normal tree, see
+// App.jsx). This renders the real App component, with window.location pointing
+// at a guest link, to prove the chrome-free early-return branch is actually
+// what a visitor gets.
 describe('App: anonymous visitor at /jukebox/:token', () => {
   const originalPathname = window.location.pathname;
 
@@ -88,5 +87,40 @@ describe('App: anonymous visitor at /jukebox/:token', () => {
     expect(document.querySelector('.app-header')).not.toBeInTheDocument();
     expect(document.querySelector('.header-content')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Menu')).not.toBeInTheDocument();
+  });
+});
+
+describe('App: logged-in visitor at /jukebox/:token', () => {
+  const originalPathname = window.location.pathname;
+
+  afterEach(() => {
+    window.history.pushState({}, '', originalPathname);
+    localStorage.clear();
+  });
+
+  test('stays in the guest app instead of being redirected to the normal app', async () => {
+    const { apiService } = await import('./services/api');
+    apiService.getMe.mockResolvedValueOnce({ data: { user: { id: 2, username: 'pat', admin: false } } });
+    window.history.pushState({}, '', '/jukebox/sometoken');
+
+    render(<App />);
+    await waitFor(() => expect(screen.queryByText('Loading...')).not.toBeInTheDocument());
+
+    expect(window.location.pathname).toBe('/jukebox/sometoken');
+    expect(screen.getByPlaceholderText('Your name')).toBeInTheDocument();
+    expect(document.querySelector('.app-header')).not.toBeInTheDocument();
+  });
+
+  test('keeps a logged-in visitor on a deep guest link too', async () => {
+    const { apiService } = await import('./services/api');
+    apiService.getMe.mockResolvedValueOnce({ data: { user: { id: 2, username: 'pat', admin: false } } });
+    localStorage.setItem('jukebox-guest-name', 'Pat');
+    window.history.pushState({}, '', '/jukebox/sometoken/playlists');
+
+    render(<App />);
+    await waitFor(() => expect(screen.queryByText('Loading...')).not.toBeInTheDocument());
+
+    expect(window.location.pathname).toBe('/jukebox/sometoken/playlists');
+    expect(document.querySelector('.jukebox-guest')).toBeInTheDocument();
   });
 });

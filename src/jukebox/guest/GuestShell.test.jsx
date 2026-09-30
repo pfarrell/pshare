@@ -3,7 +3,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import GuestShell from './GuestShell';
 import { GuestProvider } from './GuestContext';
 
-vi.mock('../../services/api', () => ({ apiService: { submitToJukebox: vi.fn() } }));
+vi.mock('../../services/api', () => ({ apiService: { submitToJukebox: vi.fn(), sendJukeboxCommand: vi.fn() } }));
 
 const renderShell = (route = '/jukebox/tok') =>
   render(
@@ -52,4 +52,9 @@ test('choosing a menu link navigates and closes the menu', () => {
   fireEvent.click(screen.getByRole('link', { name: 'Playlists' }));
   expect(screen.getByText('playlists page')).toBeInTheDocument();
   expect(screen.queryByRole('link', { name: 'Collections' })).not.toBeInTheDocument();
+});
+
+test('always shows the jukebox remote, on every guest page', () => {
+  renderShell('/jukebox/tok/playlists');
+  expect(screen.getByRole('button', { name: 'Jukebox play or pause' })).toBeInTheDocument();
 });

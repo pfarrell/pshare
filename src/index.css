@@ -3771,9 +3771,14 @@ body:has(.jukebox-app) {
   background: var(--color-bg-page);
   color: var(--color-text-primary);
   font-size: 1rem;
+  /* Column so the sticky remote bar stays at the bottom of the screen even
+     when a page is shorter than the viewport. */
+  display: flex;
+  flex-direction: column;
 }
 
 .jukebox-guest-header {
+  flex: none;
   position: sticky;
   top: 0;
   z-index: 10;
@@ -3836,7 +3841,40 @@ body:has(.jukebox-app) {
 .jukebox-guest-menu a:last-child { border-bottom: 0; }
 
 .jukebox-guest-content {
-  padding: 0.5rem max(0.75rem, env(safe-area-inset-left, 0)) calc(1.5rem + env(safe-area-inset-bottom, 0));
+  flex: 1 0 auto;
+  padding: 0.5rem max(0.75rem, env(safe-area-inset-left, 0)) 1.5rem;
+}
+
+/* Always-visible jukebox remote: pinned to the bottom of the guest scroll
+   container, clearing the home-indicator inset. */
+.jukebox-guest-remote {
+  flex: none;
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  padding: 0.5rem max(0.75rem, env(safe-area-inset-right, 0)) calc(0.5rem + env(safe-area-inset-bottom, 0)) max(0.75rem, env(safe-area-inset-left, 0));
+  background: #1a252f;
+  border-top: 1px solid #2c3e50;
+}
+.jukebox-guest-remote-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+.jukebox-guest-remote-buttons button {
+  flex: 1;
+  min-height: 2.75rem;  /* iOS minimum touch target */
+  border: 0;
+  border-radius: 8px;
+  background: #3a4853;
+  color: #fff;
+  font-size: 1.25rem;
+}
+.jukebox-guest-remote-buttons button:disabled { opacity: 0.5; }
+.jukebox-guest-remote-message {
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+  text-align: center;
+  color: #fbbf24;
 }
 
 .jukebox-guest-heading,

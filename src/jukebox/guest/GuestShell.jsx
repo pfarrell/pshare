@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, Outlet, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useGuest } from './useGuest';
+import GuestRemote from './GuestRemote';
 
 const GuestShell = () => {
   const { path } = useGuest();
@@ -53,6 +54,7 @@ const GuestShell = () => {
       <main className="jukebox-guest-content">
         <Outlet />
       </main>
+      <GuestRemote />
     </div>
   );
 };

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Routes, Route, Link } from 'react-router-dom';
 import { getStoredGuestName } from '../../utils/jukeboxGuestName';
+import { setStoredJukeboxToken } from '../../utils/jukeboxEnqueueToken';
 import { GuestProvider } from './GuestContext';
 import { useGuest } from './useGuest';
 import GuestShell from './GuestShell';
@@ -28,6 +29,10 @@ const GuestNotFound = () => {
 // <Router>: App.jsx's dedicated anonymous branch and the normal tree alike.
 const GuestApp = ({ token }) => {
   const [nameSaved, setNameSaved] = useState(() => getStoredGuestName() != null);
+
+  // Remember which kiosk this device is talking to, so the main app's "Send to
+  // Jukebox" action and its menu remote work once the visitor is logged in.
+  useEffect(() => { setStoredJukeboxToken(token); }, [token]);
 
   if (!nameSaved) return <GuestNameGate onSaved={() => setNameSaved(true)} />;
 

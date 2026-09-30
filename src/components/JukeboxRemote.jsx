@@ -1,13 +1,7 @@
 import { useState } from 'react';
 import { apiService } from '../services/api';
 import { getStoredJukeboxToken } from '../utils/jukeboxEnqueueToken';
-
-const STATUS_MESSAGES = {
-  401: 'Log in again to control the jukebox',
-  404: 'This jukebox link has expired. Scan its QR code again',
-  409: 'The jukebox is not connected',
-  429: 'Slow down, try again in a moment',
-};
+import { remoteErrorMessage } from '../utils/jukeboxRemote';
 
 const BUTTON_STYLE = {
   flex: 1,
@@ -39,7 +33,7 @@ const JukeboxRemote = () => {
     try {
       await apiService.sendJukeboxCommand(token, command);
     } catch (err) {
-      setMessage(STATUS_MESSAGES[err?.response?.status] ?? 'Could not reach the jukebox');
+      setMessage(remoteErrorMessage(err));
     } finally {
       setSending(false);
     }
