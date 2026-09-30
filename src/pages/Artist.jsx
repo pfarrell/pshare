@@ -101,12 +101,12 @@ const Artist = () => {
         
         {/* Artist Info */}
         <div style={{ flex: 1 }}>
-          <div className="artist-header-title-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '1rem' }}>
+          <div className="artist-header-title-row" style={{ marginBottom: '1rem' }}>
             <h1 style={{ fontSize: '2.5rem', fontWeight: 'bold', margin: 0, color: 'var(--color-text-primary)' }}>
               {artist.name}
             </h1>
 
-            <div className="artist-header-actions" style={{ display: 'flex', gap: '0.5rem' }}>
+            <div className="artist-header-actions" style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
               <PlayActionsMenu
                 onPlay={(albums?.length > 0 || singles?.length > 0) ? queue.play : undefined}
                 onPlayNext={queue.playNext}

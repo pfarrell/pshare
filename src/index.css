@@ -840,6 +840,26 @@
   flex-shrink: 0;
 }
 
+/* Desktop: actions sit under the name, flush with the picture's right edge
+   (same placement as the album page). */
+@media (min-width: 769px) {
+  .artist-header-title-row {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 768px) {
+  .artist-header-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .artist-header-actions { margin-top: 0 !important; }
+}
+
 .about-section {
   margin: 0.5rem 0 1rem 0;
   padding-top: 0.75rem;
