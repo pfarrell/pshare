@@ -12,6 +12,7 @@ import ProfileFilterChip from './ProfileFilterChip';
 import ProfilePickerControl from './ProfilePickerControl';
 import ThemeToggle from './ThemeToggle';
 import ViewModeToggle from './ViewModeToggle';
+import JukeboxRemote from './JukeboxRemote';
 
 const Layout = ({ children }) => {
   const navigate = useNavigate();
@@ -326,6 +327,8 @@ const Layout = ({ children }) => {
                         </button>
                       )}
                     </div>
+
+                    <JukeboxRemote />
 
                     <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid #3a4853' }}>
                       <button

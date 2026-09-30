@@ -139,6 +139,8 @@ export const apiService = {
   guestCollections: (token) => api.get(`/jukebox/${token}/collections`),
   guestTrackIds: (token, kind, id) => api.get(`/jukebox/${token}/${kind}/${id}/track-ids`),
   guestRandomTracks: (token, kind, id) => api.post(`/jukebox/${token}/${kind}/${id}/random-tracks`),
+  // Remote control: a logged-in user drives the kiosk's transport. command is 'toggle' | 'next' | 'prev'.
+  sendJukeboxCommand: (token, command) => api.post(`/jukebox/${token}/command`, { command }),
   getJukeboxPendingQueue: (deviceId) => api.get(`/jukebox/devices/${deviceId}/queue/pending`),
   markJukeboxDelivered: (deviceId, submissionId) => api.post(`/jukebox/devices/${deviceId}/queue/${submissionId}/delivered`),
   rotateJukeboxToken: (deviceId) => api.post(`/jukebox/devices/${deviceId}/rotate-token`),

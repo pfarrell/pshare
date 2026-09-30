@@ -70,10 +70,27 @@ export const useJukeboxQueueEvents = (deviceId) => {
         .catch(() => {});
     };
 
+    // Remote control from a logged-in phone: the same three transport actions
+    // the footer buttons call, and nothing else. Anything unrecognized or
+    // malformed is dropped silently; the kiosk must never throw on a stray event.
+    const handlePlaybackCommand = (event) => {
+      let command;
+      try {
+        command = JSON.parse(event.data)?.command;
+      } catch {
+        return;
+      }
+      const { togglePlayPause, playNext, playPrev } = usePlayerStore.getState();
+      if (command === 'toggle') togglePlayPause();
+      else if (command === 'next') playNext({ manual: true });
+      else if (command === 'prev') playPrev();
+    };
+
     const source = new EventSource(jukeboxEventsUrl(deviceId), { withCredentials: true });
     source.addEventListener('open', fetchPending);
     source.addEventListener('queue-item-added', (event) => deliverBatch([JSON.parse(event.data)]));
     source.addEventListener('profiles-changed', () => invalidateProfilesCache());
+    source.addEventListener('playback-command', handlePlaybackCommand);
 
     return () => source.close();
   }, [deviceId]);

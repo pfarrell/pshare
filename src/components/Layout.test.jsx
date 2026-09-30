@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import Layout from './Layout';
 import { useAuthStore } from '../stores/authStore';
@@ -10,6 +10,7 @@ vi.mock('../services/api', () => ({
     getTags: vi.fn(() => Promise.resolve({ data: [] })),
     getSignupUnseenCount: vi.fn(() => Promise.resolve({ data: { count: 0 } })),
     getProfiles: vi.fn(() => Promise.resolve({ data: [] })),
+    sendJukeboxCommand: vi.fn(() => Promise.resolve({ data: { ok: true } })),
   },
 }));
 
@@ -87,6 +88,44 @@ describe('Layout — logged-in hamburger menu', () => {
     expect(screen.queryByText('Upload')).not.toBeInTheDocument();
     expect(screen.queryByText('New')).not.toBeInTheDocument();
     expect(screen.queryByText('Logs')).not.toBeInTheDocument();
+  });
+});
+
+describe('Layout — jukebox remote in the hamburger menu', () => {
+  const openMenu = () => fireEvent.click(screen.getByLabelText('Menu'));
+
+  afterEach(() => localStorage.clear());
+
+  test('shows the remote to a logged-in user who has connected to a jukebox', () => {
+    localStorage.setItem('jukebox-enqueue-token', 'tok');
+    useAuthStore.setState({ user: { id: 1, username: 'pat', admin: false }, isAuthenticated: true, isAdmin: false });
+    renderLayout();
+    openMenu();
+    expect(screen.getByText('Jukebox remote')).toBeInTheDocument();
+  });
+
+  test('hides the remote when no jukebox has been connected', () => {
+    useAuthStore.setState({ user: { id: 1, username: 'pat', admin: false }, isAuthenticated: true, isAdmin: false });
+    renderLayout();
+    openMenu();
+    expect(screen.queryByText('Jukebox remote')).not.toBeInTheDocument();
+  });
+
+  test('never shows the remote to a logged-out visitor, even with a stored token', () => {
+    localStorage.setItem('jukebox-enqueue-token', 'tok');
+    renderLayout();
+    openMenu();
+    expect(screen.queryByText('Jukebox remote')).not.toBeInTheDocument();
+  });
+
+  test('tapping a remote button keeps the menu open so it can be used repeatedly', async () => {
+    localStorage.setItem('jukebox-enqueue-token', 'tok');
+    useAuthStore.setState({ user: { id: 1, username: 'pat', admin: false }, isAuthenticated: true, isAdmin: false });
+    renderLayout();
+    openMenu();
+    fireEvent.click(screen.getByRole('button', { name: 'Jukebox next' }));
+    await waitFor(() => expect(apiService.sendJukeboxCommand).toHaveBeenCalledWith('tok', 'next'));
+    expect(screen.getByText('Jukebox remote')).toBeInTheDocument();
   });
 });
 

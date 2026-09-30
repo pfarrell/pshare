@@ -182,3 +182,57 @@ test('a failed getTrack lookup is not marked delivered and is retried on the nex
   await waitFor(() => expect(addTracks).toHaveBeenCalledWith([{ id: 10, title: 'Pending Track' }]));
   await waitFor(() => expect(apiService.markJukeboxDelivered).toHaveBeenCalledWith(5, 1));
 });
+
+describe('playback-command events (remote control from a logged-in phone)', () => {
+  const setupActions = () => {
+    const actions = { togglePlayPause: vi.fn(), playNext: vi.fn(), playPrev: vi.fn() };
+    usePlayerStore.setState(actions);
+    return actions;
+  };
+
+  test('toggle calls togglePlayPause', () => {
+    const actions = setupActions();
+    renderHook(() => useJukeboxQueueEvents(5));
+
+    FakeEventSource.instances[0].emit('playback-command', { command: 'toggle' });
+
+    expect(actions.togglePlayPause).toHaveBeenCalledTimes(1);
+    expect(actions.playNext).not.toHaveBeenCalled();
+    expect(actions.playPrev).not.toHaveBeenCalled();
+  });
+
+  test('next calls playNext as a manual advance, like the footer button', () => {
+    const actions = setupActions();
+    renderHook(() => useJukeboxQueueEvents(5));
+
+    FakeEventSource.instances[0].emit('playback-command', { command: 'next' });
+
+    expect(actions.playNext).toHaveBeenCalledWith({ manual: true });
+    expect(actions.togglePlayPause).not.toHaveBeenCalled();
+  });
+
+  test('prev calls playPrev', () => {
+    const actions = setupActions();
+    renderHook(() => useJukeboxQueueEvents(5));
+
+    FakeEventSource.instances[0].emit('playback-command', { command: 'prev' });
+
+    expect(actions.playPrev).toHaveBeenCalledTimes(1);
+  });
+
+  test('ignores unknown, missing or malformed commands without throwing', () => {
+    const actions = setupActions();
+    renderHook(() => useJukeboxQueueEvents(5));
+    const source = FakeEventSource.instances[0];
+
+    source.emit('playback-command', { command: 'seek' });
+    source.emit('playback-command', { command: 'volume-up' });
+    source.emit('playback-command', {});
+    source.emit('playback-command', null);
+    source.listeners['playback-command']({ data: 'not json {' });
+
+    expect(actions.togglePlayPause).not.toHaveBeenCalled();
+    expect(actions.playNext).not.toHaveBeenCalled();
+    expect(actions.playPrev).not.toHaveBeenCalled();
+  });
+});
