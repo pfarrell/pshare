@@ -4,7 +4,7 @@ import { apiService } from '../../services/api';
 import { remoteErrorMessage } from '../../utils/jukeboxRemote';
 import { useGuest } from './useGuest';
 import { useGuestQueue } from './useGuestQueue';
-import { redirectToLogin } from './guestLogin';
+import GuestLoginPrompt from './GuestLoginPrompt';
 import GuestRow from './GuestRow';
 import GuestStatus from './GuestStatus';
 
@@ -18,6 +18,7 @@ const GuestQueue = () => {
   const { data, error, loading, refresh, notFound } = useGuestQueue(token);
   const [busyKey, setBusyKey] = useState(null);
   const [message, setMessage] = useState(null);
+  const [needsLogin, setNeedsLogin] = useState(false);
 
   const act = async (command, entry) => {
     if (busyKey !== null) return; // one command at a time: a double tap cannot fire twice
@@ -28,7 +29,7 @@ const GuestQueue = () => {
       await refresh();
     } catch (err) {
       if (err?.response?.status === 401) {
-        redirectToLogin(pathname + search);
+        setNeedsLogin(true);
         return;
       }
       setMessage(remoteErrorMessage(err));
@@ -119,6 +120,7 @@ const GuestQueue = () => {
           {upcoming.map((entry) => row(entry, { removable: true }))}
         </section>
       )}
+      {needsLogin && <GuestLoginPrompt returnTo={pathname + search} onCancel={() => setNeedsLogin(false)} />}
     </>
   );
 };

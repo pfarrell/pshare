@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { apiService } from '../../services/api';
 import { remoteErrorMessage } from '../../utils/jukeboxRemote';
 import { useGuest } from './useGuest';
-import { redirectToLogin } from './guestLogin';
+import GuestLoginPrompt from './GuestLoginPrompt';
 
 // Previous / play-pause / next for this kiosk. Always rendered, even for a
 // logged-out visitor: the server requires a login for commands, so a 401 sends
@@ -15,6 +15,7 @@ const GuestRemote = () => {
   const { pathname, search } = useLocation();
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState(null);
+  const [needsLogin, setNeedsLogin] = useState(false);
 
   const send = async (command) => {
     setSending(true);
@@ -23,7 +24,7 @@ const GuestRemote = () => {
       await apiService.sendJukeboxCommand(token, command);
     } catch (err) {
       if (err?.response?.status === 401) {
-        redirectToLogin(pathname + search);
+        setNeedsLogin(true);
         return;
       }
       setMessage(remoteErrorMessage(err));
@@ -40,6 +41,7 @@ const GuestRemote = () => {
         <button type="button" aria-label="Jukebox play or pause" disabled={sending} onClick={() => send('toggle')}>⏯</button>
         <button type="button" aria-label="Jukebox next" disabled={sending} onClick={() => send('next')}>⏭</button>
       </div>
+      {needsLogin && <GuestLoginPrompt returnTo={pathname + search} onCancel={() => setNeedsLogin(false)} />}
     </div>
   );
 };

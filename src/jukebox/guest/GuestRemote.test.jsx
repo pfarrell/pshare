@@ -40,11 +40,24 @@ test.each([
   expect(redirectToLogin).not.toHaveBeenCalled();
 });
 
-test('a 401 (not logged in) sends the visitor to login, returning to the page they were on', async () => {
+test('a 401 (not logged in) asks first, then sends the visitor to login on confirm, returning to the page they were on', async () => {
   apiService.sendJukeboxCommand.mockRejectedValue({ response: { status: 401 } });
   renderRemote('/jukebox/tok/search?q=abba');
   fireEvent.click(screen.getByRole('button', { name: 'Jukebox next' }));
+  expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  expect(redirectToLogin).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Log in' }));
   await waitFor(() => expect(redirectToLogin).toHaveBeenCalledWith('/jukebox/tok/search?q=abba'));
+});
+
+test('cancelling the login prompt stays on the page without redirecting', async () => {
+  apiService.sendJukeboxCommand.mockRejectedValue({ response: { status: 401 } });
+  renderRemote();
+  fireEvent.click(screen.getByRole('button', { name: 'Jukebox next' }));
+  await screen.findByRole('dialog');
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(redirectToLogin).not.toHaveBeenCalled();
 });
 
 test.each([

@@ -72,6 +72,9 @@ test('a 401 on jump or remove sends a logged-out visitor to login and back to th
   apiService.sendJukeboxCommand.mockRejectedValue({ response: { status: 401 } });
   renderQueue();
   fireEvent.click(await screen.findByRole('button', { name: 'Remove Next Song from queue' }));
+  await screen.findByRole('dialog');
+  expect(redirectToLogin).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Log in' }));
   await waitFor(() => expect(redirectToLogin).toHaveBeenCalledWith('/jukebox/tok/queue'));
 });
 
