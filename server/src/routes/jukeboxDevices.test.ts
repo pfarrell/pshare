@@ -7,6 +7,7 @@ import { createArtist, createAlbum, createTrack, createUser, createJukeboxDevice
 import { authMiddleware, requireAuth } from '../middleware/auth.js'
 import { jukeboxQueueService } from '../services/jukeboxQueueService.js'
 import { sseBroadcaster } from '../services/sseBroadcaster.js'
+import { jukeboxStateService } from '../services/jukeboxStateService.js'
 import jukeboxDevices from './jukeboxDevices.js'
 
 after(cleanupFixtures)
@@ -204,4 +205,61 @@ test('GET /jukebox/devices/:id/events 403s for a different device\'s id', async 
   })
 
   assert.equal(res.status, 403)
+})
+
+const validState = () => ({
+  queue: [{ index: 1, id: 7, title: 'Song', artist: 'Band' }],
+  currentIndex: 1,
+  isPlaying: true,
+})
+
+const postState = (deviceId: number, cookie: string | undefined, body: unknown) =>
+  app().request(`/jukebox/devices/${deviceId}/state`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) },
+    body: JSON.stringify(body),
+  })
+
+test('POST /jukebox/devices/:id/state stores the kiosk snapshot', async () => {
+  const owner = await createUser('jdev-state-owner')
+  const device = await createJukeboxDevice('jdev-state-device', owner.id)
+
+  const res = await postState(device.id, deviceCookie(owner.id, owner.username, device.id), validState())
+
+  assert.equal(res.status, 200)
+  assert.deepEqual(jukeboxStateService.get(device.id), validState())
+})
+
+test('POST /jukebox/devices/:id/state 400s on a malformed body and keeps the previous snapshot', async () => {
+  const owner = await createUser('jdev-state-bad-owner')
+  const device = await createJukeboxDevice('jdev-state-bad-device', owner.id)
+  const cookie = deviceCookie(owner.id, owner.username, device.id)
+  await postState(device.id, cookie, validState())
+
+  const bodies = [
+    { queue: 'nope', currentIndex: 0, isPlaying: true },
+    { queue: Array.from({ length: 301 }, (_, i) => ({ index: i, id: i, title: 't', artist: null })), currentIndex: 0, isPlaying: true },
+    { queue: [], currentIndex: 'x', isPlaying: true },
+  ]
+  for (const body of bodies) {
+    const res = await postState(device.id, cookie, body)
+    assert.equal(res.status, 400)
+  }
+  const notJson = await app().request(`/jukebox/devices/${device.id}/state`, { method: 'POST', headers: { Cookie: cookie }, body: 'not json {' })
+  assert.equal(notJson.status, 400)
+
+  assert.deepEqual(jukeboxStateService.get(device.id), validState())
+})
+
+test('POST /jukebox/devices/:id/state 403s for a different device and 401s without a cookie', async () => {
+  const owner = await createUser('jdev-state-forbidden-owner')
+  const device = await createJukeboxDevice('jdev-state-forbidden-device', owner.id)
+  const other = await createJukeboxDevice('jdev-state-forbidden-other', owner.id)
+
+  const wrong = await postState(other.id, deviceCookie(owner.id, owner.username, device.id), validState())
+  const anon = await postState(device.id, undefined, validState())
+
+  assert.equal(wrong.status, 403)
+  assert.equal(anon.status, 401)
+  assert.equal(jukeboxStateService.get(other.id), undefined)
 })

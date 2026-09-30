@@ -10,6 +10,7 @@ import { streamSSE } from 'hono/streaming'
 import { requireOwnJukeboxDevice } from '../middleware/auth.js'
 import { jukeboxQueueService } from '../services/jukeboxQueueService.js'
 import { sseBroadcaster } from '../services/sseBroadcaster.js'
+import { jukeboxStateService, parseKioskState } from '../services/jukeboxStateService.js'
 
 const jukeboxDevices = new Hono()
 
@@ -73,6 +74,16 @@ jukeboxDevices.get('/:id/events', requireOwnJukeboxDevice, async (c) => {
       unsubCommands()
     }
   })
+})
+
+// The kiosk publishes what it has queued so phones can show it. A malformed or
+// oversized body is rejected and never replaces the previous snapshot.
+jukeboxDevices.post('/:id/state', requireOwnJukeboxDevice, async (c) => {
+  const deviceId = parseInt(c.req.param('id'))
+  const state = parseKioskState(await c.req.json().catch(() => null))
+  if (!state) return c.json({ error: 'Invalid state' }, 400)
+  jukeboxStateService.set(deviceId, state)
+  return c.json({ ok: true })
 })
 
 export default jukeboxDevices

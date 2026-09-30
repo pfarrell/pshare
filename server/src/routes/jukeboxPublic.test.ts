@@ -6,9 +6,10 @@ import { Hono } from 'hono'
 import jwt from 'jsonwebtoken'
 import { createArtist, createAlbum, createTrack, createUser, createJukeboxDevice, createPlaylist, createCollection, cleanupFixtures, fixtureName } from '../test/fixtures.js'
 import { db } from '../db/database.js'
-import jukeboxPublic, { MAX_GUEST_QUEUE_IDS, MAX_GUEST_TRACKS, GUEST_TRACKS_PER_MINUTE, GUEST_READS_PER_MINUTE, GUEST_COMMANDS_PER_MINUTE } from './jukeboxPublic.js'
+import jukeboxPublic, { MAX_GUEST_QUEUE_IDS, MAX_GUEST_TRACKS, GUEST_TRACKS_PER_MINUTE, GUEST_READS_PER_MINUTE, GUEST_COMMANDS_PER_MINUTE, GUEST_QUEUE_POLLS_PER_MINUTE } from './jukeboxPublic.js'
 import { MAX_PLAYLIST_TRACKS } from './playlists.js'
 import { sseBroadcaster } from '../services/sseBroadcaster.js'
+import { jukeboxStateService } from '../services/jukeboxStateService.js'
 
 after(cleanupFixtures)
 
@@ -565,5 +566,71 @@ test('POST command jump requires a login like every other command', async () => 
   const unsub = sseBroadcaster.subscribeToCommands(device.id, () => {})
   const res = await postCommandBody(device.enqueue_token, { command: 'jump', index: 1, trackId: 2 })
   assert.equal(res.status, 401)
+  unsub()
+})
+
+// --- Phone queue read -----------------------------------------------------
+const snapshot = () => ({
+  queue: [
+    { index: 4, id: 10, title: 'Now', artist: 'Band' },
+    { index: 5, id: 11, title: 'Next', artist: null },
+  ],
+  currentIndex: 4,
+  isPlaying: true,
+})
+
+test('GET /jukebox/:token/queue 404s for an unknown token', async () => {
+  const res = await app().request('/jukebox/not-a-real-token/queue')
+  assert.equal(res.status, 404)
+})
+
+test('GET /jukebox/:token/queue returns the kiosk snapshot with no login', async () => {
+  const device = await guestDevice('jpub-queue-read')
+  jukeboxStateService.set(device.id, snapshot())
+  const unsub = sseBroadcaster.subscribeToCommands(device.id, () => {})
+
+  const { status, body } = await getJson(`/jukebox/${device.enqueue_token}/queue`)
+
+  assert.equal(status, 200)
+  assert.deepEqual(body, { connected: true, ...snapshot() })
+  assert.deepEqual(Object.keys(body.queue[0]).sort(), ['artist', 'id', 'index', 'title'])
+  unsub()
+})
+
+test('GET /jukebox/:token/queue never returns a stale queue when no kiosk is connected', async () => {
+  const device = await guestDevice('jpub-queue-stale')
+  jukeboxStateService.set(device.id, snapshot())
+
+  const { body } = await getJson(`/jukebox/${device.enqueue_token}/queue`)
+
+  assert.deepEqual(body, { connected: false, queue: [], currentIndex: -1, isPlaying: false })
+})
+
+test('GET /jukebox/:token/queue is connected with an empty queue before the kiosk has published', async () => {
+  const device = await guestDevice('jpub-queue-nosnap')
+  const unsub = sseBroadcaster.subscribeToCommands(device.id, () => {})
+
+  const { body } = await getJson(`/jukebox/${device.enqueue_token}/queue`)
+
+  assert.deepEqual(body, { connected: true, queue: [], currentIndex: -1, isPlaying: false })
+  unsub()
+})
+
+test('queue polling has its own limit and does not consume the browse read limit or commands', async () => {
+  const device = await guestDevice('jpub-queue-limit')
+  const user = await createUser('jpub-queue-limit-user')
+  const unsub = sseBroadcaster.subscribeToCommands(device.id, () => {})
+
+  let limited = 0
+  for (let i = 0; i < GUEST_QUEUE_POLLS_PER_MINUTE + 3; i++) {
+    const res = await app().request(`/jukebox/${device.enqueue_token}/queue`)
+    if (res.status === 429) limited++
+  }
+  assert.equal(limited, 3)
+
+  const browse = await app().request(`/jukebox/${device.enqueue_token}/playlists`)
+  assert.equal(browse.status, 200, 'browse reads are unaffected')
+  const cmd = await postCommand(device.enqueue_token, 'toggle', authCookieFor(user))
+  assert.equal(cmd.status, 200, 'commands are unaffected')
   unsub()
 })

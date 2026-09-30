@@ -10,6 +10,7 @@ import jwt from 'jsonwebtoken'
 import { jukeboxQueueService } from '../services/jukeboxQueueService.js'
 import { db } from '../db/database.js'
 import { sseBroadcaster } from '../services/sseBroadcaster.js'
+import { jukeboxStateService } from '../services/jukeboxStateService.js'
 import { createFixedWindowLimiter } from '../utils/rateLimit.js'
 import { handleSearchRequest } from './search.js'
 import artists, { fetchRandomArtists } from './artists.js'
@@ -292,6 +293,33 @@ jukeboxPublic.post('/:token/:kind/:id/random-tracks', loadDeviceForRead, async (
 
   const { tracks } = await res.json()
   return c.json({ trackIds: (tracks ?? []).map((t: any) => t.id) })
+})
+
+// --- Phone queue ---------------------------------------------------------
+// Phones poll the queue every few seconds while the Queue page is open, so it
+// gets its own generous per-token limit, kept apart from the browse read limit.
+export const GUEST_QUEUE_POLLS_PER_MINUTE = 600
+const queuePollsAllowed = createFixedWindowLimiter(GUEST_QUEUE_POLLS_PER_MINUTE, 60_000)
+
+async function loadDeviceForQueue(c: any, next: any) {
+  const device = await jukeboxQueueService.findDeviceByToken(c.req.param('token'))
+  if (!device) return c.json({ error: 'Not found' }, 404)
+  if (!queuePollsAllowed(device.enqueue_token)) return c.json({ error: 'Too many requests, try again in a moment' }, 429)
+  c.set('jukeboxTokenDevice', device)
+  await next()
+}
+
+// What the kiosk has queued, for the phone's Queue page. Public like the rest of
+// browsing (the queue is visible to anyone with the QR link); only skipping and
+// removing need a login. Only the kiosk's own snapshot is ever returned, and an
+// empty queue when nothing is listening, so a stale list never shows.
+jukeboxPublic.get('/:token/queue', loadDeviceForQueue, async (c: any) => {
+  const device = c.get('jukeboxTokenDevice')
+  if (sseBroadcaster.commandListenerCount(device.id) === 0) {
+    return c.json({ connected: false, queue: [], currentIndex: -1, isPlaying: false })
+  }
+  const state = jukeboxStateService.get(device.id) ?? { queue: [], currentIndex: -1, isPlaying: false }
+  return c.json({ connected: true, ...state })
 })
 
 // --- Remote control ------------------------------------------------------
