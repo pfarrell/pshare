@@ -6,9 +6,9 @@ import { redirectToLogin } from './guestLogin';
 // broke, so they confirm first; cancelling leaves them where they were.
 const GuestLoginPrompt = ({ returnTo, onCancel }) => (
   <ConfirmDialog
-    title="Log in to continue"
-    message="Controlling playback and the queue needs an account. Log in and you'll come right back to this page."
-    confirmLabel="Log in"
+    title="Log in or sign up to continue"
+    message="Controlling playback and the queue needs an account. Log in or sign up and you'll come right back to this page."
+    confirmLabel="Log in / Sign up"
     onConfirm={() => redirectToLogin(returnTo)}
     onCancel={onCancel}
   />

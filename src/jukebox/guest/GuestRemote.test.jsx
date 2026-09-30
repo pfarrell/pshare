@@ -46,7 +46,7 @@ test('a 401 (not logged in) asks first, then sends the visitor to login on confi
   fireEvent.click(screen.getByRole('button', { name: 'Jukebox next' }));
   expect(await screen.findByRole('dialog')).toBeInTheDocument();
   expect(redirectToLogin).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: 'Log in' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Log in / Sign up' }));
   await waitFor(() => expect(redirectToLogin).toHaveBeenCalledWith('/jukebox/tok/search?q=abba'));
 });
 
