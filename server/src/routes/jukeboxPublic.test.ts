@@ -6,8 +6,9 @@ import { Hono } from 'hono'
 import jwt from 'jsonwebtoken'
 import { createArtist, createAlbum, createTrack, createUser, createJukeboxDevice, createPlaylist, createCollection, cleanupFixtures, fixtureName } from '../test/fixtures.js'
 import { db } from '../db/database.js'
-import jukeboxPublic, { MAX_GUEST_QUEUE_IDS, MAX_GUEST_TRACKS, GUEST_TRACKS_PER_MINUTE, GUEST_READS_PER_MINUTE } from './jukeboxPublic.js'
+import jukeboxPublic, { MAX_GUEST_QUEUE_IDS, MAX_GUEST_TRACKS, GUEST_TRACKS_PER_MINUTE, GUEST_READS_PER_MINUTE, GUEST_COMMANDS_PER_MINUTE } from './jukeboxPublic.js'
 import { MAX_PLAYLIST_TRACKS } from './playlists.js'
+import { sseBroadcaster } from '../services/sseBroadcaster.js'
 
 after(cleanupFixtures)
 
@@ -410,4 +411,90 @@ test('read rate limiting does not create state for unknown tokens', async () => 
     const res = await app().request('/jukebox/not-a-real-token/playlists')
     assert.equal(res.status, 404)
   }
+})
+
+// --- Remote control: a logged-in user drives the kiosk's transport ----------
+const authCookieFor = (user: { id: number; username: string; admin: boolean }) =>
+  `auth=${jwt.sign({ id: user.id, username: user.username, admin: user.admin }, JWT_SECRET, { expiresIn: '3650d' })}`
+
+const postCommand = (token: string, command: unknown, cookie?: string) =>
+  app().request(`/jukebox/${token}/command`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(cookie ? { cookie } : {}) },
+    body: JSON.stringify({ command }),
+  })
+
+test('POST /jukebox/:token/command broadcasts to the kiosk for a logged-in user', async () => {
+  const device = await guestDevice('jpub-cmd-ok')
+  const user = await createUser('jpub-cmd-ok-user')
+  const received: unknown[] = []
+  const unsub = sseBroadcaster.subscribeToCommands(device.id, (c) => received.push(c))
+
+  for (const command of ['toggle', 'next', 'prev']) {
+    const res = await postCommand(device.enqueue_token, command, authCookieFor(user))
+    assert.equal(res.status, 200, command)
+    assert.deepEqual(await res.json(), { ok: true })
+  }
+
+  assert.deepEqual(received, ['toggle', 'next', 'prev'])
+  unsub()
+})
+
+test('POST /jukebox/:token/command 401s without a login and broadcasts nothing', async () => {
+  const device = await guestDevice('jpub-cmd-anon')
+  const received: unknown[] = []
+  const unsub = sseBroadcaster.subscribeToCommands(device.id, (c) => received.push(c))
+
+  const none = await postCommand(device.enqueue_token, 'next')
+  const bad = await postCommand(device.enqueue_token, 'next', 'auth=not-a-real-jwt')
+
+  assert.equal(none.status, 401)
+  assert.equal(bad.status, 401)
+  assert.deepEqual(received, [])
+  unsub()
+})
+
+test('POST /jukebox/:token/command 400s on an unknown or missing command', async () => {
+  const device = await guestDevice('jpub-cmd-bad')
+  const user = await createUser('jpub-cmd-bad-user')
+  const unsub = sseBroadcaster.subscribeToCommands(device.id, () => {})
+
+  for (const command of ['seek', 'skip', '', null, 42, undefined]) {
+    const res = await postCommand(device.enqueue_token, command, authCookieFor(user))
+    assert.equal(res.status, 400, String(command))
+  }
+  const noBody = await app().request(`/jukebox/${device.enqueue_token}/command`, {
+    method: 'POST',
+    headers: { cookie: authCookieFor(user) },
+  })
+  assert.equal(noBody.status, 400)
+  unsub()
+})
+
+test('POST /jukebox/:token/command 404s for an unknown token', async () => {
+  const user = await createUser('jpub-cmd-404-user')
+  const res = await postCommand('not-a-real-token', 'next', authCookieFor(user))
+  assert.equal(res.status, 404)
+})
+
+test('POST /jukebox/:token/command 409s when no kiosk is connected', async () => {
+  const device = await guestDevice('jpub-cmd-offline')
+  const user = await createUser('jpub-cmd-offline-user')
+  const res = await postCommand(device.enqueue_token, 'next', authCookieFor(user))
+  assert.equal(res.status, 409)
+  assert.match((await res.json()).error, /not connected/i)
+})
+
+test('POST /jukebox/:token/command is rate limited per token', async () => {
+  const device = await guestDevice('jpub-cmd-rate')
+  const user = await createUser('jpub-cmd-rate-user')
+  const unsub = sseBroadcaster.subscribeToCommands(device.id, () => {})
+
+  let limited = 0
+  for (let i = 0; i < GUEST_COMMANDS_PER_MINUTE + 3; i++) {
+    const res = await postCommand(device.enqueue_token, 'toggle', authCookieFor(user))
+    if (res.status === 429) limited++
+  }
+  assert.equal(limited, 3)
+  unsub()
 })

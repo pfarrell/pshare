@@ -21,6 +21,18 @@ const JWT_SECRET = process.env.BEMUSED_JWT_SECRET || 'default-secret-change-me'
 
 const jukeboxPublic = new Hono()
 
+// Valid auth cookie -> that user's id, otherwise null (never throws).
+function userIdFromAuthCookie(c: any): number | null {
+  const authCookie = getCookie(c, 'auth')
+  if (!authCookie) return null
+  try {
+    const decoded = jwt.verify(authCookie, JWT_SECRET, { algorithms: ['HS256'] }) as { id: number }
+    return decoded.id
+  } catch {
+    return null
+  }
+}
+
 async function loadDeviceByToken(c: any, next: any) {
   const device = await jukeboxQueueService.findDeviceByToken(c.req.param('token'))
   if (!device) return c.json({ error: 'Not found' }, 404)
@@ -77,17 +89,9 @@ jukeboxPublic.post('/:token/queue', loadDeviceByToken, async (c: any) => {
 
   // A logged-in submitter is attributed by their account, ignoring any name
   // in the body — matches the spec's "if the request carries a valid auth
-  // cookie, submitted_by_user_id is set from it (ignoring name)".
-  let userId: number | null = null
-  const authCookie = getCookie(c, 'auth')
-  if (authCookie) {
-    try {
-      const decoded = jwt.verify(authCookie, JWT_SECRET, { algorithms: ['HS256'] }) as { id: number }
-      userId = decoded.id
-    } catch {
-      // Invalid/expired cookie — fall through and treat this as a guest submission.
-    }
-  }
+  // cookie, submitted_by_user_id is set from it (ignoring name)". An invalid
+  // or expired cookie falls through and is treated as a guest submission.
+  const userId = userIdFromAuthCookie(c)
 
   const name = typeof body.name === 'string' ? body.name.trim().slice(0, 50) : ''
   if (!userId && !name) return c.json({ error: 'name is required' }, 400)
@@ -288,6 +292,37 @@ jukeboxPublic.post('/:token/:kind/:id/random-tracks', loadDeviceForRead, async (
 
   const { tracks } = await res.json()
   return c.json({ trackIds: (tracks ?? []).map((t: any) => t.id) })
+})
+
+// --- Remote control ------------------------------------------------------
+// A logged-in user (valid auth cookie) can drive the kiosk's transport. Guests
+// cannot: the cookie is required, unlike the queue endpoint. No seeking, and
+// no state comes back: the phone never learns whether the kiosk is playing,
+// so "toggle" is deliberately a blind toggle.
+export const GUEST_COMMANDS_PER_MINUTE = 30
+const PLAYBACK_COMMANDS = ['toggle', 'next', 'prev']
+const commandsAllowed = createFixedWindowLimiter(GUEST_COMMANDS_PER_MINUTE, 60_000)
+
+jukeboxPublic.post('/:token/command', loadDeviceByToken, async (c: any) => {
+  const device = c.get('jukeboxTokenDevice')
+
+  if (userIdFromAuthCookie(c) === null) return c.json({ error: 'Log in to control the jukebox' }, 401)
+
+  const body = await c.req.json().catch(() => null)
+  const command = body?.command
+  if (typeof command !== 'string' || !PLAYBACK_COMMANDS.includes(command)) {
+    return c.json({ error: `command must be one of ${PLAYBACK_COMMANDS.join(', ')}` }, 400)
+  }
+
+  if (!commandsAllowed(device.enqueue_token)) {
+    return c.json({ error: 'Too many commands, try again in a moment' }, 429)
+  }
+
+  if (sseBroadcaster.broadcastPlaybackCommand(device.id, command) === 0) {
+    return c.json({ error: 'The jukebox is not connected' }, 409)
+  }
+
+  return c.json({ ok: true })
 })
 
 export default jukeboxPublic

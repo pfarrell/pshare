@@ -47,10 +47,12 @@ jukeboxDevices.get('/:id/events', requireOwnJukeboxDevice, async (c) => {
 
     const unsubQueue = sseBroadcaster.subscribeToDevice(deviceId, (payload) => push('queue-item-added', payload))
     const unsubProfiles = sseBroadcaster.subscribeToProfiles(() => push('profiles-changed', {}))
+    const unsubCommands = sseBroadcaster.subscribeToCommands(deviceId, (command) => push('playback-command', { command }))
 
     stream.onAbort(() => {
       unsubQueue()
       unsubProfiles()
+      unsubCommands()
       notify?.()
     })
 
@@ -68,6 +70,7 @@ jukeboxDevices.get('/:id/events', requireOwnJukeboxDevice, async (c) => {
     } finally {
       unsubQueue()
       unsubProfiles()
+      unsubCommands()
     }
   })
 })

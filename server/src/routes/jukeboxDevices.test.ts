@@ -172,6 +172,27 @@ test('GET /jukebox/devices/:id/events streams a profiles-changed event on broadc
   await reader.cancel()
 })
 
+test('GET /jukebox/devices/:id/events streams a playback-command event on broadcast', { timeout: 5000 }, async () => {
+  const owner = await createUser('jdev-events-command-owner')
+  const device = await createJukeboxDevice('jdev-events-command-device', owner.id)
+
+  const res = await app().request(`/jukebox/devices/${device.id}/events`, {
+    headers: { Cookie: deviceCookie(owner.id, owner.username, device.id) },
+  })
+  const reader = res.body!.getReader()
+  const decoder = new TextDecoder()
+
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  sseBroadcaster.broadcastPlaybackCommand(device.id, 'next')
+
+  const { value } = await reader.read()
+  const text = decoder.decode(value)
+
+  assert.match(text, /event: playback-command/)
+  assert.match(text, /"command":"next"/)
+  await reader.cancel()
+})
+
 test('GET /jukebox/devices/:id/events 403s for a different device\'s id', async () => {
   const owner = await createUser('jdev-events-forbidden-owner')
   const device = await createJukeboxDevice('jdev-events-forbidden-device', owner.id)
