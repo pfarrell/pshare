@@ -12,6 +12,7 @@ import { useJukeboxStatePublisher } from './jukeboxStatePublisher';
 import MusicPlayerWrapper from '../components/player/MusicPlayerWrapper';
 import { useJukeboxScreensaverStore } from '../stores/jukeboxScreensaverStore';
 import JukeboxScreensaver from './JukeboxScreensaver';
+import MilkdropCanvas from '../components/visualizer/MilkdropCanvas';
 
 // How long the drawer can sit open with no touch inside it before it closes
 // itself back to Now Playing.
@@ -139,6 +140,10 @@ const JukeboxApp = () => {
   // opening or the feature being turned off in Settings force it off
   // immediately, not just block future activations.
   const [screensaverActive, setScreensaverActive] = useState(false);
+  // Set when the visualizer cannot start (no WebGL, lazy chunk failed to
+  // fetch). A black rectangle is indistinguishable from a dead kiosk, so we
+  // fall back to the music screensaver for the rest of this page's life.
+  const [visualizerFailed, setVisualizerFailed] = useState(false);
   const screensaverTimerRef = useRef(null);
   useEffect(() => {
     if (activeDestination !== null || screensaverMode === 'off') {
@@ -183,11 +188,18 @@ const JukeboxApp = () => {
       <JukeboxNowPlaying onTap={toggleBrowse} />
       <JukeboxToast message={toastMessage} />
       {screensaverActive && (
-        <JukeboxScreensaver
-          mode={screensaverMode}
-          onDismiss={() => setScreensaverActive(false)}
-          onView={handleScreensaverView}
-        />
+        screensaverMode === 'visualizer' && !visualizerFailed ? (
+          <MilkdropCanvas
+            onDismiss={() => setScreensaverActive(false)}
+            onFail={() => setVisualizerFailed(true)}
+          />
+        ) : (
+          <JukeboxScreensaver
+            mode={screensaverMode === 'visualizer' ? 'music' : screensaverMode}
+            onDismiss={() => setScreensaverActive(false)}
+            onView={handleScreensaverView}
+          />
+        )
       )}
       <JukeboxBrowsePanel
         activeDestination={activeDestination}
