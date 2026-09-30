@@ -142,3 +142,28 @@ test('tracks with a missing title or artist render without crashing or "undefine
   await screen.findByText('Now playing');
   expect(screen.queryByText(/undefined|null|\[object/)).not.toBeInTheDocument();
 });
+
+test('in shuffle the section says what is left to play and that the order is random, not "Up next"', async () => {
+  apiService.getJukeboxQueue.mockResolvedValue({ data: live({ playbackMode: 'shuffle' }) });
+  renderQueue();
+  expect(await screen.findByText('Left to play')).toBeInTheDocument();
+  expect(screen.getByText(/shuffle is on, so these play in random order/i)).toBeInTheDocument();
+  expect(screen.queryByText('Up next')).not.toBeInTheDocument();
+});
+
+test('with repeat one on, the queue is labelled Up next but says the current track repeats', async () => {
+  apiService.getJukeboxQueue.mockResolvedValue({ data: live({ playbackMode: 'repeat-one' }) });
+  renderQueue();
+  expect(await screen.findByText('Up next')).toBeInTheDocument();
+  expect(screen.getByText(/repeat one is on, so the current track plays again first/i)).toBeInTheDocument();
+});
+
+test('other modes, and a server that sends no mode, show a plain Up next with no note', async () => {
+  for (const playbackMode of ['off', 'shuffle-scope', 'repeat-all', undefined]) {
+    apiService.getJukeboxQueue.mockResolvedValue({ data: live({ playbackMode }) });
+    const { unmount } = renderQueue();
+    expect(await screen.findByText('Up next')).toBeInTheDocument();
+    expect(screen.queryByText(/shuffle is on|repeat one is on/i)).not.toBeInTheDocument();
+    unmount();
+  }
+});

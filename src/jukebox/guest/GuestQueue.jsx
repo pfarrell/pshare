@@ -94,6 +94,14 @@ const GuestQueue = () => {
     );
   };
 
+  // Plain shuffle does not play in queue order, so the list is "what is left"
+  // and says so; repeat one replays the current track before moving on.
+  const shuffled = data.playbackMode === 'shuffle';
+  const upcomingHeading = shuffled ? 'Left to play' : 'Up next';
+  const modeNote = shuffled
+    ? 'Shuffle is on, so these play in random order.'
+    : (data.playbackMode === 'repeat-one' ? 'Repeat one is on, so the current track plays again first.' : null);
+
   return (
     <>
       <h1 className="jukebox-guest-heading">Queue</h1>
@@ -106,7 +114,8 @@ const GuestQueue = () => {
       )}
       {upcoming.length > 0 && (
         <section className="jukebox-guest-section">
-          <h2>Up next</h2>
+          <h2>{upcomingHeading}</h2>
+          {modeNote && <p className="jukebox-guest-queue-note">{modeNote}</p>}
           {upcoming.map((entry) => row(entry, { removable: true }))}
         </section>
       )}

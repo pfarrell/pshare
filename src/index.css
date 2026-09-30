@@ -4092,3 +4092,8 @@ body:has(.jukebox-app) {
   font-size: 1.5rem;
   color: var(--color-text-muted);
 }
+.jukebox-guest-queue-note {
+  margin: 0 0 0.25rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}

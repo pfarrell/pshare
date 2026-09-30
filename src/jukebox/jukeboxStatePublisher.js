@@ -8,16 +8,41 @@ import { apiService } from '../services/api';
 export const PUBLISH_THROTTLE_MS = 1500;
 const MAX_QUEUE_ENTRIES = 300;
 
-export const buildQueueSnapshot = ({ playlist, currentTrackIndex, isPlaying }) => {
+const toEntry = (track, index) => ({
+  index,
+  id: track?.id,
+  title: typeof track?.title === 'string' ? track.title : '',
+  artist: typeof track?.artist?.name === 'string' && track.artist.name ? track.artist.name : null,
+});
+
+// What the phone shows. Normally that is the current track onward, in queue
+// order. Plain shuffle does NOT play in queue order (the next track is picked at
+// random from everything not yet played), so there the list is the current track
+// followed by every track still left to play, still addressed by real playlist
+// index so jump/remove hit the right row. The mode rides along so the phone can
+// say so instead of implying an order.
+export const buildQueueSnapshot = ({ playlist, currentTrackIndex, isPlaying, playbackMode, shuffleHistory }) => {
   const list = playlist ?? [];
-  const start = Math.max(currentTrackIndex ?? -1, 0);
-  const queue = list.slice(start, start + MAX_QUEUE_ENTRIES).map((t, i) => ({
-    index: start + i,
-    id: t?.id,
-    title: typeof t?.title === 'string' ? t.title : '',
-    artist: typeof t?.artist?.name === 'string' && t.artist.name ? t.artist.name : null,
-  }));
-  return { queue, currentIndex: list.length ? (currentTrackIndex ?? -1) : -1, isPlaying: !!isPlaying };
+  const mode = playbackMode ?? 'off';
+  const current = currentTrackIndex ?? -1;
+
+  const indices = [];
+  if (mode === 'shuffle') {
+    const played = new Set(shuffleHistory ?? []);
+    if (current >= 0 && current < list.length) indices.push(current);
+    for (let i = 0; i < list.length; i += 1) {
+      if (i !== current && !played.has(i)) indices.push(i);
+    }
+  } else {
+    for (let i = Math.max(current, 0); i < list.length; i += 1) indices.push(i);
+  }
+
+  return {
+    queue: indices.slice(0, MAX_QUEUE_ENTRIES).map((i) => toEntry(list[i], i)),
+    currentIndex: list.length ? current : -1,
+    isPlaying: !!isPlaying,
+    playbackMode: mode,
+  };
 };
 
 // Set while the hook is mounted, so code elsewhere (the event-stream hook) can
@@ -53,6 +78,8 @@ export const useJukeboxStatePublisher = (deviceId) => {
         state.playlist !== prev.playlist
         || state.currentTrackIndex !== prev.currentTrackIndex
         || state.isPlaying !== prev.isPlaying
+        || state.playbackMode !== prev.playbackMode
+        || state.shuffleHistory !== prev.shuffleHistory
       ) {
         schedule();
       }
