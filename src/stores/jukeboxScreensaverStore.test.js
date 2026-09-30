@@ -19,6 +19,12 @@ describe('jukeboxScreensaverStore', () => {
     useJukeboxScreensaverStore.getState().setMode('off');
     expect(localStorage.getItem('jukebox-screensaver-mode')).toBe('off');
   });
+
+  test('setMode accepts visualizer and persists it', () => {
+    useJukeboxScreensaverStore.getState().setMode('visualizer');
+    expect(useJukeboxScreensaverStore.getState().mode).toBe('visualizer');
+    expect(localStorage.getItem('jukebox-screensaver-mode')).toBe('visualizer');
+  });
 });
 
 // The store reads localStorage once, at module-evaluation time (inside the
@@ -39,6 +45,12 @@ describe('jukeboxScreensaverStore module-load behavior (fresh import per test)',
     localStorage.setItem('jukebox-screensaver-mode', 'photos');
     const { useJukeboxScreensaverStore: fresh } = await import('./jukeboxScreensaverStore');
     expect(fresh.getState().mode).toBe('photos');
+  });
+
+  test('reads a persisted visualizer mode back on next load', async () => {
+    localStorage.setItem('jukebox-screensaver-mode', 'visualizer');
+    const { useJukeboxScreensaverStore: fresh } = await import('./jukeboxScreensaverStore');
+    expect(fresh.getState().mode).toBe('visualizer');
   });
 
   test('falls back to music for an invalid persisted value', async () => {
