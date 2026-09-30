@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import JukeboxSettingsTab from './JukeboxSettingsTab';
 import { __resetProfilesCacheForTests, invalidateProfilesCache } from '../utils/profilesCache';
 import { useProfileFilterStore } from '../stores/profileFilterStore';
@@ -109,5 +109,51 @@ describe('screensaver mode selector', () => {
 
     expect(musicButton).toHaveClass('jukebox-settings-tab-screensaver-toggle');
     expect(musicButton.parentElement).not.toBe(allButton.parentElement);
+  });
+
+  describe('Exit kiosk', () => {
+    afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+    test('first tap only arms the confirm; nothing is sent', () => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+      render(<JukeboxSettingsTab />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Exit kiosk' }));
+
+      expect(screen.getByRole('button', { name: 'Tap again to confirm' })).toBeInTheDocument();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    test('second tap posts to the local kiosk helper', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+      vi.stubGlobal('fetch', fetchMock);
+      render(<JukeboxSettingsTab />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Exit kiosk' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Tap again to confirm' }));
+
+      expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:8737/exit-kiosk', { method: 'POST' });
+    });
+
+    test('the confirm disarms itself after a few seconds', () => {
+      vi.useFakeTimers();
+      render(<JukeboxSettingsTab />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Exit kiosk' }));
+      act(() => { vi.advanceTimersByTime(3100); });
+
+      expect(screen.getByRole('button', { name: 'Exit kiosk' })).toBeInTheDocument();
+    });
+
+    test('shows an error when the helper is unreachable', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+      render(<JukeboxSettingsTab />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Exit kiosk' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Tap again to confirm' }));
+
+      expect(await screen.findByText('Kiosk helper not running')).toBeInTheDocument();
+    });
   });
 });

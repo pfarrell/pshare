@@ -3375,6 +3375,11 @@ body:has(.jukebox-app) {
    close to Modal's default light-panel look (a real dialog reads fine
    against the dark kiosk chrome behind it); first pass, verify sizing/touch
    targets on the actual kiosk hardware. */
+/* The kiosk keyboard (z-index --z-modal-top) sits over the modal backdrop, so
+   pin the panel to the top of the screen to keep the input clear of it. */
+.modal-backdrop:has(.jukebox-save-playlist-input) {
+  align-items: flex-start;
+}
 .jukebox-save-playlist-title {
   margin: 0 0 1rem 0;
   font-size: 1.25rem;

@@ -12,7 +12,17 @@ import JukeboxQrCode from './JukeboxQrCode';
 // JukeboxNextUpTab are shown. Applying a profile does NOT switch away from
 // Settings — see docs/superpowers/specs/2026-09-24-profiles-design.md
 // Design §5: this is a filter/settings change, not a playback action.
+// The kiosk's Chromium was launched by the Pi's labwc autostart, and a page
+// can't quit its own browser — so this posts to a tiny localhost-only helper
+// on the Pi (scripts/pi-kiosk-helper/) that kills Chromium and brings up the
+// regular Pi desktop. Two taps, since the Settings tab is reachable by anyone
+// standing at the panel.
+const KIOSK_HELPER_URL = 'http://127.0.0.1:8737/exit-kiosk';
+const EXIT_CONFIRM_MS = 3000;
+
 const JukeboxSettingsTab = () => {
+  const [confirmingExit, setConfirmingExit] = useState(false);
+  const [exitError, setExitError] = useState(false);
   const { activeProfileId, setProfile } = useProfileFilterStore();
   const { mode: screensaverMode, setMode: setScreensaverMode } = useJukeboxScreensaverStore();
   const [profiles, setProfiles] = useState(null);
@@ -28,6 +38,27 @@ const JukeboxSettingsTab = () => {
       getProfilesCached().then((res) => setProfiles(res.data)).catch(() => setProfiles([]));
     }
   }, [profiles]);
+
+  useEffect(() => {
+    if (!confirmingExit) return undefined;
+    const timer = setTimeout(() => setConfirmingExit(false), EXIT_CONFIRM_MS);
+    return () => clearTimeout(timer);
+  }, [confirmingExit]);
+
+  const handleExitKiosk = async () => {
+    if (!confirmingExit) {
+      setExitError(false);
+      setConfirmingExit(true);
+      return;
+    }
+    setConfirmingExit(false);
+    try {
+      const res = await fetch(KIOSK_HELPER_URL, { method: 'POST' });
+      if (!res.ok) setExitError(true);
+    } catch {
+      setExitError(true);
+    }
+  };
 
   useEffect(() => subscribeProfilesInvalidated(() => setProfiles(null)), []);
 
@@ -76,6 +107,11 @@ const JukeboxSettingsTab = () => {
           {p.name}
         </button>
       ))}
+      <div className="jukebox-settings-tab-divider" />
+      <button type="button" onClick={handleExitKiosk}>
+        {confirmingExit ? 'Tap again to confirm' : 'Exit kiosk'}
+      </button>
+      {exitError && <p className="jukebox-settings-tab-error">Kiosk helper not running</p>}
     </div>
   );
 };
