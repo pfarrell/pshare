@@ -39,3 +39,9 @@ export const __resetShaderDiagnosticsForTests = () => {
   installed = false;
   failures.length = 0;
 };
+
+// Lets tests simulate butterchurn silently compiling a broken shader without
+// needing WebGL.
+export const __pushShaderFailureForTests = (message) => {
+  failures.push(message);
+};
