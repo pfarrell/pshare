@@ -24,6 +24,7 @@ import auth from './routes/auth.js'
 import errors from './routes/errors.js'
 import signups from './routes/signups.js'
 import photos from './routes/photos.js'
+import factoids from './routes/factoids.js'
 import { errorLogService } from './services/errorLogService.js'
 import { authMiddleware, requireAdmin, requireAuth } from './middleware/auth.js'
 
@@ -109,6 +110,7 @@ protectedApp.route('/collections', collections)
 protectedApp.route('/favorites', favorites)
 protectedApp.route('/lookup', lookup)
 protectedApp.route('/photos', photos)
+protectedApp.route('/factoids', factoids)
 
 // Playlist/collection owners (not just site admins) can reach some routes under
 // the /admin/playlist and /admin/collection URL space (e.g. POST .../:id/image,
