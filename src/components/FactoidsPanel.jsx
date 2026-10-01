@@ -22,6 +22,10 @@ const FactoidsPanel = ({ kind, targetId }) => {
   const [factoids, setFactoids] = useState([]);
   const [generation, setGeneration] = useState(null);
   const [loadFailed, setLoadFailed] = useState(false);
+  // False until the first answer arrives. Without it the empty list is also the
+  // initial state, so the panel would claim "No factoids yet" for a moment on an
+  // entity that has plenty, which reads as the research having found nothing.
+  const [loaded, setLoaded] = useState(false);
   // A failed delete or re-research is reported inline and leaves the list
   // alone: replacing the list with an error would hide which factoids still
   // exist, and the list must not lie about what a failed delete did.
@@ -34,6 +38,7 @@ const FactoidsPanel = ({ kind, targetId }) => {
       setFactoids(res?.data?.factoids ?? []);
       setGeneration(res?.data?.generation ?? null);
       setLoadFailed(false);
+      setLoaded(true);
     } catch {
       setLoadFailed(true);
     }
@@ -61,12 +66,24 @@ const FactoidsPanel = ({ kind, targetId }) => {
     }
   };
 
+  // Nothing to show until there is an entity to ask about.
+  if (targetId == null) return null;
+
   if (loadFailed) {
     return (
       <div className="factoids-panel">
         <h3>Factoids</h3>
         <p>Could not load factoids.</p>
         <button type="button" onClick={load}>Retry</button>
+      </div>
+    );
+  }
+
+  if (!loaded) {
+    return (
+      <div className="factoids-panel">
+        <h3>Factoids</h3>
+        <p>Loading factoids...</p>
       </div>
     );
   }

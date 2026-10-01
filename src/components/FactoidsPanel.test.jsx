@@ -60,6 +60,17 @@ test('re-research clears the ledger row and refetches', async () => {
   expect(apiService.adminListFactoids).toHaveBeenCalledTimes(2);
 });
 
+test('shows a loading state, not a false empty state, while the request is in flight', async () => {
+  // Otherwise an admin sees "No factoids yet" for a moment on an album that has
+  // plenty, which reads as the research having found nothing.
+  apiService.adminListFactoids.mockReturnValue(new Promise(() => {}));
+  render(<FactoidsPanel kind="album" targetId={10} />);
+  await act(async () => {});
+
+  expect(screen.getByText(/loading/i)).toBeInTheDocument();
+  expect(screen.queryByText(/no factoids/i)).not.toBeInTheDocument();
+});
+
 test('shows an empty state rather than a bare heading', async () => {
   apiService.adminListFactoids.mockResolvedValue({ data: { factoids: [], generation: null } });
   render(<FactoidsPanel kind="album" targetId={10} />);
