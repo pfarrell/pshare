@@ -9,7 +9,15 @@ import {
   STALE_PENDING_MS, FAILED_RETRY_AFTER_MS,
 } from './factoidLedger.js'
 
-const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000)
+const DAY_MS = 24 * 60 * 60 * 1000
+
+// node --test runs files in parallel against one shared DB, so any assertion on
+// a GLOBAL query (a count over all rows, the single most recent play) is racy:
+// another file's fixtures land inside the window. The time-windowed functions
+// take an injectable clock; these tests run a year in the future, where no real
+// row written by a concurrent file can fall inside the window.
+const FAKE_NOW = Date.now() + 365 * DAY_MS
+const fakeAgo = (ms: number) => new Date(FAKE_NOW - ms)
 
 beforeEach(async () => {
   await cleanupFixtures()
@@ -100,9 +108,9 @@ test('a failed entity is re-claimable only after the retry delay, and only 3 tim
 test('nextCandidate picks a recently played album with no ledger row', async () => {
   const artist = await createArtist('cand-artist')
   const album = await createAlbum('cand-album', artist.id)
-  await createLog(album.id, null, artist.id, new Date())
+  await createLog(album.id, null, artist.id, fakeAgo(0))
 
-  const candidate = await nextCandidate()
+  const candidate = await nextCandidate(FAKE_NOW)
   assert.ok(candidate)
   assert.ok(
     (candidate.kind === 'album' && candidate.targetId === album.id) ||
@@ -113,9 +121,9 @@ test('nextCandidate picks a recently played album with no ledger row', async () 
 test('nextCandidate ignores plays older than the lookback window', async () => {
   const artist = await createArtist('cand-old-artist')
   const album = await createAlbum('cand-old-album', artist.id)
-  await createLog(album.id, null, artist.id, daysAgo(30))
+  await createLog(album.id, null, artist.id, fakeAgo(30 * DAY_MS))
 
-  const candidate = await nextCandidate()
+  const candidate = await nextCandidate(FAKE_NOW)
   const isOurs = candidate && (
     (candidate.kind === 'album' && candidate.targetId === album.id) ||
     (candidate.kind === 'artist' && candidate.targetId === artist.id)
@@ -126,13 +134,13 @@ test('nextCandidate ignores plays older than the lookback window', async () => {
 test('nextCandidate skips entities that already have a ledger row', async () => {
   const artist = await createArtist('cand-claimed-artist')
   const album = await createAlbum('cand-claimed-album', artist.id)
-  await createLog(album.id, null, artist.id, new Date())
+  await createLog(album.id, null, artist.id, fakeAgo(0))
   const a = await claimEntity('artist', artist.id)
   const b = await claimEntity('album', album.id)
   await recordResult(a!, 'ok', 1)
   await recordResult(b!, 'ok', 1)
 
-  const candidate = await nextCandidate()
+  const candidate = await nextCandidate(FAKE_NOW)
   const isOurs = candidate && (
     (candidate.kind === 'album' && candidate.targetId === album.id) ||
     (candidate.kind === 'artist' && candidate.targetId === artist.id)
@@ -147,15 +155,15 @@ test('a log row with null album_id and null artist_id yields no candidate', asyn
   // deleted in the finally block: cleanupFixtures only removes logs by album id,
   // so this row would otherwise accumulate in the dev DB on every run.
   const nullLog = await db.insertInto('logs')
-    .values({ album_id: null, track_id: null, artist_id: null, action: 'stream', created_at: new Date(), ip_address: null })
+    .values({ album_id: null, track_id: null, artist_id: null, action: 'stream', created_at: fakeAgo(0), ip_address: null })
     .returning('id')
     .executeTakeFirstOrThrow()
   try {
     await db.deleteFrom('albums').where('id', '=', album.id).execute()
     await db.deleteFrom('artists').where('id', '=', artist.id).execute()
 
-    const candidate = await nextCandidate()
-    assert.ok(candidate === null || candidate.targetId > 0, 'must never produce a null or NaN target')
+    const candidate = await nextCandidate(FAKE_NOW)
+    assert.equal(candidate, null, 'with every real entity out of window and the null-id row ignored, there is nothing to pick')
   } finally {
     await db.deleteFrom('logs').where('id', '=', nullLog.id).execute()
   }
@@ -170,7 +178,8 @@ test('generationsInLastDay counts only the last 24 hours', async () => {
   await recordResult(oldId!, 'ok', 1)
   // Raw SQL on purpose: created_at is an audit timestamp, typed as immutable on
   // update in database.ts, and loosening that for one test would weaken it.
-  await sql`UPDATE factoid_generations SET created_at = ${daysAgo(3)} WHERE id = ${oldId!}`.execute(db)
+  await sql`UPDATE factoid_generations SET created_at = ${fakeAgo(60 * 60 * 1000)} WHERE id = ${recentId!}`.execute(db)
+  await sql`UPDATE factoid_generations SET created_at = ${fakeAgo(3 * DAY_MS)} WHERE id = ${oldId!}`.execute(db)
 
-  assert.equal(await generationsInLastDay(), 1)
+  assert.equal(await generationsInLastDay(FAKE_NOW), 1)
 })

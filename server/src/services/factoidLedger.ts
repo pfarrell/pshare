@@ -71,11 +71,13 @@ export async function reapStalePending(): Promise<number> {
   return reaped.length
 }
 
-export async function generationsInLastDay(): Promise<number> {
+// `now` is injectable so tests can query a window no concurrent test file's
+// rows can fall into; production always uses the real clock.
+export async function generationsInLastDay(now: number = Date.now()): Promise<number> {
   const { count } = await db
     .selectFrom('factoid_generations')
     .select(db.fn.count('id').as('count'))
-    .where('created_at', '>', new Date(Date.now() - 24 * 60 * 60 * 1000))
+    .where('created_at', '>', new Date(now - 24 * 60 * 60 * 1000))
     .executeTakeFirstOrThrow()
   return Number(count)
 }
@@ -84,8 +86,8 @@ export async function generationsInLastDay(): Promise<number> {
 // every play, so there is no enqueue path to build and no way for a job table
 // to drift from what was actually listened to. Both columns are nullable, so
 // nulls are filtered explicitly.
-export async function nextCandidate(): Promise<{ kind: FactoidTargetKind, targetId: number } | null> {
-  const since = new Date(Date.now() - CANDIDATE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000)
+export async function nextCandidate(now: number = Date.now()): Promise<{ kind: FactoidTargetKind, targetId: number } | null> {
+  const since = new Date(now - CANDIDATE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000)
 
   const row = await sql<{ kind: FactoidTargetKind, target_id: number }>`
     SELECT kind, target_id FROM (
