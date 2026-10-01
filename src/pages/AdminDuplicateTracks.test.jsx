@@ -16,7 +16,7 @@ vi.mock('../services/api', () => ({
 const renderPage = () => render(<MemoryRouter><AdminDuplicateTracks /></MemoryRouter>);
 
 const mk = (id, title, duration_sec = 226) => ({
-  id, title, duration_sec, media_file_id: 1000 + id, album_id: 5, album_title: 'Greatest Hits of the 90s', url: `http://localhost:3000/stream/${id}`,
+  id, title, duration_sec, media_file_id: 1000 + id, file_status: 'ok', file_path: null, album_id: 5, album_title: 'Greatest Hits of the 90s', url: `http://localhost:3000/stream/${id}`,
 });
 const group = {
   reasons: ['file', 'musicbrainz'],
@@ -71,12 +71,136 @@ describe('AdminDuplicateTracks', () => {
 
     await screen.findByRole('link', { name: 'I Touch Myself' });
     const [first, second, third] = document.querySelectorAll('audio');
-    [first, second, third].forEach((p) => { p.pause = vi.fn(); });
+    [first, second, third].forEach((p) => { p.pause = vi.fn(); p.load = vi.fn(); });
     fireEvent.play(second);
 
     expect(first.pause).toHaveBeenCalled();
     expect(third.pause).toHaveBeenCalled();
     expect(second.pause).not.toHaveBeenCalled();
+    expect(second.load).not.toHaveBeenCalled();
+  });
+
+  test('starting a preview aborts the downloads of previews that already started, so they stop holding connections', async () => {
+    apiService.getDuplicateTracks.mockResolvedValue(respond([group]));
+    renderPage();
+
+    await screen.findByRole('link', { name: 'I Touch Myself' });
+    const [first, second, third] = document.querySelectorAll('audio');
+    [first, second, third].forEach((p) => { p.pause = vi.fn(); p.load = vi.fn(); });
+    // the first was played earlier (has data), the third never started
+    Object.defineProperty(first, 'readyState', { value: 4, configurable: true });
+    fireEvent.play(second);
+
+    expect(first.load).toHaveBeenCalled();
+    expect(third.load).not.toHaveBeenCalled();
+    expect(second.load).not.toHaveBeenCalled();
+  });
+
+  describe('files that are missing or will not play', () => {
+    const withStatus = (track, file_status, file_path = null) => ({ ...track, file_status, file_path });
+    const brokenGroup = {
+      ...group,
+      tracks: [
+        mk(100, 'I Touch Myself'),
+        withStatus(mk(200, 'I touch Myself', 227), 'missing', '/var/share3/jeff_music/Divinyls/01 I Touch Myself.mp3'),
+        withStatus(mk(300, 'I Touch Myself (Remaster)', 228), 'empty', '/var/share3/x/empty.mp3'),
+      ],
+    };
+
+    test('a missing file is marked red with the reason and its path; working files are not', async () => {
+      apiService.getDuplicateTracks.mockResolvedValue(respond([brokenGroup]));
+      renderPage();
+
+      await screen.findByRole('link', { name: 'I Touch Myself' });
+      expect(rowOf('I Touch Myself')).not.toHaveAttribute('data-file-problem');
+      expect(within(rowOf('I Touch Myself')).queryByRole('alert')).not.toBeInTheDocument();
+
+      const missing = rowOf('I touch Myself');
+      expect(missing).toHaveAttribute('data-file-problem', 'true');
+      expect(missing.style.backgroundColor).toMatch(/rgba\(220, 38, 38/);
+      expect(within(missing).getByRole('alert')).toHaveTextContent('FILE MISSING on disk: /var/share3/jeff_music/Divinyls/01 I Touch Myself.mp3');
+
+      expect(within(rowOf('I Touch Myself (Remaster)')).getByRole('alert')).toHaveTextContent('FILE IS EMPTY (0 bytes): /var/share3/x/empty.mp3');
+    });
+
+    test('a track with no media file at all is marked too', async () => {
+      const noFile = { ...group, tracks: [mk(100, 'I Touch Myself'), { ...mk(200, 'I touch Myself'), media_file_id: null, file_status: 'none' }] };
+      apiService.getDuplicateTracks.mockResolvedValue(respond([noFile]));
+      renderPage();
+
+      await screen.findByRole('link', { name: 'I Touch Myself' });
+      expect(within(rowOf('I touch Myself')).getByRole('alert')).toHaveTextContent('NO MEDIA FILE');
+    });
+
+    test('a file the server could not check (unknown) is not painted as broken', async () => {
+      const unknown = { ...group, tracks: group.tracks.map((t) => ({ ...t, file_status: 'unknown' })) };
+      apiService.getDuplicateTracks.mockResolvedValue(respond([unknown]));
+      renderPage();
+
+      await screen.findByRole('link', { name: 'I Touch Myself' });
+      expect(document.querySelectorAll('[data-file-problem]')).toHaveLength(0);
+    });
+
+    test('a broken version cannot be the main one: its consolidate button is disabled and says why', async () => {
+      const user = userEvent.setup();
+      apiService.getDuplicateTracks.mockResolvedValue(respond([brokenGroup]));
+      renderPage();
+
+      await screen.findByRole('link', { name: 'I Touch Myself' });
+      await check(user, 'I Touch Myself');
+      await check(user, 'I Touch Myself (Remaster)');
+
+      const fromMissing = within(rowOf('I touch Myself')).getByText('Consolidate 2 selected to this version');
+      expect(fromMissing).toBeDisabled();
+      expect(fromMissing).toHaveAttribute('title', expect.stringMatching(/can't be the main one: FILE MISSING/));
+      expect(apiService.setCanonicalTrackFile).not.toHaveBeenCalled();
+    });
+
+    test('a working version can be the main one for broken tracks, which is how they get fixed', async () => {
+      const user = userEvent.setup();
+      apiService.getDuplicateTracks.mockResolvedValue(respond([brokenGroup]));
+      apiService.setCanonicalTrackFile.mockResolvedValue({ data: { success: true } });
+      renderPage();
+
+      await screen.findByRole('link', { name: 'I Touch Myself' });
+      await check(user, 'I touch Myself'); // the missing file
+      await check(user, 'I Touch Myself (Remaster)'); // the empty file
+      await user.click(within(rowOf('I Touch Myself')).getByText('Consolidate 2 selected to this version'));
+
+      expect(apiService.setCanonicalTrackFile).toHaveBeenCalledWith(100, [200, 300]);
+    });
+
+    test('after consolidating onto a working file the red marking clears, because those tracks now play', async () => {
+      const user = userEvent.setup();
+      apiService.getDuplicateTracks.mockResolvedValue(respond([brokenGroup]));
+      apiService.setCanonicalTrackFile.mockResolvedValue({ data: { success: true } });
+      renderPage();
+
+      await screen.findByRole('link', { name: 'I Touch Myself' });
+      await check(user, 'I touch Myself');
+      await check(user, 'I Touch Myself (Remaster)');
+      await user.click(within(rowOf('I Touch Myself')).getByText('Consolidate 2 selected to this version'));
+
+      // all three now share the working file, so nothing is left to review
+      expect(await screen.findByText('No possible duplicate tracks found.')).toBeInTheDocument();
+    });
+
+    test('a player that fails to load turns its row red even though the file is on disk, and clears when it plays', async () => {
+      apiService.getDuplicateTracks.mockResolvedValue(respond([group]));
+      renderPage();
+
+      await screen.findByRole('link', { name: 'I Touch Myself' });
+      const row = rowOf('I touch Myself');
+      expect(row).not.toHaveAttribute('data-file-problem');
+
+      fireEvent.error(row.querySelector('audio'));
+      expect(await within(row).findByRole('alert')).toHaveTextContent('Preview failed to load');
+      expect(rowOf('I touch Myself')).toHaveAttribute('data-file-problem', 'true');
+      expect(within(rowOf('I touch Myself')).getByText(/Consolidate to this version|Consolidate \d selected to this version/)).toBeDisabled();
+
+      fireEvent.playing(rowOf('I touch Myself').querySelector('audio'));
+      await vi.waitFor(() => expect(rowOf('I touch Myself')).not.toHaveAttribute('data-file-problem'));
+    });
   });
 
   test('every track lists its own album (linked, with artist and id)', async () => {
@@ -229,7 +353,7 @@ describe('AdminDuplicateTracks', () => {
 
     test('a track with no media file cannot be the main version to consolidate to', async () => {
       const user = userEvent.setup();
-      const noFile = { ...group, tracks: [mk(100, 'I Touch Myself'), { ...mk(200, 'I touch Myself'), media_file_id: null }] };
+      const noFile = { ...group, tracks: [mk(100, 'I Touch Myself'), { ...mk(200, 'I touch Myself'), media_file_id: null, file_status: 'none' }] };
       apiService.getDuplicateTracks.mockResolvedValue(respond([noFile]));
       renderPage();
 

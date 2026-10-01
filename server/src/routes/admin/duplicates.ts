@@ -6,6 +6,7 @@ import { titlesRoughlyMatch } from '../../utils/titleMatch.js'
 import { mergeAlbumInto } from '../../services/albumMergeService.js'
 import { setCanonicalMediaFile, CanonicalFileError } from '../../services/trackCanonicalFileService.js'
 import { removeDuplicateTracks } from '../../services/trackDuplicateRemovalService.js'
+import { checkMediaFiles } from '../../services/mediaFileStatus.js'
 import { groupDuplicateTracks } from '../../services/duplicateTrackGroups.js'
 import { countsService } from '../../services/countsService.js'
 import { streamBase } from '../../db/streamUrl.js'
@@ -168,6 +169,7 @@ router.get('/duplicates/tracks', async (c) => {
       'tracks.id', 'tracks.album_id', 'tracks.title', 'tracks.media_file_id', 'tracks.duration_sec',
       'albums.title as album_title', 'artists.name as album_artist',
       'media_files.file_hash', 'media_files.musicbrainz_recording_id',
+      'media_files.absolute_path', 'media_files.file_missing',
       // Fingerprints are kilobytes each; equal md5s mean identical fingerprints, so only the digest leaves the DB.
       sql<string | null>`md5(media_files.chromaprint_fingerprint)`.as('chromaprint_key'),
     ])
@@ -179,12 +181,33 @@ router.get('/duplicates/tracks', async (c) => {
 
   const total = groups.length
   const totalPages = Math.max(1, Math.ceil(total / limit))
-  const shape = (row: (typeof tracks)[number]) => ({
-    id: row.id, title: row.title, duration_sec: row.duration_sec,
-    album_id: row.album_id, album_title: row.album_title, album_artist: row.album_artist, media_file_id: row.media_file_id,
-    url: `${streamBase(c)}/stream/${row.id}`,
-  })
-  const pageItems = groups.slice((page - 1) * limit, page * limit).map((g) => ({
+  const pageGroups = groups.slice((page - 1) * limit, page * limit)
+
+  // Only the files on this page are checked against the disk (a stat each). The
+  // media_files.file_missing flag is almost never set, so it cannot be relied on to
+  // find files that have gone from the NAS. In dev the audio share is not mounted
+  // (streams are proxied to prod), so every file would falsely look missing.
+  const pageFiles = new Map<number, { id: number; absolute_path: string | null; file_missing: boolean | null }>()
+  for (const g of pageGroups) {
+    for (const t of g.tracks) {
+      if (t.media_file_id != null) pageFiles.set(t.media_file_id, { id: t.media_file_id, absolute_path: t.absolute_path, file_missing: t.file_missing })
+    }
+  }
+  const fileStatus = await checkMediaFiles([...pageFiles.values()], { skip: !!process.env.BEMUSED_DEV })
+
+  const shape = (row: (typeof tracks)[number]) => {
+    const status = row.media_file_id == null ? 'none' : fileStatus.get(row.media_file_id) ?? 'unknown'
+    return {
+      id: row.id, title: row.title, duration_sec: row.duration_sec,
+      album_id: row.album_id, album_title: row.album_title, album_artist: row.album_artist, media_file_id: row.media_file_id,
+      // 'ok' | 'missing' | 'empty' | 'unreadable' | 'unknown' | 'none' (track has no media file)
+      file_status: status,
+      // the path is only useful, and only sent, when something is wrong with the file
+      file_path: status === 'missing' || status === 'empty' || status === 'unreadable' ? row.absolute_path : null,
+      url: `${streamBase(c)}/stream/${row.id}`,
+    }
+  }
+  const pageItems = pageGroups.map((g) => ({
     reasons: g.reasons, album_ids: g.album_ids, tracks: g.tracks.map(shape),
   }))
 

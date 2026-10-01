@@ -18,13 +18,37 @@ const REASON_LABELS = {
 };
 
 // Comparing versions by ear means one at a time: starting a preview stops the others.
+//
+// Pausing is not enough. A paused <audio> keeps its HTTP connection open and keeps
+// buffering, and a browser allows only ~6 connections per host over plain HTTP/1.1 (the
+// LAN address), shared with the rest of the app. A handful of paused previews used them
+// all up and playback stalled. load() aborts the download and resets the element; with
+// preload="none" it then fetches nothing until play is pressed again (from the start).
 const pauseOtherPreviews = (event) => {
   document.querySelectorAll('audio[data-dup-preview]').forEach((el) => {
-    if (el !== event.currentTarget) el.pause();
+    if (el === event.currentTarget) return;
+    el.pause();
+    const started = el.readyState > 0 || el.networkState === HTMLMediaElement.NETWORK_LOADING;
+    if (started) el.load();
   });
 };
 
 const groupKey = (group) => group.tracks.map((t) => t.id).join('-');
+
+// What is wrong with a track's audio, if anything. The server checks each file on disk
+// (media_files.file_missing is almost never set, so it can't be trusted); `playFailed` is
+// the browser telling us the player itself could not load the stream.
+const FILE_PROBLEMS = {
+  missing: 'FILE MISSING on disk',
+  empty: 'FILE IS EMPTY (0 bytes)',
+  unreadable: 'FILE UNREADABLE (storage error)',
+  none: 'NO MEDIA FILE',
+};
+const fileProblem = (track, playFailed) => {
+  if (FILE_PROBLEMS[track.file_status]) return FILE_PROBLEMS[track.file_status];
+  if (playFailed.has(track.id)) return 'Preview failed to load (the file is on disk but the browser could not play it)';
+  return null;
+};
 
 const buttonStyle = (bg, disabled) => ({
   padding: '0.4rem 0.75rem', backgroundColor: bg, color: 'white', border: 'none', borderRadius: '4px',
@@ -39,6 +63,15 @@ export default function AdminDuplicateTracks() {
   // Checked tracks, by id. The button you click names the main version; the action applies
   // to the OTHER checked tracks only, and unchecked tracks stay in the group untouched.
   const [selected, setSelected] = useState(() => new Set());
+  // Tracks whose <audio> reported an error this session.
+  const [playFailed, setPlayFailed] = useState(() => new Set());
+  const setPlayState = (id, failed) => setPlayFailed((prev) => {
+    if (prev.has(id) === failed) return prev;
+    const next = new Set(prev);
+    if (failed) next.add(id);
+    else next.delete(id);
+    return next;
+  });
 
   const toggleSelected = (id) => setSelected((prev) => {
     const next = new Set(prev);
@@ -70,7 +103,7 @@ export default function AdminDuplicateTracks() {
   // at the clicked track's media file, which becomes the definitive one.
   const handleUseFile = async (group, main) => {
     const others = selectedOthers(group, main);
-    if (others.length === 0) return;
+    if (others.length === 0 || fileProblem(main, playFailed)) return;
     const names = others.length === 1 ? `"${others[0].title}"` : `${others.length} selected tracks`;
     if (!window.confirm(`Consolidate: use the audio file of "${main.title}" as the definitive file for ${names}?\n\nNo tracks are removed from the album.`)) return;
     const key = groupKey(group);
@@ -83,9 +116,13 @@ export default function AdminDuplicateTracks() {
       const moved = new Set(others.map((t) => t.id));
       setGroups((prev) => prev.flatMap((g) => {
         if (groupKey(g) !== key) return [g];
-        const tracks = g.tracks.map((t) => (moved.has(t.id) ? { ...t, media_file_id: main.media_file_id } : t));
+        // moved tracks now play from the main file, so they take on its (working) status too
+        const tracks = g.tracks.map((t) => (moved.has(t.id)
+          ? { ...t, media_file_id: main.media_file_id, file_status: main.file_status, file_path: main.file_path }
+          : t));
         return stillPending(tracks) ? [{ ...g, tracks }] : [];
       }));
+      others.forEach((t) => setPlayState(t.id, false));
       deselect(others.map((t) => t.id));
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to update tracks'));
@@ -183,14 +220,22 @@ export default function AdminDuplicateTracks() {
                 {group.tracks.map((track, index) => {
                   const others = selectedOthers(group, track);
                   const removable = others.filter((t) => t.album_id === track.album_id).length;
-                  const consolidateDisabled = busy || track.media_file_id == null || others.length === 0;
+                  // A broken file must not become the definitive one: the other tracks would
+                  // stop playing too. Consolidating onto a working file is how they get fixed.
+                  const problem = fileProblem(track, playFailed);
+                  const consolidateDisabled = busy || !!problem || others.length === 0;
                   const removeDisabled = busy || removable === 0;
                   return (
                     <div
                       key={track.id}
                       role="listitem"
                       data-track-row
-                      style={{ display: 'flex', gap: '0.75rem 1rem', flexWrap: 'wrap', alignItems: 'center', padding: '0.6rem 0', borderTop: index === 0 ? 'none' : '1px solid var(--color-border-strong)' }}
+                      data-file-problem={problem ? 'true' : undefined}
+                      style={{
+                        display: 'flex', gap: '0.75rem 1rem', flexWrap: 'wrap', alignItems: 'center', padding: '0.6rem 0.5rem',
+                        borderTop: index === 0 ? 'none' : '1px solid var(--color-border-strong)',
+                        ...(problem ? { backgroundColor: 'rgba(220, 38, 38, 0.14)', borderLeft: '4px solid #dc2626' } : { borderLeft: '4px solid transparent' }),
+                      }}
                     >
                       <input
                         type="checkbox"
@@ -218,22 +263,33 @@ export default function AdminDuplicateTracks() {
                           {track.album_artist ? ` by ${track.album_artist}` : ''} (album #{track.album_id})
                           {' · '}{formatDuration(track.duration_sec)} · file #{track.media_file_id ?? 'none'}
                         </p>
+                        {problem && (
+                          <p role="alert" style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#dc2626', overflowWrap: 'anywhere' }}>
+                            {problem}
+                            {track.file_path ? <span style={{ fontWeight: 'normal' }}>{': '}{track.file_path}</span> : null}
+                          </p>
+                        )}
                       </div>
                       {/* preload="none": nothing downloads until play is pressed, so a
                           page full of players costs no bandwidth. */}
                       <audio
+                        // remounts when the track is pointed at a different file, so a stale
+                        // load error from the old (broken) file does not stick
+                        key={`${track.id}-${track.media_file_id}`}
                         controls
                         preload="none"
                         data-dup-preview
                         src={track.url}
                         onPlay={pauseOtherPreviews}
+                        onError={() => setPlayState(track.id, true)}
+                        onPlaying={() => setPlayState(track.id, false)}
                         style={{ flex: '1 1 220px', minWidth: 0, maxWidth: '300px' }}
                       />
                       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', flex: '0 1 auto' }}>
                         <button
                           disabled={consolidateDisabled}
-                          title={track.media_file_id == null
-                            ? 'This track has no media file'
+                          title={problem
+                            ? `This version can't be the main one: ${problem}. Pick a version that plays.`
                             : others.length === 0
                               ? 'Check the other versions to point at this track\'s audio file. No tracks are removed.'
                               : 'Point the checked versions at this track\'s audio file. No tracks are removed.'}

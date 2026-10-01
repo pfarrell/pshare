@@ -5,6 +5,7 @@ import path from 'path'
 import { streamsService } from '../services/streamsService.js'
 import { requireAuth } from '../middleware/auth.js'
 import type { Variables } from '../types.js'
+import { pipeFile } from '../utils/pipeFile.js'
 
 const streams = new Hono()
 export const downloads = new Hono<{ Variables: Variables }>()
@@ -84,11 +85,7 @@ streams.get('/:id', async (c) => {
       c.header('Content-Type', 'audio/mpeg')
       c.status(206)
 
-      const readStream = fs.createReadStream(filePath, { start, end })
-
-      for await (const chunk of readStream) {
-        await stream.write(chunk)
-      }
+      await pipeFile(stream, filePath, { start, end })
     })
   }
 
@@ -98,11 +95,7 @@ streams.get('/:id', async (c) => {
     c.header('Content-Type', 'audio/mpeg')
     c.header('Accept-Ranges', 'bytes')
 
-    const readStream = fs.createReadStream(filePath)
-
-    for await (const chunk of readStream) {
-      await stream.write(chunk)
-    }
+    await pipeFile(stream, filePath)
   })
 })
 
@@ -125,10 +118,7 @@ downloads.get('/:id', requireAuth, async (c) => {
     c.header('Content-Type', CONTENT_TYPES[file.fileType] || 'application/octet-stream')
     c.header('Content-Disposition', buildContentDisposition(file.artistName, file.title, file.fileType))
 
-    const readStream = fs.createReadStream(file.absolutePath)
-    for await (const chunk of readStream) {
-      await streamWriter.write(chunk)
-    }
+    await pipeFile(streamWriter, file.absolutePath)
   })
 })
 
