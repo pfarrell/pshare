@@ -18,6 +18,9 @@ vi.mock('../services/api', () => ({
     makeTrackSingle: vi.fn(),
     deleteAlbum: vi.fn(),
     getImageUrl: vi.fn(() => ''),
+    adminListFactoids: vi.fn(),
+    adminDeleteFactoid: vi.fn(),
+    adminClearFactoidGeneration: vi.fn(),
     entityImages: {
       album: { list: vi.fn(), add: vi.fn(), setPrimary: vi.fn(), remove: vi.fn() },
     },
@@ -57,6 +60,16 @@ beforeEach(() => {
   apiService.entityImages.album.list.mockResolvedValue({ data: [] });
   apiService.getAlbumSecondaryArtists.mockResolvedValue({ data: [] });
   apiService.getAlbumMbTags.mockResolvedValue({ data: { tags: [] } });
+  apiService.adminListFactoids.mockResolvedValue({ data: { factoids: [], generation: null } });
+});
+
+describe('AdminAlbum — factoids panel', () => {
+  test('renders the factoids panel for this album', async () => {
+    renderAdminAlbum();
+
+    expect(await screen.findByText(/no factoids yet for this album/i)).toBeInTheDocument();
+    expect(apiService.adminListFactoids).toHaveBeenCalledWith('album', '10');
+  });
 });
 
 describe('AdminAlbum — compilation checkbox', () => {

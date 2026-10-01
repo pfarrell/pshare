@@ -15,6 +15,7 @@ import WikipediaSlugInput from '../components/admin/WikipediaSlugInput';
 import AdminFormActions from '../components/admin/AdminFormActions';
 import ArtistRelationsSection from './admin/artist/ArtistRelationsSection';
 import ArtistMergeSection from './admin/artist/ArtistMergeSection';
+import FactoidsPanel from '../components/FactoidsPanel';
 import { toFilename } from '../utils/filenames';
 import { formatCount } from '../utils/formatters';
 
@@ -274,6 +275,8 @@ const AdminArtist = () => {
         onMergedKeepingThis={() => setRelationsReloadKey((k) => k + 1)}
         onError={setError}
       />
+
+      <FactoidsPanel kind="artist" targetId={id} />
 
       {showDeleteModal && (
         <ConfirmDeleteModal

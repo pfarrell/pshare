@@ -21,6 +21,9 @@ vi.mock('../services/api', () => ({
     deleteArtist: vi.fn(),
     addRelatedArtist: vi.fn(),
     getImageUrl: vi.fn(() => ''),
+    adminListFactoids: vi.fn(),
+    adminDeleteFactoid: vi.fn(),
+    adminClearFactoidGeneration: vi.fn(),
     entityImages: {
       artist: { list: vi.fn(), add: vi.fn(), setPrimary: vi.fn(), remove: vi.fn() },
     },
@@ -53,7 +56,17 @@ beforeEach(() => {
   apiService.getArtistSecondaryAlbums.mockResolvedValue({ data: [] });
   apiService.getRelatedArtists.mockResolvedValue({ data: [] });
   apiService.getArtistMbTags.mockResolvedValue({ data: { tags: [] } });
+  apiService.adminListFactoids.mockResolvedValue({ data: { factoids: [], generation: null } });
   vi.spyOn(window, 'confirm').mockReturnValue(true);
+});
+
+describe('AdminArtist — factoids panel', () => {
+  test('renders the factoids panel for this artist', async () => {
+    renderAdminArtist();
+
+    expect(await screen.findByText(/no factoids yet for this artist/i)).toBeInTheDocument();
+    expect(apiService.adminListFactoids).toHaveBeenCalledWith('artist', '5');
+  });
 });
 
 describe('AdminArtist — unified merge section', () => {

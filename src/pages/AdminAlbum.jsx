@@ -17,6 +17,7 @@ import AdminFormActions from '../components/admin/AdminFormActions';
 import AlbumTransferSection from './admin/album/AlbumTransferSection';
 import AlbumAdditionalArtistsSection from './admin/album/AlbumAdditionalArtistsSection';
 import AlbumTracksTable from './admin/album/AlbumTracksTable';
+import FactoidsPanel from '../components/FactoidsPanel';
 import { formatCount } from '../utils/formatters';
 import { toFilename } from '../utils/filenames';
 
@@ -367,6 +368,8 @@ const AdminAlbum = () => {
       <AlbumTransferSection albumId={id} album={albumData?.album} onError={setError} />
 
       <AlbumAdditionalArtistsSection albumId={id} primaryArtistId={albumData?.album?.artist_id} />
+
+      <FactoidsPanel kind="album" targetId={id} />
 
       <AlbumTracksTable
         tracks={tracks}
