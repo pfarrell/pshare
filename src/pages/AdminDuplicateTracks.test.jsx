@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import AdminDuplicateTracks from './AdminDuplicateTracks';
@@ -51,16 +51,30 @@ describe('AdminDuplicateTracks', () => {
     expect(screen.getByText(/Greatest Hits of the 90s/)).toBeInTheDocument();
   });
 
-  test('every track has its own preview that reveals an audio player on its stream url', async () => {
-    const user = userEvent.setup();
+  test('every track renders its own player up front, on its stream url, without downloading until played', async () => {
     apiService.getDuplicateTracks.mockResolvedValue(respond([group]));
     renderPage();
 
     await screen.findByRole('link', { name: 'I Touch Myself' });
-    expect(screen.getAllByText('Preview')).toHaveLength(3);
-
-    await user.click(within(rowOf('I touch Myself')).getByText('Preview'));
+    const players = document.querySelectorAll('audio');
+    expect(players).toHaveLength(3);
+    players.forEach((p) => expect(p).toHaveAttribute('preload', 'none'));
     expect(rowOf('I touch Myself').querySelector('audio')).toHaveAttribute('src', 'http://localhost:3000/stream/200');
+    expect(screen.queryByText('Preview')).not.toBeInTheDocument();
+  });
+
+  test('starting one preview pauses the others', async () => {
+    apiService.getDuplicateTracks.mockResolvedValue(respond([group]));
+    renderPage();
+
+    await screen.findByRole('link', { name: 'I Touch Myself' });
+    const [first, second, third] = document.querySelectorAll('audio');
+    [first, second, third].forEach((p) => { p.pause = vi.fn(); });
+    fireEvent.play(second);
+
+    expect(first.pause).toHaveBeenCalled();
+    expect(third.pause).toHaveBeenCalled();
+    expect(second.pause).not.toHaveBeenCalled();
   });
 
   test('keeping a track merges all other versions into it and removes the group', async () => {

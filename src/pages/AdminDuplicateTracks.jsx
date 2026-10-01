@@ -17,7 +17,14 @@ const REASON_LABELS = {
   title: 'matching title',
 };
 
-const groupKey = (group) => group.tracks.map((t) => t.id).join('-');
+// Comparing versions by ear means one at a time: starting a preview stops the others.
+const pauseOtherPreviews = (event) => {
+  document.querySelectorAll('audio[data-dup-preview]').forEach((el) => {
+    if (el !== event.currentTarget) el.pause();
+  });
+};
+
+const groupKey =(group) => group.tracks.map((t) => t.id).join('-');
 
 const buttonStyle = (bg, busy) => ({
   padding: '0.4rem 0.75rem', backgroundColor: bg, color: 'white', border: 'none', borderRadius: '4px',
@@ -29,7 +36,6 @@ export default function AdminDuplicateTracks() {
     (page) => apiService.getDuplicateTracks(page, 25).then((response) => ({ items: response.data.groups, pagination: response.data.pagination }))
   );
   const [busyKey, setBusyKey] = useState(null);
-  const [previewId, setPreviewId] = useState(null); // track id whose <audio> is expanded, or null
 
   const handleKeep = async (group, keep) => {
     const losers = group.tracks.filter((t) => t.id !== keep.id);
@@ -99,14 +105,17 @@ export default function AdminDuplicateTracks() {
                       {track.title}
                     </Link>
                     <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>{formatDuration(track.duration_sec)}</p>
+                    {/* preload="none": nothing downloads until play is pressed, so a
+                        page full of players costs no bandwidth. */}
+                    <audio
+                      controls
+                      preload="none"
+                      data-dup-preview
+                      src={track.url}
+                      onPlay={pauseOtherPreviews}
+                      style={{ marginTop: '0.5rem', width: '100%', maxWidth: '260px' }}
+                    />
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
-                      <button
-                        disabled={busy}
-                        onClick={() => setPreviewId(previewId === track.id ? null : track.id)}
-                        style={{ ...buttonStyle('var(--color-border-strong)', busy), color: 'var(--color-text-primary)' }}
-                      >
-                        {previewId === track.id ? 'Hide preview' : 'Preview'}
-                      </button>
                       <button disabled={busy} onClick={() => handleKeep(group, track)} style={buttonStyle('#3b82f6', busy)}>
                         Keep this one
                       </button>
@@ -114,9 +123,6 @@ export default function AdminDuplicateTracks() {
                         Not a duplicate
                       </button>
                     </div>
-                    {previewId === track.id && (
-                      <audio controls src={track.url} style={{ marginTop: '0.5rem', width: '100%', maxWidth: '260px' }} />
-                    )}
                   </div>
                 ))}
               </div>
