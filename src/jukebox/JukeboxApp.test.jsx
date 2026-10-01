@@ -89,6 +89,16 @@ vi.mock('../components/visualizer/MilkdropCanvas', () => ({
     </div>
   ),
 }));
+// The real factoid screensaver fetches from the API and falls back to the art
+// screensaver itself; here it is a stub exposing its two callbacks as buttons.
+vi.mock('./JukeboxFactoidScreensaver', () => ({
+  default: ({ onDismiss, onView }) => (
+    <div data-testid="factoid-screensaver">
+      <button onClick={onDismiss}>trigger-factoid-dismiss</button>
+      <button onClick={() => onView({ type: 'album', data: { id: 7, title: 'Factoid Album' } })}>trigger-factoid-view</button>
+    </div>
+  ),
+}));
 vi.mock('./useJukeboxKeyboardFocus', () => ({ useJukeboxKeyboardFocus: vi.fn() }));
 
 import { useAuthStore } from '../stores/authStore';
@@ -701,5 +711,57 @@ describe('visualizer screensaver', () => {
 
     expect(screen.queryByTestId('milkdrop-canvas')).not.toBeInTheDocument();
     expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+  });
+});
+
+describe('factoid screensaver', () => {
+  const SCREENSAVER_IDLE_MS = 2 * 60 * 1000;
+
+  beforeEach(() => {
+    useJukeboxScreensaverStore.mockReturnValue('factoids');
+  });
+
+  test('shows the factoid screensaver, not the art or visualizer one, when the screensaver activates', async () => {
+    vi.useFakeTimers();
+    renderApp();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
+
+    expect(screen.getByTestId('factoid-screensaver')).toBeInTheDocument();
+    expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('milkdrop-canvas')).not.toBeInTheDocument();
+  });
+
+  test('does not mount the factoid screensaver in any other mode', async () => {
+    useJukeboxScreensaverStore.mockReturnValue('music');
+    vi.useFakeTimers();
+    renderApp();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
+
+    expect(screen.queryByTestId('factoid-screensaver')).not.toBeInTheDocument();
+    expect(screen.getByTestId('jukebox-screensaver')).toBeInTheDocument();
+  });
+
+  test('dismissing the factoid screensaver closes it', async () => {
+    vi.useFakeTimers();
+    renderApp();
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
+
+    fireEvent.click(screen.getByText('trigger-factoid-dismiss'));
+
+    expect(screen.queryByTestId('factoid-screensaver')).not.toBeInTheDocument();
+  });
+
+  test('choosing View from the factoid screensaver closes it and carries the item to Browse', async () => {
+    vi.useFakeTimers();
+    renderApp();
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
+
+    fireEvent.click(screen.getByText('trigger-factoid-view'));
+
+    expect(screen.queryByTestId('factoid-screensaver')).not.toBeInTheDocument();
+    expect(activeDestination()).toBe('browse');
+    expect(pendingItemLabel()).toBe('album:Factoid Album');
   });
 });
