@@ -24,14 +24,11 @@ const pauseOtherPreviews = (event) => {
   });
 };
 
-// Only tracks on the chosen track's own album can be removed; see handleRemoveOthers.
-const sameAlbumOthers = (group, keep) => group.tracks.filter((t) => t.id !== keep.id && t.album_id === keep.album_id);
-
 const groupKey = (group) => group.tracks.map((t) => t.id).join('-');
 
-const buttonStyle = (bg, busy) => ({
+const buttonStyle = (bg, disabled) => ({
   padding: '0.4rem 0.75rem', backgroundColor: bg, color: 'white', border: 'none', borderRadius: '4px',
-  cursor: busy ? 'not-allowed' : 'pointer', fontSize: '0.8rem',
+  cursor: disabled ? 'not-allowed' : 'pointer', fontSize: '0.8rem', opacity: disabled ? 0.55 : 1,
 });
 
 export default function AdminDuplicateTracks() {
@@ -39,21 +36,57 @@ export default function AdminDuplicateTracks() {
     (page) => apiService.getDuplicateTracks(page, 25).then((response) => ({ items: response.data.groups, pagination: response.data.pagination }))
   );
   const [busyKey, setBusyKey] = useState(null);
+  // Checked tracks, by id. The button you click names the main version; the action applies
+  // to the OTHER checked tracks only, and unchecked tracks stay in the group untouched.
+  const [selected, setSelected] = useState(() => new Set());
+
+  const toggleSelected = (id) => setSelected((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  });
+  const setGroupSelected = (group, on) => setSelected((prev) => {
+    const next = new Set(prev);
+    group.tracks.forEach((t) => (on ? next.add(t.id) : next.delete(t.id)));
+    return next;
+  });
+  const deselect = (ids) => setSelected((prev) => {
+    const next = new Set(prev);
+    ids.forEach((id) => next.delete(id));
+    return next;
+  });
+  const selectedOthers = (group, main) => group.tracks.filter((t) => selected.has(t.id) && t.id !== main.id);
+
+  // A group still needs review while two or more of its tracks do not share one media file.
+  const stillPending = (tracks) => {
+    const files = new Set(tracks.map((t) => t.media_file_id));
+    return tracks.length > 1 && !(files.size === 1 && !files.has(null));
+  };
 
   // A group has two different possible ends, and they are separate buttons on purpose.
   //
-  // Consolidate: nothing is deleted. Every track stays on its album and the others
-  // are pointed at the chosen track's media file, which becomes the definitive one.
-  const handleUseFile = async (group, keep) => {
-    const others = group.tracks.filter((t) => t.id !== keep.id);
-    const names = others.length === 1 ? `"${others[0].title}"` : `${others.length} other tracks`;
-    if (!window.confirm(`Consolidate: use the audio file of "${keep.title}" as the definitive file for ${names}?\n\nNo tracks are removed from the album.`)) return;
+  // Consolidate: nothing is deleted. Every checked track stays on its album and is pointed
+  // at the clicked track's media file, which becomes the definitive one.
+  const handleUseFile = async (group, main) => {
+    const others = selectedOthers(group, main);
+    if (others.length === 0) return;
+    const names = others.length === 1 ? `"${others[0].title}"` : `${others.length} selected tracks`;
+    if (!window.confirm(`Consolidate: use the audio file of "${main.title}" as the definitive file for ${names}?\n\nNo tracks are removed from the album.`)) return;
     const key = groupKey(group);
     setBusyKey(key);
     try {
-      await apiService.setCanonicalTrackFile(keep.id, others.map((t) => t.id));
-      toast.success(`${others.length} track${others.length === 1 ? ' now uses' : 's now use'} the file from "${keep.title}".`);
-      setGroups((prev) => prev.filter((g) => groupKey(g) !== key));
+      await apiService.setCanonicalTrackFile(main.id, others.map((t) => t.id));
+      toast.success(`${others.length} track${others.length === 1 ? ' now uses' : 's now use'} the file from "${main.title}".`);
+      // The consolidated tracks stay in the group, now sharing the main file; the
+      // unchecked ones are untouched. The group goes away once nothing is left to review.
+      const moved = new Set(others.map((t) => t.id));
+      setGroups((prev) => prev.flatMap((g) => {
+        if (groupKey(g) !== key) return [g];
+        const tracks = g.tracks.map((t) => (moved.has(t.id) ? { ...t, media_file_id: main.media_file_id } : t));
+        return stillPending(tracks) ? [{ ...g, tracks }] : [];
+      }));
+      deselect(others.map((t) => t.id));
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to update tracks'));
     } finally {
@@ -61,28 +94,30 @@ export default function AdminDuplicateTracks() {
     }
   };
 
-  // Remove others: deletes the other tracks on the SAME ALBUM as the chosen one. The same
+  // Remove: deletes the checked tracks on the SAME ALBUM as the clicked one. The same
   // recording on a different release belongs to that release, so those are only ever
   // consolidated, never deleted (the server enforces this too).
-  const handleRemoveOthers = async (group, keep) => {
-    const others = sameAlbumOthers(group, keep);
-    const names = others.length === 1 ? `"${others[0].title}"` : `${others.length} other tracks`;
-    if (!window.confirm(`REMOVE ${names} from this album and keep "${keep.title}"?\n\nThe removed tracks are deleted. Their playlist entries, favorites, notes and tags move to "${keep.title}". This cannot be undone.`)) return;
+  const handleRemoveOthers = async (group, main) => {
+    const picked = selectedOthers(group, main);
+    const others = picked.filter((t) => t.album_id === main.album_id);
+    if (others.length === 0) return;
+    const names = others.length === 1 ? `"${others[0].title}"` : `${others.length} selected tracks`;
+    const skipped = picked.length - others.length;
+    const skippedNote = skipped > 0 ? `\n\n${skipped} selected track${skipped === 1 ? ' is' : 's are'} on other albums and will be left alone.` : '';
+    if (!window.confirm(`REMOVE ${names} from this album and keep "${main.title}"?\n\nThe removed tracks are deleted. Their playlist entries, favorites, notes and tags move to "${main.title}". This cannot be undone.${skippedNote}`)) return;
     const key = groupKey(group);
     setBusyKey(key);
     try {
-      await apiService.removeOtherDuplicateTracks(keep.id, others.map((t) => t.id));
-      toast.success(`Removed ${others.length} track${others.length === 1 ? '' : 's'}, kept "${keep.title}".`);
-      // Tracks on other albums survive, so the group stays (smaller) while it still has
-      // two or more tracks that do not already share one media file.
+      await apiService.removeOtherDuplicateTracks(main.id, others.map((t) => t.id));
+      toast.success(`Removed ${others.length} track${others.length === 1 ? '' : 's'}, kept "${main.title}".`);
+      // Everything not removed stays in the group while it still needs review.
       const removed = new Set(others.map((t) => t.id));
       setGroups((prev) => prev.flatMap((g) => {
         if (groupKey(g) !== key) return [g];
         const remaining = g.tracks.filter((t) => !removed.has(t.id));
-        const files = new Set(remaining.map((t) => t.media_file_id));
-        const pending = remaining.length > 1 && !(files.size === 1 && !files.has(null));
-        return pending ? [{ ...g, tracks: remaining, album_ids: [...new Set(remaining.map((t) => t.album_id))] }] : [];
+        return stillPending(remaining) ? [{ ...g, tracks: remaining, album_ids: [...new Set(remaining.map((t) => t.album_id))] }] : [];
       }));
+      deselect(others.map((t) => t.id));
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to remove tracks'));
     } finally {
@@ -103,6 +138,7 @@ export default function AdminDuplicateTracks() {
         const remaining = g.tracks.filter((t) => t.id !== track.id);
         return remaining.length > 1 ? [{ ...g, tracks: remaining }] : [];
       }));
+      deselect([track.id]);
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to dismiss'));
     } finally {
@@ -115,7 +151,10 @@ export default function AdminDuplicateTracks() {
 
   return (
     <div style={{ padding: '2rem', backgroundColor: 'var(--color-bg-surface-muted)', minHeight: '100%' }}>
-      <h1 style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--color-text-primary)', marginBottom: '1.5rem' }}>Possible Duplicate Tracks</h1>
+      <h1 style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--color-text-primary)', marginBottom: '0.5rem' }}>Possible Duplicate Tracks</h1>
+      <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+        Check the versions to act on, then click a button on the version you want as the main one. Unchecked versions are left alone.
+      </p>
 
       {groups.length === 0 ? (
         <p style={{ color: 'var(--color-text-muted)' }}>No possible duplicate tracks found.</p>
@@ -123,72 +162,105 @@ export default function AdminDuplicateTracks() {
         groups.map((group) => {
           const key = groupKey(group);
           const busy = busyKey === key;
+          const selectedCount = group.tracks.filter((t) => selected.has(t.id)).length;
           return (
-            <div key={key} style={{ backgroundColor: 'var(--color-bg-surface)', borderRadius: '0.5rem', padding: '1rem', marginBottom: '1rem', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
-              <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-                {group.tracks.length} versions - {group.album_ids.length > 1 ? `across ${group.album_ids.length} albums` : group.tracks[0].album_title} - matched by {group.reasons.map((r) => REASON_LABELS[r] ?? r).join(', ')}
-              </p>
-              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                {group.tracks.map((track) => (
-                  <div key={track.id} style={{ flex: '1 1 200px' }}>
-                    {/* Deliberately no target="_blank" — see the matching
-                        comment in AlbumCompareModal.jsx: a real new tab/
-                        window on mobile either hard-navigates in place
-                        (installed PWA, destroying the playing queue) or
-                        opens a visually-empty second tab that looks like
-                        data loss. Plain in-SPA nav leaves playback alone. */}
-                    <Link to={`/album/${track.album_id}`} style={{ fontWeight: 'bold', color: '#3b82f6', textDecoration: 'none' }}>
-                      {track.title}
-                    </Link>
-                    <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
-                      Album:{' '}
-                      <Link to={`/album/${track.album_id}`} style={{ color: '#3b82f6', textDecoration: 'none' }}>
-                        {track.album_title || 'Untitled album'}
-                      </Link>
-                      {track.album_artist ? ` by ${track.album_artist}` : ''} (album #{track.album_id})
-                    </p>
-                    <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>{formatDuration(track.duration_sec)} · file #{track.media_file_id ?? 'none'}</p>
-                    {/* preload="none": nothing downloads until play is pressed, so a
-                        page full of players costs no bandwidth. */}
-                    <audio
-                      controls
-                      preload="none"
-                      data-dup-preview
-                      src={track.url}
-                      onPlay={pauseOtherPreviews}
-                      style={{ marginTop: '0.5rem', width: '100%', maxWidth: '260px' }}
-                    />
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
-                      <button
-                        disabled={busy || track.media_file_id == null}
-                        title={track.media_file_id == null ? 'This track has no media file' : 'Point the other tracks at this track\'s audio file. No tracks are removed.'}
-                        onClick={() => handleUseFile(group, track)}
-                        style={buttonStyle('#3b82f6', busy || track.media_file_id == null)}
-                      >
-                        Consolidate to this version
-                      </button>
-                      {(() => {
-                        const removable = sameAlbumOthers(group, track).length;
-                        const spansAlbums = group.album_ids.length > 1;
-                        return (
-                          <button
-                            disabled={busy || removable === 0}
-                            title={removable === 0
-                              ? 'No other tracks from this album to remove. Tracks on other albums can only be consolidated.'
-                              : 'Delete the other tracks from this track\'s album and keep this one.'}
-                            onClick={() => handleRemoveOthers(group, track)}
-                            style={buttonStyle('#dc2626', busy || removable === 0)}
-                          >
-                            {spansAlbums ? `Remove ${removable} on this album` : 'Remove others'}
-                          </button>
-                        );
-                      })()}
-                      <button disabled={busy} onClick={() => handleNotDuplicate(group, track)} style={buttonStyle('var(--color-text-muted)', busy)}>
-                        Not a duplicate
-                      </button>
+            <div key={key} style={{ backgroundColor: 'var(--color-bg-surface)', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '1rem', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '0.25rem' }}>
+                <p style={{ flex: '1 1 260px', fontSize: '0.75rem', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                  {group.tracks.length} versions - {group.album_ids.length > 1 ? `across ${group.album_ids.length} albums` : group.tracks[0].album_title} - matched by {group.reasons.map((r) => REASON_LABELS[r] ?? r).join(', ')}
+                </p>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{selectedCount} selected</span>
+                <button
+                  disabled={busy}
+                  onClick={() => setGroupSelected(group, selectedCount !== group.tracks.length)}
+                  style={{ ...buttonStyle('var(--color-border-strong)', busy), color: 'var(--color-text-primary)' }}
+                >
+                  {selectedCount === group.tracks.length ? 'Clear selection' : 'Select all'}
+                </button>
+              </div>
+
+              <div role="list">
+                {group.tracks.map((track, index) => {
+                  const others = selectedOthers(group, track);
+                  const removable = others.filter((t) => t.album_id === track.album_id).length;
+                  const consolidateDisabled = busy || track.media_file_id == null || others.length === 0;
+                  const removeDisabled = busy || removable === 0;
+                  return (
+                    <div
+                      key={track.id}
+                      role="listitem"
+                      data-track-row
+                      style={{ display: 'flex', gap: '0.75rem 1rem', flexWrap: 'wrap', alignItems: 'center', padding: '0.6rem 0', borderTop: index === 0 ? 'none' : '1px solid var(--color-border-strong)' }}
+                    >
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${track.title}`}
+                        checked={selected.has(track.id)}
+                        disabled={busy}
+                        onChange={() => toggleSelected(track.id)}
+                        style={{ width: '1.1rem', height: '1.1rem', flex: '0 0 auto' }}
+                      />
+                      <div style={{ flex: '2 1 240px', minWidth: 0 }}>
+                        {/* Deliberately no target="_blank" — see the matching
+                            comment in AlbumCompareModal.jsx: a real new tab/
+                            window on mobile either hard-navigates in place
+                            (installed PWA, destroying the playing queue) or
+                            opens a visually-empty second tab that looks like
+                            data loss. Plain in-SPA nav leaves playback alone. */}
+                        <Link to={`/album/${track.album_id}`} style={{ fontWeight: 'bold', color: '#3b82f6', textDecoration: 'none' }}>
+                          {track.title}
+                        </Link>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                          Album:{' '}
+                          <Link to={`/album/${track.album_id}`} style={{ color: '#3b82f6', textDecoration: 'none' }}>
+                            {track.album_title || 'Untitled album'}
+                          </Link>
+                          {track.album_artist ? ` by ${track.album_artist}` : ''} (album #{track.album_id})
+                          {' · '}{formatDuration(track.duration_sec)} · file #{track.media_file_id ?? 'none'}
+                        </p>
+                      </div>
+                      {/* preload="none": nothing downloads until play is pressed, so a
+                          page full of players costs no bandwidth. */}
+                      <audio
+                        controls
+                        preload="none"
+                        data-dup-preview
+                        src={track.url}
+                        onPlay={pauseOtherPreviews}
+                        style={{ flex: '1 1 220px', minWidth: 0, maxWidth: '300px' }}
+                      />
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', flex: '0 1 auto' }}>
+                        <button
+                          disabled={consolidateDisabled}
+                          title={track.media_file_id == null
+                            ? 'This track has no media file'
+                            : others.length === 0
+                              ? 'Check the other versions to point at this track\'s audio file. No tracks are removed.'
+                              : 'Point the checked versions at this track\'s audio file. No tracks are removed.'}
+                          onClick={() => handleUseFile(group, track)}
+                          style={buttonStyle('#3b82f6', consolidateDisabled)}
+                        >
+                          {others.length > 0 ? `Consolidate ${others.length} selected to this version` : 'Consolidate to this version'}
+                        </button>
+                        <button
+                          disabled={removeDisabled}
+                          title={removable === 0
+                            ? (others.length > 0
+                              ? 'The checked versions are on other albums, which can only be consolidated.'
+                              : 'Check other versions from this track\'s album to remove.')
+                            : 'Delete the checked versions from this track\'s album and keep this one.'}
+                          onClick={() => handleRemoveOthers(group, track)}
+                          style={buttonStyle('#dc2626', removeDisabled)}
+                        >
+                          {removable > 0 ? `Remove ${removable} selected` : 'Remove selected'}
+                        </button>
+                        <button disabled={busy} onClick={() => handleNotDuplicate(group, track)} style={buttonStyle('var(--color-text-muted)', busy)}>
+                          Not a duplicate
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           );
