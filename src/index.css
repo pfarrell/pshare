@@ -3104,12 +3104,19 @@ body:has(.jukebox-app) {
    "Filter" made it look like a second active filter rather than a separate
    setting. A neutral ghost/outline treatment plus the divider below reads
    as its own control instead. */
+/* Wraps: the drawer is min(420px, 90vw) and its scrollbar is hidden (and the
+   kiosk touchscreen acts as a mouse, so nobody can swipe-scroll), so a row wider
+   than the drawer silently pushes its last buttons out of reach. Five buttons
+   (Off, Music, Photos, Visualizer, Factoids) total ~500px; the label takes its
+   own line and the buttons flow onto a second row when they must. */
 .jukebox-app .jukebox-settings-tab-screensaver {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
 }
 .jukebox-app .jukebox-settings-tab-screensaver-label {
+  flex-basis: 100%;
   font-size: 0.85rem;
   color: rgba(255, 255, 255, 0.5);
   margin-right: 0.25rem;
