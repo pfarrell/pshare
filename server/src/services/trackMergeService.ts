@@ -1,6 +1,6 @@
 import type { Kysely } from 'kysely'
 import type { Database } from '../db/database.js'
-import { deletableMediaFileIds } from './entityDeleteService.js'
+import { deletableMediaFileIds, reassignFactoids } from './entityDeleteService.js'
 
 // Folds `loserId` into `targetId` and deletes the loser. Run inside
 // db.transaction(). Same shape as mergeArtistInto/mergeAlbumInto: dedupe
@@ -59,6 +59,10 @@ export async function mergeTrackInto(targetId: number, loserId: number, trx: Kys
     ]))
     .execute()
   await trx.updateTable('track_artists').set({ track_id: targetId }).where('track_id', '=', loserId).execute()
+
+  // factoids (kind='track'): polymorphic, no FK, so nothing cascades — redirect
+  // them (dropping any the target already says) before the loser row goes.
+  await reassignFactoids('track', loserId, targetId, trx)
 
   await trx.deleteFrom('tracks').where('id', '=', loserId).execute()
 
