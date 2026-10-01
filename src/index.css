@@ -2787,9 +2787,26 @@ body:has(.jukebox-app) {
   height: min(40vw, 30vh);
   color: rgba(255, 255, 255, 0.35);
 }
+.jukebox-app .jukebox-screensaver-nav {
+  position: absolute;
+  bottom: 1.5rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  font-size: 1.75rem;
+  line-height: 1;
+  color: white;
+  background: rgba(20, 26, 32, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.jukebox-app .jukebox-screensaver-nav-prev { left: 1.5rem; }
+.jukebox-app .jukebox-screensaver-nav-next { right: 1.5rem; }
 .jukebox-app .jukebox-screensaver-view-button {
   position: absolute;
-  right: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
   bottom: 1.5rem;
   min-height: 2.75rem;
   padding: 0 1.25rem;

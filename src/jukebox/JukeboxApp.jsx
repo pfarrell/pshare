@@ -22,10 +22,10 @@ const IDLE_CLOSE_MS = 15000;
 const TOAST_DURATION_MS = 2500;
 // How long the kiosk must sit untouched (drawer closed; playback or not)
 // before the screensaver takes over.
-const SCREENSAVER_IDLE_MS = 2 * 60 * 1000;
+const SCREENSAVER_IDLE_MS = 60 * 1000;
 // Testing aid: a whole number of seconds in localStorage under this key
 // shortens the idle delay without a redeploy (e.g. to watch the screensaver
-// without waiting two minutes). Anything unusable, or under the floor, is
+// without waiting a minute). Anything unusable, or under the floor, is
 // ignored so a typo can never make the screensaver fire constantly.
 const SCREENSAVER_IDLE_OVERRIDE_KEY = 'jukebox-screensaver-idle-seconds';
 const SCREENSAVER_IDLE_MIN_SECONDS = 5;
@@ -180,6 +180,14 @@ const JukeboxApp = () => {
     };
   }, [activeDestination, screensaverMode]);
 
+  // Settings' "Start now": close the drawer and activate immediately rather
+  // than waiting out the idle delay. closeAll sets the destination to null,
+  // which the effect above treats as "arm the timer", never "deactivate".
+  const handleStartScreensaver = () => {
+    closeAll();
+    setScreensaverActive(true);
+  };
+
   // Explicit alongside the effect's own teardown above (which fires once
   // activeDestination changes) so the dismissal is immediate rather than
   // waiting a render cycle.
@@ -232,6 +240,7 @@ const JukeboxApp = () => {
         onPendingItemConsumed={() => setPendingItem(null)}
         onGeneratingChange={setAiMixGenerating}
         onPlaylistSaved={handlePlaylistSaved}
+        onStartScreensaver={handleStartScreensaver}
       />
       <JukeboxFooterStrip
         onOpenQueue={() => toggleDestination('nextup')}

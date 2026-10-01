@@ -173,7 +173,7 @@ describe('mode="photos"', () => {
 
     await act(async () => {});
 
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /view/i })).not.toBeInTheDocument();
   });
 
   test('tapping anywhere still calls onDismiss', async () => {
@@ -214,5 +214,25 @@ describe('mode="photos"', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(20000); });
 
     expect(screen.getByRole('img').getAttribute('src')).not.toBe(first);
+  });
+});
+
+describe('manual navigation', () => {
+  test('Next advances, Prev returns to the earlier item, and neither dismisses', async () => {
+    const onDismiss = vi.fn();
+    apiService.getRandomPhotos.mockResolvedValue({ data: [photo({ id: 1, image_path: 'a.jpg' }), photo({ id: 2, image_path: 'b.jpg' })] });
+    render(<JukeboxScreensaver mode="photos" onDismiss={onDismiss} onView={vi.fn()} />);
+    await act(async () => {});
+    const first = screen.getByRole('img').getAttribute('src');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await act(async () => {});
+    const second = screen.getByRole('img').getAttribute('src');
+    expect(second).not.toBe(first);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous' }));
+    await act(async () => {});
+    expect(screen.getByRole('img')).toHaveAttribute('src', first);
+    expect(onDismiss).not.toHaveBeenCalled();
   });
 });

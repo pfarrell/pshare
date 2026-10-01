@@ -20,7 +20,7 @@ import JukeboxQrCode from './JukeboxQrCode';
 const KIOSK_HELPER_URL = 'http://127.0.0.1:8737/exit-kiosk';
 const EXIT_CONFIRM_MS = 3000;
 
-const JukeboxSettingsTab = () => {
+const JukeboxSettingsTab = ({ onStartScreensaver }) => {
   const [confirmingExit, setConfirmingExit] = useState(false);
   const [exitError, setExitError] = useState(false);
   const { activeProfileId, setProfile } = useProfileFilterStore();
@@ -112,6 +112,13 @@ const JukeboxSettingsTab = () => {
           onClick={() => setScreensaverMode('factoids')}
         >
           Factoids
+        </button>
+        <button
+          type="button"
+          disabled={screensaverMode === 'off'}
+          onClick={onStartScreensaver}
+        >
+          Start now
         </button>
       </div>
       <div className="jukebox-settings-tab-divider" />

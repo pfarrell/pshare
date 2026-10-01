@@ -181,3 +181,20 @@ describe('screensaver mode selector', () => {
     });
   });
 });
+
+describe('Start now', () => {
+  test('calls onStartScreensaver when tapped', async () => {
+    const onStart = vi.fn();
+    render(<JukeboxSettingsTab onStartScreensaver={onStart} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Start now' }));
+    expect(onStart).toHaveBeenCalled();
+    await waitFor(() => screen.getByText('Kids'));
+  });
+
+  test('is disabled while the screensaver is off', async () => {
+    useJukeboxScreensaverStore.setState({ mode: 'off' });
+    render(<JukeboxSettingsTab onStartScreensaver={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Start now' })).toBeDisabled();
+    await waitFor(() => screen.getByText('Kids'));
+  });
+});

@@ -49,6 +49,12 @@ const JukeboxScreensaver = ({ mode, onDismiss, onView }) => {
   const activeProfileId = useProfileFilterStore((s) => s.activeProfileId);
   const [current, setCurrent] = useState(null);
   const queueRef = useRef([]);
+  // Items already shown this session plus the cursor into them, so Prev can
+  // step back and Next re-walks history before pulling fresh items.
+  const historyRef = useRef([]);
+  const cursorRef = useRef(-1);
+  const goRef = useRef(null);
+  const timerRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,6 +62,8 @@ const JukeboxScreensaver = ({ mode, onDismiss, onView }) => {
     // pool was fetched for the old mode/filter, so it must not keep
     // draining out on screen under the new one.
     queueRef.current = [];
+    historyRef.current = [];
+    cursorRef.current = -1;
 
     const fetchPool = async () => {
       if (mode === 'photos') {
@@ -71,7 +79,14 @@ const JukeboxScreensaver = ({ mode, onDismiss, onView }) => {
       return interleave(albums, artists);
     };
 
+    const show = (item) => setCurrent(item ?? null);
+
     const advance = async () => {
+      if (cursorRef.current < historyRef.current.length - 1) {
+        cursorRef.current += 1;
+        show(historyRef.current[cursorRef.current]);
+        return;
+      }
       if (queueRef.current.length === 0) {
         const pool = await fetchPool();
         if (cancelled) return;
@@ -80,16 +95,42 @@ const JukeboxScreensaver = ({ mode, onDismiss, onView }) => {
       if (cancelled) return;
       const [next, ...rest] = queueRef.current;
       queueRef.current = rest;
-      setCurrent(next ?? null);
+      if (next) {
+        historyRef.current.push(next);
+        cursorRef.current = historyRef.current.length - 1;
+      }
+      show(next);
+    };
+
+    const back = () => {
+      if (cursorRef.current <= 0) return;
+      cursorRef.current -= 1;
+      show(historyRef.current[cursorRef.current]);
+    };
+
+    // Manual nav restarts the rotation timer so a tapped-to photo gets its
+    // full time on screen.
+    const startTimer = () => {
+      clearInterval(timerRef.current);
+      timerRef.current = setInterval(advance, ROTATION_MS);
+    };
+    goRef.current = (dir) => {
+      startTimer();
+      return dir < 0 ? back() : advance();
     };
 
     advance();
-    const timer = setInterval(advance, ROTATION_MS);
+    startTimer();
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      clearInterval(timerRef.current);
     };
   }, [mode, activeProfileId]);
+
+  const navigate = (e, dir) => {
+    e.stopPropagation();
+    goRef.current?.(dir);
+  };
 
   if (!current) return null;
 
@@ -113,6 +154,22 @@ const JukeboxScreensaver = ({ mode, onDismiss, onView }) => {
             d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
         </svg>
       )}
+      <button
+        type="button"
+        className="jukebox-screensaver-nav jukebox-screensaver-nav-prev"
+        aria-label="Previous"
+        onClick={(e) => navigate(e, -1)}
+      >
+        &#8249;
+      </button>
+      <button
+        type="button"
+        className="jukebox-screensaver-nav jukebox-screensaver-nav-next"
+        aria-label="Next"
+        onClick={(e) => navigate(e, 1)}
+      >
+        &#8250;
+      </button>
       {!isPhoto && (
         <button
           type="button"

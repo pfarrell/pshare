@@ -445,9 +445,9 @@ describe('drawer inactivity auto-close', () => {
 });
 
 describe('idle screensaver', () => {
-  const SCREENSAVER_IDLE_MS = 2 * 60 * 1000;
+  const SCREENSAVER_IDLE_MS = 60 * 1000;
 
-  test('activates after 2 minutes idle with the drawer closed and nothing playing', async () => {
+  test('activates after 1 minute idle with the drawer closed and nothing playing', async () => {
     vi.useFakeTimers();
     renderApp();
 
@@ -469,14 +469,13 @@ describe('idle screensaver', () => {
     vi.useFakeTimers();
     renderApp();
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(90 * 1000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(45 * 1000); });
     fireEvent.pointerDown(document.body);
-    await act(async () => { await vi.advanceTimersByTimeAsync(90 * 1000); }); // 3 min total, 90s since the reset
+    await act(async () => { await vi.advanceTimersByTimeAsync(45 * 1000); }); // 90s total, 45s since the reset
 
     expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(30 * 1000); }); // 2 min since the reset
-
+    await act(async () => { await vi.advanceTimersByTimeAsync(15 * 1000); }); // 60s since the reset
     expect(screen.getByTestId('jukebox-screensaver')).toBeInTheDocument();
   });
 
@@ -614,7 +613,7 @@ test('tapping the footer queue button while on Next Up returns to Browse', () =>
 // idle delay without a redeploy. The default stays 2 minutes.
 describe('screensaver idle override', () => {
   const KEY = 'jukebox-screensaver-idle-seconds';
-  const DEFAULT_MS = 2 * 60 * 1000;
+  const DEFAULT_MS = 60 * 1000;
 
   afterEach(() => {
     localStorage.removeItem(KEY);
@@ -660,7 +659,7 @@ describe('screensaver idle override', () => {
 });
 
 describe('visualizer screensaver', () => {
-  const SCREENSAVER_IDLE_MS = 2 * 60 * 1000;
+  const SCREENSAVER_IDLE_MS = 60 * 1000;
 
   beforeEach(() => {
     useJukeboxScreensaverStore.mockReturnValue('visualizer');
@@ -715,7 +714,7 @@ describe('visualizer screensaver', () => {
 });
 
 describe('factoid screensaver', () => {
-  const SCREENSAVER_IDLE_MS = 2 * 60 * 1000;
+  const SCREENSAVER_IDLE_MS = 60 * 1000;
 
   beforeEach(() => {
     useJukeboxScreensaverStore.mockReturnValue('factoids');
