@@ -157,6 +157,26 @@ export function collectSearchHosts(content: unknown[], into: Set<string>): void 
 // if the tool-runner loop yields turns without their web_search_tool_result
 // blocks, searchHosts stays empty, every citation is discarded as invented, the
 // run records "empty", and the worker keeps spending on a feature producing zero.
+export type RunUsage = { turns: number; input: number; output: number; cacheRead: number; cacheWrite: number; searches: number }
+
+export const emptyUsage = (): RunUsage => ({ turns: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, searches: 0 })
+
+// Sums one API turn's usage block into the run total. Token counts are logged
+// per run so the model can be chosen on cost per album, not on a guess.
+export function addUsage(total: RunUsage, usage: unknown): void {
+  const u = (usage ?? {}) as {
+    input_tokens?: number; output_tokens?: number
+    cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null
+    server_tool_use?: { web_search_requests?: number } | null
+  }
+  total.turns += 1
+  total.input += u.input_tokens ?? 0
+  total.output += u.output_tokens ?? 0
+  total.cacheRead += u.cache_read_input_tokens ?? 0
+  total.cacheWrite += u.cache_creation_input_tokens ?? 0
+  total.searches += u.server_tool_use?.web_search_requests ?? 0
+}
+
 export function summarizeRun(r: {
   kind: 'artist' | 'album'
   targetId: number
@@ -165,8 +185,14 @@ export function summarizeRun(r: {
   submitted: number
   accepted: number
   rejected: string[]
+  model?: string
+  usage?: RunUsage
 }): string {
   let line = `[factoids] ${r.kind} ${r.targetId} (${r.name}): search hosts=${r.searchHosts}, submitted=${r.submitted}, accepted=${r.accepted}, discarded=${r.rejected.length}`
+  if (r.usage) {
+    const u = r.usage
+    line += `, model=${r.model}, turns=${u.turns}, searches=${u.searches}, tokens in=${u.input} out=${u.output} cache_read=${u.cacheRead} cache_write=${u.cacheWrite}`
+  }
   if (r.rejected.length > 0) line += `: ${r.rejected.join('; ')}`
   if (r.submitted > 0 && r.searchHosts === 0) {
     line += ' (WARNING: the model submitted facts but no web search results were seen, so every citation was discarded; check that the tool runner yields web_search_tool_result blocks)'
@@ -201,6 +227,7 @@ export async function generateFactoidsFor(
 
   const client = new Anthropic()
   const searchHosts = new Set<string>()
+  const usage = emptyUsage()
   let submitted: SubmittedFactoid[] = []
 
   const submitFactoids = betaTool({
@@ -266,6 +293,7 @@ export async function generateFactoidsFor(
     // SDK change that stops it fails a test instead of silently truncating runs.
     for await (const message of runner) {
       collectSearchHosts(message.content as unknown[], searchHosts)
+      addUsage(usage, message.usage)
     }
   } catch (err) {
     if (!controller.signal.aborted) throw err
@@ -290,6 +318,8 @@ export async function generateFactoidsFor(
     submitted: Array.isArray(submitted) ? submitted.length : 0,
     accepted: accepted.length,
     rejected: rejected.map((r) => r.reason),
+    model: FACTOID_MODEL,
+    usage,
   }))
 
   const count = await insertFactoids(accepted, FACTOID_MODEL, generationId)

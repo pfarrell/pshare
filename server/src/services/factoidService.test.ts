@@ -6,7 +6,7 @@ import { createArtist, createAlbum, createTrack, cleanupFixtures } from '../test
 import { claimEntity } from './factoidLedger.js'
 import { insertFactoids } from './factoidStore.js'
 import {
-  buildArtistContext, buildAlbumContext, collectSearchHosts, existingTextsForRun, summarizeRun,
+  buildArtistContext, buildAlbumContext, collectSearchHosts, existingTextsForRun, summarizeRun, addUsage, emptyUsage,
 } from './factoidService.js'
 
 beforeEach(async () => { await cleanupFixtures() })
@@ -105,6 +105,20 @@ test('summarizeRun reports hosts, submitted, accepted, and discarded counts with
   assert.match(line, /accepted=4/)
   assert.match(line, /discarded=2/)
   assert.match(line, /duplicate text; length over 240/)
+})
+
+test('addUsage sums tokens, cache, and web searches across turns and tolerates missing fields', () => {
+  const total = emptyUsage()
+  addUsage(total, { input_tokens: 100, output_tokens: 20, cache_read_input_tokens: 5, cache_creation_input_tokens: null, server_tool_use: { web_search_requests: 2 } })
+  addUsage(total, { input_tokens: 50, output_tokens: 10 })
+  addUsage(total, undefined)
+  assert.deepEqual(total, { turns: 3, input: 150, output: 30, cacheRead: 5, cacheWrite: 0, searches: 2 })
+})
+
+test('summarizeRun appends model and token usage when provided', () => {
+  const usage = { turns: 2, input: 1200, output: 300, cacheRead: 0, cacheWrite: 0, searches: 3 }
+  const line = summarizeRun({ kind: 'album', targetId: 1, name: 'X', searchHosts: 2, submitted: 3, accepted: 3, rejected: [], model: 'claude-sonnet-5-5', usage })
+  assert.match(line, /model=claude-sonnet-5-5, turns=2, searches=3, tokens in=1200 out=300 cache_read=0 cache_write=0/)
 })
 
 test('summarizeRun flags the failure mode where the model submitted facts but no search results were seen', () => {
