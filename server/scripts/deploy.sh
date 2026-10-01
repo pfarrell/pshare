@@ -37,7 +37,7 @@ ssh -p ${REMOTE_PORT} ${REMOTE_USER}@${REMOTE_HOST} "cd ${RELEASE_DIR} && npm ci
 
 # Run database migrations
 echo "🔄 Running database migrations..."
-ssh -p ${REMOTE_PORT} ${REMOTE_USER}@${REMOTE_HOST} "cd ${RELEASE_DIR} && export \$(cat ${SHARED_DIR}/.env | xargs) && node scripts/run-migrations.js"
+ssh -p ${REMOTE_PORT} ${REMOTE_USER}@${REMOTE_HOST} "cd ${RELEASE_DIR} && export \$(grep -vE '^[[:space:]]*(#|\$)' ${SHARED_DIR}/.env | xargs) && node scripts/run-migrations.js"
 
 # Create symlink for public/images to shared directory
 echo "🔗 Linking public/images to shared directory..."
