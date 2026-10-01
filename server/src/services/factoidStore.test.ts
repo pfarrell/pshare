@@ -79,10 +79,16 @@ test('listForTrack still returns the track factoid when the album row was delete
   const { album, track, generationId } = await scaffold('store-orphan-album')
   await insertFactoids([fact({ kind: 'track', targetId: track.id, text: 'Survivor track fact.' })], 'm', generationId)
   await db.deleteFrom('albums').where('id', '=', album.id).execute()
-
-  const rows = await listForTrack(track.id)
-  assert.equal(rows.length, 1)
-  assert.equal(rows[0].subject, track.title)
+  try {
+    const rows = await listForTrack(track.id)
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0].subject, track.title)
+  } finally {
+    // cleanupFixtures finds fixture albums by title, and this test just deleted
+    // its album, so its ledger row would otherwise be orphaned in the dev DB on
+    // every run.
+    await db.deleteFrom('factoid_generations').where('kind', '=', 'album').where('target_id', '=', album.id).execute()
+  }
 })
 
 test('listForTrack works for a track with no artist of its own', async () => {
