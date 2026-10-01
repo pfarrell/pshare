@@ -126,6 +126,13 @@ export default function AdminDuplicateTracks() {
                     <Link to={`/album/${track.album_id}`} style={{ fontWeight: 'bold', color: '#3b82f6', textDecoration: 'none' }}>
                       {track.title}
                     </Link>
+                    <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
+                      Album:{' '}
+                      <Link to={`/album/${track.album_id}`} style={{ color: '#3b82f6', textDecoration: 'none' }}>
+                        {track.album_title || 'Untitled album'}
+                      </Link>
+                      {track.album_artist ? ` by ${track.album_artist}` : ''} (album #{track.album_id})
+                    </p>
                     <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>{formatDuration(track.duration_sec)} · file #{track.media_file_id ?? 'none'}</p>
                     {/* preload="none": nothing downloads until play is pressed, so a
                         page full of players costs no bandwidth. */}

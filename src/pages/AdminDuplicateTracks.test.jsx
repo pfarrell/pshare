@@ -49,7 +49,27 @@ describe('AdminDuplicateTracks', () => {
     expect(screen.getByRole('link', { name: 'I touch Myself' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'I Touch Myself (Remaster)' })).toBeInTheDocument();
     expect(screen.getByText(/3 versions .* matched by same audio file, same MusicBrainz recording/)).toBeInTheDocument();
-    expect(screen.getByText(/Greatest Hits of the 90s/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Greatest Hits of the 90s/).length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('every track lists its own album (linked, with artist and id) so same-album and separate-release tracks are distinguishable', async () => {
+    const mixed = {
+      ...group,
+      tracks: [
+        { ...mk(100, 'I Touch Myself'), album_artist: 'Divinyls' },
+        { ...mk(200, 'I touch Myself', 227), album_id: 9, album_title: 'Essential 90s', album_artist: 'Various Artists' },
+      ],
+    };
+    apiService.getDuplicateTracks.mockResolvedValue(respond([mixed]));
+    renderPage();
+
+    await screen.findByRole('link', { name: 'I Touch Myself' });
+    const first = rowOf('I Touch Myself');
+    expect(within(first).getByRole('link', { name: 'Greatest Hits of the 90s' })).toHaveAttribute('href', '/album/5');
+    expect(first).toHaveTextContent('by Divinyls (album #5)');
+    const second = rowOf('I touch Myself');
+    expect(within(second).getByRole('link', { name: 'Essential 90s' })).toHaveAttribute('href', '/album/9');
+    expect(second).toHaveTextContent('by Various Artists (album #9)');
   });
 
   test('every track renders its own player up front, on its stream url, without downloading until played', async () => {

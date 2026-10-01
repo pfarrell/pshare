@@ -162,10 +162,11 @@ router.get('/duplicates/tracks', async (c) => {
   const tracks = await db
     .selectFrom('tracks')
     .leftJoin('albums', 'albums.id', 'tracks.album_id')
+    .leftJoin('artists', 'artists.id', 'albums.artist_id')
     .leftJoin('media_files', 'media_files.id', 'tracks.media_file_id')
     .select([
       'tracks.id', 'tracks.album_id', 'tracks.title', 'tracks.media_file_id', 'tracks.duration_sec',
-      'albums.title as album_title',
+      'albums.title as album_title', 'artists.name as album_artist',
       'media_files.file_hash', 'media_files.musicbrainz_recording_id',
       // Fingerprints are kilobytes each; equal md5s mean identical fingerprints, so only the digest leaves the DB.
       sql<string | null>`md5(media_files.chromaprint_fingerprint)`.as('chromaprint_key'),
@@ -180,7 +181,7 @@ router.get('/duplicates/tracks', async (c) => {
   const totalPages = Math.max(1, Math.ceil(total / limit))
   const shape = (row: (typeof tracks)[number]) => ({
     id: row.id, title: row.title, duration_sec: row.duration_sec,
-    album_id: row.album_id, album_title: row.album_title, media_file_id: row.media_file_id,
+    album_id: row.album_id, album_title: row.album_title, album_artist: row.album_artist, media_file_id: row.media_file_id,
     url: `${streamBase(c)}/stream/${row.id}`,
   })
   const pageItems = groups.slice((page - 1) * limit, page * limit).map((g) => ({
