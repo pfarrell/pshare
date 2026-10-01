@@ -3,6 +3,7 @@ import { db } from '../../db/database.js'
 import { sql } from 'kysely'
 import { SINGLES_ALBUM_TITLE } from '../../constants/singles.js'
 import { getTrackForRecording } from '../../services/musicbrainzLocal.js'
+import { deleteFactoidsFor } from '../../services/entityDeleteService.js'
 
 const router = new Hono()
 
@@ -278,11 +279,16 @@ router.delete('/track/:id', async (c) => {
   const id = parseInt(c.req.param('id'))
 
   try {
-    const deleted = await db
-      .deleteFrom('tracks')
-      .where('id', '=', id)
-      .returningAll()
-      .executeTakeFirst()
+    // factoids are keyed by track id with no FK, so deleting the track does not
+    // cascade to them: remove them in the same transaction.
+    const deleted = await db.transaction().execute(async (trx) => {
+      await deleteFactoidsFor('track', [id], trx)
+      return trx
+        .deleteFrom('tracks')
+        .where('id', '=', id)
+        .returningAll()
+        .executeTakeFirst()
+    })
 
     if (!deleted) {
       return c.json({ error: 'Track not found' }, 404)

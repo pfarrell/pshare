@@ -105,6 +105,14 @@ const JukeboxSettingsTab = () => {
         >
           Visualizer
         </button>
+        <button
+          type="button"
+          className="jukebox-settings-tab-screensaver-toggle"
+          aria-pressed={screensaverMode === 'factoids'}
+          onClick={() => setScreensaverMode('factoids')}
+        >
+          Factoids
+        </button>
       </div>
       <div className="jukebox-settings-tab-divider" />
       <button type="button" aria-pressed={activeProfileId === null} onClick={() => setProfile(null)}>

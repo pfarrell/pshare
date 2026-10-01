@@ -12,6 +12,7 @@ import { useJukeboxStatePublisher } from './jukeboxStatePublisher';
 import MusicPlayerWrapper from '../components/player/MusicPlayerWrapper';
 import { useJukeboxScreensaverStore } from '../stores/jukeboxScreensaverStore';
 import JukeboxScreensaver from './JukeboxScreensaver';
+import JukeboxFactoidScreensaver from './JukeboxFactoidScreensaver';
 import MilkdropCanvas from '../components/visualizer/MilkdropCanvas';
 
 // How long the drawer can sit open with no touch inside it before it closes
@@ -204,7 +205,12 @@ const JukeboxApp = () => {
       <JukeboxNowPlaying onTap={toggleBrowse} />
       <JukeboxToast message={toastMessage} />
       {screensaverActive && (
-        screensaverMode === 'visualizer' && !visualizerFailed ? (
+        screensaverMode === 'factoids' ? (
+          <JukeboxFactoidScreensaver
+            onDismiss={() => setScreensaverActive(false)}
+            onView={handleScreensaverView}
+          />
+        ) : screensaverMode === 'visualizer' && !visualizerFailed ? (
           <MilkdropCanvas
             onDismiss={() => setScreensaverActive(false)}
             onFail={() => setVisualizerFailed(true)}

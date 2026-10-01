@@ -40,6 +40,21 @@ describe('apiService query strings are unchanged', () => {
     expect(http.get).toHaveBeenLastCalledWith('/photos/random?size=3');
   });
 
+  test('factoid endpoints hit the exact backend routes', () => {
+    // The component tests mock apiService wholesale, so a wrong URL or verb here
+    // would otherwise only surface on a real kiosk.
+    apiService.getFactoidsForTrack(5);
+    expect(http.get).toHaveBeenLastCalledWith('/factoids?track_id=5');
+    apiService.getRandomFactoids();
+    expect(http.get).toHaveBeenLastCalledWith('/factoids/random');
+    apiService.adminListFactoids('album', 12);
+    expect(http.get).toHaveBeenLastCalledWith('/admin/factoids?kind=album&target_id=12');
+    apiService.adminDeleteFactoid(9);
+    expect(http.delete).toHaveBeenLastCalledWith('/admin/factoids/9');
+    apiService.adminClearFactoidGeneration('album', 12);
+    expect(http.delete).toHaveBeenLastCalledWith('/admin/factoids/generations/album/12');
+  });
+
   test('uploadPhoto posts multipart form data to /admin/photos', () => {
     const file = new File(['x'], 'a.jpg', { type: 'image/jpeg' });
     apiService.uploadPhoto(file);

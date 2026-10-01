@@ -54,11 +54,14 @@ describe('Album page — scrolling to the track that arrived playing (from the m
     renderAlbum([{ pathname: '/album/10', state: { scrollToTrackId: 2 } }]);
     await screen.findByText('Test Album');
 
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith(
+    // waitFor, not a bare expect: the scroll runs in an effect keyed on the loaded
+    // album, and findByText can resolve on the commit before that effect flushes.
+    // On a loaded machine the bare assertion won the race and failed intermittently.
+    await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith(
       // 'start' so the row lands below the fixed header, matching the
       // .scroll-below-fixed-header convention used elsewhere (AdminCollection).
       expect.objectContaining({ block: 'start' })
-    );
+    ));
   });
 
   test('does not scroll when there is no scrollToTrackId in location state', async () => {

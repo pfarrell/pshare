@@ -10,6 +10,7 @@ import tags from './tags.js'
 import duplicates from './duplicates.js'
 import profiles from './profiles.js'
 import photos from './photos.js'
+import factoids from './factoids.js'
 
 const admin = new Hono()
 
@@ -23,5 +24,6 @@ admin.route('/', tags)
 admin.route('/', duplicates)
 admin.route('/', profiles)
 admin.route('/', photos)
+admin.route('/', factoids)
 
 export default admin

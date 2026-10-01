@@ -20,6 +20,12 @@ describe('jukeboxScreensaverStore', () => {
     expect(localStorage.getItem('jukebox-screensaver-mode')).toBe('off');
   });
 
+  test('setMode accepts factoids and persists it', () => {
+    useJukeboxScreensaverStore.getState().setMode('factoids');
+    expect(useJukeboxScreensaverStore.getState().mode).toBe('factoids');
+    expect(localStorage.getItem('jukebox-screensaver-mode')).toBe('factoids');
+  });
+
   test('setMode accepts visualizer and persists it', () => {
     useJukeboxScreensaverStore.getState().setMode('visualizer');
     expect(useJukeboxScreensaverStore.getState().mode).toBe('visualizer');
@@ -45,6 +51,14 @@ describe('jukeboxScreensaverStore module-load behavior (fresh import per test)',
     localStorage.setItem('jukebox-screensaver-mode', 'photos');
     const { useJukeboxScreensaverStore: fresh } = await import('./jukeboxScreensaverStore');
     expect(fresh.getState().mode).toBe('photos');
+  });
+
+  test('reads a persisted factoids mode back on next load', async () => {
+    // setMode does not validate, so only this load-time read proves 'factoids'
+    // is in VALID_MODES; without it readStored falls back to music.
+    localStorage.setItem('jukebox-screensaver-mode', 'factoids');
+    const { useJukeboxScreensaverStore: fresh } = await import('./jukeboxScreensaverStore');
+    expect(fresh.getState().mode).toBe('factoids');
   });
 
   test('reads a persisted visualizer mode back on next load', async () => {

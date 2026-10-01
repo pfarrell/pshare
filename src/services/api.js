@@ -91,6 +91,11 @@ export const apiService = {
 
   // Photos (jukebox photo-frame screensaver)
   getRandomPhotos: (size = 10) => api.get(`/photos/random${qs({ size })}`),
+  getFactoidsForTrack: (trackId) => api.get(`/factoids${qs({ track_id: trackId })}`),
+  getRandomFactoids: () => api.get('/factoids/random'),
+  adminListFactoids: (kind, targetId) => api.get(`/admin/factoids${qs({ kind, target_id: targetId })}`),
+  adminDeleteFactoid: (id) => api.delete(`/admin/factoids/${id}`),
+  adminClearFactoidGeneration: (kind, targetId) => api.delete(`/admin/factoids/generations/${kind}/${targetId}`),
 
   // Tracks
   getTrack: (id) => api.get(`/track/${id}`), // Returns { track }

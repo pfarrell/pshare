@@ -1,5 +1,6 @@
 import type { Kysely } from 'kysely'
 import type { Database } from '../db/database.js'
+import { reassignFactoids } from './entityDeleteService.js'
 
 // Folds `loserId` into `targetId` and deletes the loser. Run inside
 // db.transaction(): albums.artist_id / tracks.artist_id have no FK, so a
@@ -130,6 +131,10 @@ export async function mergeArtistInto(targetId: number, loserId: number, trx: Ky
     ]))
     .execute()
   await trx.updateTable('artist_mb_tags').set({ artist_id: targetId }).where('artist_id', '=', loserId).execute()
+
+  // factoids/factoid_generations are polymorphic (no FK), so nothing cascades:
+  // move them before the loser row goes, or they orphan silently.
+  await reassignFactoids('artist', loserId, targetId, trx)
 
   await trx.deleteFrom('artists').where('id', '=', loserId).execute()
 }

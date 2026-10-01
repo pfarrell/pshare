@@ -123,6 +123,18 @@ describe('screensaver mode selector', () => {
     expect(screen.getByRole('button', { name: 'Visualizer' })).toHaveAttribute('aria-pressed', 'true');
   });
 
+  test('offers a Factoids screensaver option and selects it on click', async () => {
+    render(<JukeboxSettingsTab />);
+    await waitFor(() => screen.getByText('Kids'));
+
+    expect(screen.getByRole('button', { name: 'Factoids' })).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Factoids' }));
+
+    expect(useJukeboxScreensaverStore.getState().mode).toBe('factoids');
+    expect(screen.getByRole('button', { name: 'Factoids' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   describe('Exit kiosk', () => {
     afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 

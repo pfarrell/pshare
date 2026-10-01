@@ -338,6 +338,30 @@ interface AlbumMbTagTable {
   captured_at: ColumnType<Date, string | Date | undefined, never>
 }
 
+interface FactoidGenerationTable {
+  id: Generated<number>
+  kind: 'artist' | 'album'
+  target_id: number
+  status: 'pending' | 'ok' | 'empty' | 'failed'
+  attempts: Generated<number>
+  factoid_count: Generated<number>
+  error: string | null
+  created_at: ColumnType<Date, Date | string | undefined, never>
+  updated_at: ColumnType<Date, Date | string | undefined, Date | string>
+}
+
+interface FactoidTable {
+  id: Generated<number>
+  kind: 'artist' | 'album' | 'track'
+  target_id: number
+  text: string
+  source_url: string
+  source_title: string | null
+  model: string
+  generation_id: number | null
+  created_at: ColumnType<Date, Date | string | undefined, never>
+}
+
 interface UserRecallTokenTable {
   user_id: number
   recall_token: string
@@ -438,6 +462,8 @@ export interface Database {
   user_recall_tokens: UserRecallTokenTable
   notes: NoteTable
   dismissed_duplicates: DismissedDuplicateTable
+  factoid_generations: FactoidGenerationTable
+  factoids: FactoidTable
   oauth_identities: OAuthIdentityTable
   error_log: ErrorLogTable
   signup_log: SignupLogTable

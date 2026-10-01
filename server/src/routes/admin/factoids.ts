@@ -1,0 +1,63 @@
+// server/src/routes/admin/factoids.ts
+// Mounted under /admin behind requireAdmin in src/index.ts. Delete-only
+// moderation plus a re-research escape hatch: factoids auto-publish, and this
+// is the recourse for one that is wrong or dull.
+import { Hono } from 'hono'
+import { db } from '../../db/database.js'
+import { listForTarget, deleteFactoid } from '../../services/factoidStore.js'
+
+const router = new Hono()
+
+// GET /admin/factoids?kind=album&target_id=12
+router.get('/factoids', async (c) => {
+  const kind = c.req.query('kind')
+  const targetId = parseInt(c.req.query('target_id') ?? '', 10)
+  if (kind !== 'artist' && kind !== 'album' && kind !== 'track') {
+    return c.json({ error: 'kind must be artist, album, or track' }, 400)
+  }
+  if (!Number.isFinite(targetId)) return c.json({ error: 'target_id is required' }, 400)
+
+  try {
+    const factoids = await listForTarget(kind, targetId)
+    const generation = kind === 'track' ? undefined : await db
+      .selectFrom('factoid_generations')
+      .select(['id', 'status', 'attempts', 'factoid_count', 'error', 'updated_at'])
+      .where('kind', '=', kind)
+      .where('target_id', '=', targetId)
+      .executeTakeFirst()
+    return c.json({ factoids, generation: generation ?? null })
+  } catch (error) {
+    console.error('Error listing factoids:', error)
+    return c.json({ error: 'Failed to list factoids' }, 500)
+  }
+})
+
+router.delete('/factoids/:id', async (c) => {
+  const id = parseInt(c.req.param('id'), 10)
+  if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400)
+  try {
+    const existed = await deleteFactoid(id)
+    if (!existed) return c.json({ error: 'Factoid not found' }, 404)
+    return c.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting factoid:', error)
+    return c.json({ error: 'Failed to delete factoid' }, 500)
+  }
+})
+
+// Clearing the ledger row is what lets the poller pick the entity up again.
+router.delete('/factoids/generations/:kind/:id', async (c) => {
+  const kind = c.req.param('kind')
+  const targetId = parseInt(c.req.param('id'), 10)
+  if (kind !== 'artist' && kind !== 'album') return c.json({ error: 'kind must be artist or album' }, 400)
+  if (!Number.isFinite(targetId)) return c.json({ error: 'Invalid id' }, 400)
+  try {
+    await db.deleteFrom('factoid_generations').where('kind', '=', kind).where('target_id', '=', targetId).execute()
+    return c.json({ success: true })
+  } catch (error) {
+    console.error('Error clearing factoid generation:', error)
+    return c.json({ error: 'Failed to clear generation' }, 500)
+  }
+})
+
+export default router
