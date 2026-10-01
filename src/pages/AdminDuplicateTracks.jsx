@@ -37,18 +37,40 @@ export default function AdminDuplicateTracks() {
   );
   const [busyKey, setBusyKey] = useState(null);
 
-  const handleKeep = async (group, keep) => {
-    const losers = group.tracks.filter((t) => t.id !== keep.id);
-    const others = losers.length === 1 ? `"${losers[0].title}"` : `${losers.length} other versions`;
-    if (!window.confirm(`Keep "${keep.title}" and delete ${others}?\n\nThis cannot be undone.`)) return;
+  // A group has two different possible ends, and they are separate buttons on purpose.
+  //
+  // Consolidate: nothing is deleted. Every track stays on its album and the others
+  // are pointed at the chosen track's media file, which becomes the definitive one.
+  const handleUseFile = async (group, keep) => {
+    const others = group.tracks.filter((t) => t.id !== keep.id);
+    const names = others.length === 1 ? `"${others[0].title}"` : `${others.length} other tracks`;
+    if (!window.confirm(`Consolidate: use the audio file of "${keep.title}" as the definitive file for ${names}?\n\nNo tracks are removed from the album.`)) return;
     const key = groupKey(group);
     setBusyKey(key);
     try {
-      await apiService.resolveDuplicateTrackGroup(keep.id, losers.map((t) => t.id));
-      toast.success(`Kept "${keep.title}", deleted ${losers.length} duplicate${losers.length === 1 ? '' : 's'}.`);
+      await apiService.setCanonicalTrackFile(keep.id, others.map((t) => t.id));
+      toast.success(`${others.length} track${others.length === 1 ? ' now uses' : 's now use'} the file from "${keep.title}".`);
       setGroups((prev) => prev.filter((g) => groupKey(g) !== key));
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Failed to merge tracks'));
+      toast.error(getErrorMessage(err, 'Failed to update tracks'));
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  // Remove others: deletes the other tracks from their album, keeping the chosen one.
+  const handleRemoveOthers = async (group, keep) => {
+    const others = group.tracks.filter((t) => t.id !== keep.id);
+    const names = others.length === 1 ? `"${others[0].title}"` : `${others.length} other tracks`;
+    if (!window.confirm(`REMOVE ${names} from the album and keep "${keep.title}"?\n\nThe removed tracks are deleted. Their playlist entries, favorites, notes and tags move to "${keep.title}". This cannot be undone.`)) return;
+    const key = groupKey(group);
+    setBusyKey(key);
+    try {
+      await apiService.removeOtherDuplicateTracks(keep.id, others.map((t) => t.id));
+      toast.success(`Removed ${others.length} track${others.length === 1 ? '' : 's'}, kept "${keep.title}".`);
+      setGroups((prev) => prev.filter((g) => groupKey(g) !== key));
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to remove tracks'));
     } finally {
       setBusyKey(null);
     }
@@ -104,7 +126,7 @@ export default function AdminDuplicateTracks() {
                     <Link to={`/album/${track.album_id}`} style={{ fontWeight: 'bold', color: '#3b82f6', textDecoration: 'none' }}>
                       {track.title}
                     </Link>
-                    <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>{formatDuration(track.duration_sec)}</p>
+                    <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>{formatDuration(track.duration_sec)} · file #{track.media_file_id ?? 'none'}</p>
                     {/* preload="none": nothing downloads until play is pressed, so a
                         page full of players costs no bandwidth. */}
                     <audio
@@ -116,8 +138,21 @@ export default function AdminDuplicateTracks() {
                       style={{ marginTop: '0.5rem', width: '100%', maxWidth: '260px' }}
                     />
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
-                      <button disabled={busy} onClick={() => handleKeep(group, track)} style={buttonStyle('#3b82f6', busy)}>
-                        Keep this one
+                      <button
+                        disabled={busy || track.media_file_id == null}
+                        title={track.media_file_id == null ? 'This track has no media file' : 'Point the other tracks at this track\'s audio file. No tracks are removed.'}
+                        onClick={() => handleUseFile(group, track)}
+                        style={buttonStyle('#3b82f6', busy || track.media_file_id == null)}
+                      >
+                        Consolidate to this version
+                      </button>
+                      <button
+                        disabled={busy}
+                        title="Delete the other tracks in this group and keep this one."
+                        onClick={() => handleRemoveOthers(group, track)}
+                        style={buttonStyle('#dc2626', busy)}
+                      >
+                        Remove others
                       </button>
                       <button disabled={busy} onClick={() => handleNotDuplicate(group, track)} style={buttonStyle('var(--color-text-muted)', busy)}>
                         Not a duplicate

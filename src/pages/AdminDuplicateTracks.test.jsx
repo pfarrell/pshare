@@ -7,14 +7,15 @@ import { apiService } from '../services/api';
 vi.mock('../services/api', () => ({
   apiService: {
     getDuplicateTracks: vi.fn(),
-    resolveDuplicateTrackGroup: vi.fn(),
+    setCanonicalTrackFile: vi.fn(),
+    removeOtherDuplicateTracks: vi.fn(),
     dismissDuplicate: vi.fn(),
   },
 }));
 
 const renderPage = () => render(<MemoryRouter><AdminDuplicateTracks /></MemoryRouter>);
 
-const mk = (id, title, duration_sec = 226) => ({ id, title, duration_sec, album_id: 5, album_title: 'Greatest Hits of the 90s', url: `http://localhost:3000/stream/${id}` });
+const mk = (id, title, duration_sec = 226) => ({ id, title, duration_sec, media_file_id: 1000 + id, album_id: 5, album_title: 'Greatest Hits of the 90s', url: `http://localhost:3000/stream/${id}` });
 const group = {
   reasons: ['file', 'musicbrainz'],
   album_id: 5,
@@ -77,19 +78,65 @@ describe('AdminDuplicateTracks', () => {
     expect(second.pause).not.toHaveBeenCalled();
   });
 
-  test('keeping a track merges all other versions into it and removes the group', async () => {
+  test('"Consolidate to this version" points the other tracks at the chosen track\'s file without deleting anything', async () => {
     const user = userEvent.setup();
     apiService.getDuplicateTracks.mockResolvedValue(respond([group]));
-    apiService.resolveDuplicateTrackGroup.mockResolvedValue({ data: { success: true } });
+    apiService.setCanonicalTrackFile.mockResolvedValue({ data: { success: true } });
     renderPage();
 
     await screen.findByRole('link', { name: 'I Touch Myself' });
-    await user.click(within(rowOf('I touch Myself')).getByText('Keep this one'));
+    await user.click(within(rowOf('I touch Myself')).getByText('Consolidate to this version'));
 
-    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('Keep "I touch Myself" and delete 2 other versions'));
-    expect(apiService.resolveDuplicateTrackGroup).toHaveBeenCalledWith(200, [100, 300]);
-    expect(screen.queryByRole('link', { name: 'I Touch Myself' })).not.toBeInTheDocument();
+    const prompt = window.confirm.mock.calls[0][0];
+    expect(prompt).toContain('Consolidate: use the audio file of "I touch Myself"');
+    expect(prompt).toContain('No tracks are removed from the album');
+    expect(prompt).not.toMatch(/delete/i);
+    expect(apiService.setCanonicalTrackFile).toHaveBeenCalledWith(200, [100, 300]);
     expect(screen.getByText('No possible duplicate tracks found.')).toBeInTheDocument();
+  });
+
+  test('"Remove others" deletes the rest of the group, keeps the chosen track, and says so in the confirmation', async () => {
+    const user = userEvent.setup();
+    apiService.getDuplicateTracks.mockResolvedValue(respond([group]));
+    apiService.removeOtherDuplicateTracks.mockResolvedValue({ data: { success: true, removed: 2 } });
+    renderPage();
+
+    await screen.findByRole('link', { name: 'I Touch Myself' });
+    await user.click(within(rowOf('I touch Myself')).getByText('Remove others'));
+
+    const prompt = window.confirm.mock.calls[0][0];
+    expect(prompt).toContain('REMOVE 2 other tracks from the album and keep "I touch Myself"');
+    expect(prompt).toContain('cannot be undone');
+    expect(apiService.removeOtherDuplicateTracks).toHaveBeenCalledWith(200, [100, 300]);
+    expect(apiService.setCanonicalTrackFile).not.toHaveBeenCalled();
+    expect(screen.getByText('No possible duplicate tracks found.')).toBeInTheDocument();
+  });
+
+  test('cancelling the confirmation changes nothing for either action', async () => {
+    const user = userEvent.setup();
+    window.confirm.mockReturnValue(false);
+    apiService.getDuplicateTracks.mockResolvedValue(respond([group]));
+    renderPage();
+
+    await screen.findByRole('link', { name: 'I Touch Myself' });
+    await user.click(within(rowOf('I touch Myself')).getByText('Remove others'));
+    await user.click(within(rowOf('I touch Myself')).getByText('Consolidate to this version'));
+
+    expect(apiService.removeOtherDuplicateTracks).not.toHaveBeenCalled();
+    expect(apiService.setCanonicalTrackFile).not.toHaveBeenCalled();
+    expect(screen.getByRole('link', { name: 'I Touch Myself' })).toBeInTheDocument();
+  });
+
+  test('shows each track\'s media file and does not offer a track with no file as the definitive one', async () => {
+    const noFile = { ...group, tracks: [mk(100, 'I Touch Myself'), { ...mk(200, 'I touch Myself'), media_file_id: null }] };
+    apiService.getDuplicateTracks.mockResolvedValue(respond([noFile]));
+    renderPage();
+
+    await screen.findByRole('link', { name: 'I Touch Myself' });
+    expect(within(rowOf('I Touch Myself')).getByText(/file #1100/)).toBeInTheDocument();
+    expect(within(rowOf('I touch Myself')).getByText(/file #none/)).toBeInTheDocument();
+    expect(within(rowOf('I touch Myself')).getByText('Consolidate to this version')).toBeDisabled();
+    expect(within(rowOf('I Touch Myself')).getByText('Consolidate to this version')).toBeEnabled();
   });
 
   test('"Not a duplicate" dismisses that track against the others and leaves the rest grouped', async () => {

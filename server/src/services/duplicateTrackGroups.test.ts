@@ -16,8 +16,16 @@ type Extra = { duration_sec?: number | null; file_hash?: string | null; chromapr
 const x = (id: number, title: string, extra: Extra, media_file_id: number | null = null) => ({ ...t(id, title, 1, media_file_id), ...extra })
 
 test('same media file groups differently-titled tracks and reports the reason', () => {
-  const g = groupDuplicateTracks([t(1, 'x', 1, 9), t(2, 'y', 1, 9)], new Set())
-  assert.deepEqual(g[0].reasons, ['file'])
+  const g = groupDuplicateTracks([t(1, 'x', 1, 9), t(2, 'y', 1, 9), t(3, 'x', 1, 8)], new Set())
+  assert.deepEqual(g.map((r) => r.tracks.map((tr) => tr.id)), [[1, 2, 3]])
+  assert.deepEqual(g[0].reasons, ['file', 'title'])
+})
+
+test('a group whose tracks already share one media file is resolved and not reported', () => {
+  assert.deepEqual(groupDuplicateTracks([t(1, 'Song One', 1, 9), t(2, 'Song One', 1, 9), t(3, 'Song One', 1, 9)], new Set()), [])
+  assert.deepEqual(groupDuplicateTracks([x(1, 'Alpha', { file_hash: 'abc' }, 9), x(2, 'Beta', { file_hash: 'abc' }, 9)], new Set()), [])
+  // still pending while any member points elsewhere or has no file
+  assert.equal(groupDuplicateTracks([t(1, 'Song One', 1, 9), t(2, 'Song One', 1, 9), t(3, 'Song One', 1, null)], new Set()).length, 1)
 })
 
 test('same md5 on different media file rows groups tracks with unrelated titles', () => {
@@ -109,8 +117,8 @@ test('prefix-only matches ("Track 2" / "Track 20", "Variation V" / "Variation VI
 test('placeholder titles are ignored for title matching but same-file still groups them', () => {
   const titleOnly = groupDuplicateTracks([t(1, 'Track 1'), t(2, 'Track 1'), t(3, 'Untitled'), t(4, 'Untitled')], new Set())
   assert.deepEqual(titleOnly, [])
-  const sameFile = groupDuplicateTracks([t(1, 'Track 1', 1, 7), t(2, 'Track 1', 1, 7)], new Set())
-  assert.equal(sameFile.length, 1)
+  const sameMd5 = groupDuplicateTracks([x(1, 'Track 1', { file_hash: 'h' }, 7), x(2, 'Track 1', { file_hash: 'h' }, 8)], new Set())
+  assert.equal(sameMd5.length, 1)
 })
 
 test('titles that are just a ripper e-mail address are not evidence of a duplicate', () => {

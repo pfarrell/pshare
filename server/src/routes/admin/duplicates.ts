@@ -4,7 +4,8 @@ import type { Variables } from '../../types.js'
 import { db } from '../../db/database.js'
 import { titlesRoughlyMatch } from '../../utils/titleMatch.js'
 import { mergeAlbumInto } from '../../services/albumMergeService.js'
-import { mergeTrackInto } from '../../services/trackMergeService.js'
+import { setCanonicalMediaFile, CanonicalFileError } from '../../services/trackCanonicalFileService.js'
+import { removeDuplicateTracks } from '../../services/trackDuplicateRemovalService.js'
 import { groupDuplicateTracks } from '../../services/duplicateTrackGroups.js'
 import { countsService } from '../../services/countsService.js'
 import { streamBase } from '../../db/streamUrl.js'
@@ -179,7 +180,7 @@ router.get('/duplicates/tracks', async (c) => {
   const totalPages = Math.max(1, Math.ceil(total / limit))
   const shape = (row: (typeof tracks)[number]) => ({
     id: row.id, title: row.title, duration_sec: row.duration_sec,
-    album_id: row.album_id, album_title: row.album_title,
+    album_id: row.album_id, album_title: row.album_title, media_file_id: row.media_file_id,
     url: `${streamBase(c)}/stream/${row.id}`,
   })
   const pageItems = groups.slice((page - 1) * limit, page * limit).map((g) => ({
@@ -219,55 +220,41 @@ router.post('/duplicates/albums/:targetId/resolve', async (c) => {
   }
 })
 
-router.post('/duplicates/tracks/:targetId/resolve', async (c) => {
-  const targetId = parseInt(c.req.param('targetId'))
+// Two deliberately separate outcomes for a duplicate group:
+//   canonical-file: consolidation. No track is deleted; the others are pointed at the
+//                   chosen track's definitive media_files row.
+//   remove-others:  de-duplication. The other tracks are deleted, keeping the chosen one.
+router.post('/duplicates/tracks/:keepId/remove-others', async (c) => {
+  const keepId = parseInt(c.req.param('keepId'))
   const body = await c.req.json()
-  const loserId = parseInt(body.loser_id)
-  if (!Number.isInteger(targetId) || !Number.isInteger(loserId) || targetId === loserId) {
-    return c.json({ error: 'targetId and loser_id must be distinct integers' }, 400)
-  }
-  // Same stale-row protection as the album resolve route above.
-  const existing = await db
-    .selectFrom('tracks')
-    .select('id')
-    .where('id', 'in', [targetId, loserId])
-    .execute()
-  const existingIds = new Set(existing.map((r) => r.id))
-  if (!existingIds.has(targetId) || !existingIds.has(loserId)) {
-    return c.json({ error: 'Track not found (it may have already been merged)' }, 404)
+  const trackIds: number[] = Array.isArray(body.track_ids) ? body.track_ids.map((v: unknown) => parseInt(String(v))) : []
+  if (!Number.isInteger(keepId) || trackIds.length === 0 || trackIds.some((id) => !Number.isInteger(id))) {
+    return c.json({ error: 'keepId and track_ids must be integers' }, 400)
   }
   try {
-    await db.transaction().execute((trx) => mergeTrackInto(targetId, loserId, trx))
-    return c.json({ success: true })
+    const result = await db.transaction().execute((trx) => removeDuplicateTracks(keepId, trackIds, trx))
+    return c.json({ success: true, ...result })
   } catch (error) {
-    console.error('Error resolving duplicate track:', error)
-    return c.json({ error: 'Failed to merge track' }, 500)
+    if (error instanceof CanonicalFileError) return c.json({ error: error.message }, 400)
+    console.error('Error removing duplicate tracks:', error)
+    return c.json({ error: 'Failed to remove tracks' }, 500)
   }
 })
 
-router.post('/duplicates/tracks/:targetId/resolve-group', async (c) => {
-  const targetId = parseInt(c.req.param('targetId'))
+router.post('/duplicates/tracks/:keepId/canonical-file', async (c) => {
+  const keepId = parseInt(c.req.param('keepId'))
   const body = await c.req.json()
-  const loserIds: number[] = Array.isArray(body.loser_ids) ? body.loser_ids.map((v: unknown) => parseInt(String(v))) : []
-  if (!Number.isInteger(targetId) || loserIds.length === 0
-    || loserIds.some((id) => !Number.isInteger(id) || id === targetId)
-    || new Set(loserIds).size !== loserIds.length) {
-    return c.json({ error: 'targetId and loser_ids must be distinct integers' }, 400)
-  }
-  const ids = [targetId, ...loserIds]
-  const existing = await db.selectFrom('tracks').select('id').where('id', 'in', ids).execute()
-  if (existing.length !== ids.length) {
-    return c.json({ error: 'Track not found (it may have already been merged)' }, 404)
+  const trackIds: number[] = Array.isArray(body.track_ids) ? body.track_ids.map((v: unknown) => parseInt(String(v))) : []
+  if (!Number.isInteger(keepId) || trackIds.length === 0 || trackIds.some((id) => !Number.isInteger(id))) {
+    return c.json({ error: 'keepId and track_ids must be integers' }, 400)
   }
   try {
-    // One transaction: either every version folds into the canonical track or none do.
-    await db.transaction().execute(async (trx) => {
-      for (const loserId of loserIds) await mergeTrackInto(targetId, loserId, trx)
-    })
-    return c.json({ success: true, merged: loserIds.length })
+    const result = await db.transaction().execute((trx) => setCanonicalMediaFile(keepId, trackIds, trx))
+    return c.json({ success: true, ...result })
   } catch (error) {
-    console.error('Error resolving duplicate track group:', error)
-    return c.json({ error: 'Failed to merge tracks' }, 500)
+    if (error instanceof CanonicalFileError) return c.json({ error: error.message }, 400)
+    console.error('Error setting canonical media file:', error)
+    return c.json({ error: 'Failed to update tracks' }, 500)
   }
 })
 

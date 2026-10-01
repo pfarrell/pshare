@@ -165,6 +165,10 @@ export function groupDuplicateTracks<T extends DupTrack>(tracks: T[], dismissed:
     }
     for (const members of components.values()) {
       if (members.length < 2) continue
+      // Resolving a group points every track at one definitive media file and keeps
+      // the tracks, so a group already sharing a single file is done, not pending.
+      const fileIds = new Set(members.map((m) => m.media_file_id))
+      if (fileIds.size === 1 && !fileIds.has(null)) continue
       const reasons = new Set<DupReason>()
       for (const m of members) for (const r of reasonsByTrack.get(m.id) ?? []) reasons.add(r)
       groups.push({ reasons: [...reasons].sort((a, b) => REASON_RANK[a] - REASON_RANK[b]), album_id: albumId, tracks: members })
