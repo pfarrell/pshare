@@ -9,7 +9,13 @@ import { usePaginatedList } from '../hooks/usePaginatedList';
 import Pagination from '../components/admin/Pagination';
 import { formatDuration } from '../utils/formatters';
 
-const TIER_LABELS = { 1: 'Same audio file', 2: 'Matching title' };
+const REASON_LABELS = {
+  file: 'same audio file',
+  md5: 'identical file contents',
+  chromaprint: 'same audio fingerprint',
+  musicbrainz: 'same MusicBrainz recording',
+  title: 'matching title',
+};
 
 const groupKey = (group) => group.tracks.map((t) => t.id).join('-');
 
@@ -78,7 +84,7 @@ export default function AdminDuplicateTracks() {
           return (
             <div key={key} style={{ backgroundColor: 'var(--color-bg-surface)', borderRadius: '0.5rem', padding: '1rem', marginBottom: '1rem', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
               <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-                {group.tracks.length} versions, {TIER_LABELS[group.tier]} - {group.album_title}
+                {group.tracks.length} versions - {group.album_title} - matched by {group.reasons.map((r) => REASON_LABELS[r] ?? r).join(', ')}
               </p>
               <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
                 {group.tracks.map((track) => (

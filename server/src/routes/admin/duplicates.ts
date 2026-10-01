@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { sql } from 'kysely'
 import type { Variables } from '../../types.js'
 import { db } from '../../db/database.js'
 import { titlesRoughlyMatch } from '../../utils/titleMatch.js'
@@ -160,9 +161,13 @@ router.get('/duplicates/tracks', async (c) => {
   const tracks = await db
     .selectFrom('tracks')
     .leftJoin('albums', 'albums.id', 'tracks.album_id')
+    .leftJoin('media_files', 'media_files.id', 'tracks.media_file_id')
     .select([
       'tracks.id', 'tracks.album_id', 'tracks.title', 'tracks.media_file_id', 'tracks.duration_sec',
       'albums.title as album_title',
+      'media_files.file_hash', 'media_files.musicbrainz_recording_id',
+      // Fingerprints are kilobytes each; equal md5s mean identical fingerprints, so only the digest leaves the DB.
+      sql<string | null>`md5(media_files.chromaprint_fingerprint)`.as('chromaprint_key'),
     ])
     .where('tracks.approved', '=', true)
     .where('tracks.album_id', 'is not', null)
@@ -178,7 +183,7 @@ router.get('/duplicates/tracks', async (c) => {
     url: `${streamBase(c)}/stream/${row.id}`,
   })
   const pageItems = groups.slice((page - 1) * limit, page * limit).map((g) => ({
-    tier: g.tier, album_id: g.album_id, album_title: g.tracks[0].album_title, tracks: g.tracks.map(shape),
+    reasons: g.reasons, album_id: g.album_id, album_title: g.tracks[0].album_title, tracks: g.tracks.map(shape),
   }))
 
   return c.json({ groups: pageItems, pagination: { page, limit, total, totalPages } })

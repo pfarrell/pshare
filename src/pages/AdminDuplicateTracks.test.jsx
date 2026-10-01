@@ -16,7 +16,7 @@ const renderPage = () => render(<MemoryRouter><AdminDuplicateTracks /></MemoryRo
 
 const mk = (id, title, duration_sec = 226) => ({ id, title, duration_sec, album_id: 5, album_title: 'Greatest Hits of the 90s', url: `http://localhost:3000/stream/${id}` });
 const group = {
-  tier: 1,
+  reasons: ['file', 'musicbrainz'],
   album_id: 5,
   album_title: 'Greatest Hits of the 90s',
   tracks: [mk(100, 'I Touch Myself'), mk(200, 'I touch Myself', 227), mk(300, 'I Touch Myself (Remaster)', 228)],
@@ -37,7 +37,7 @@ describe('AdminDuplicateTracks', () => {
     await screen.findByText('No possible duplicate tracks found.');
   });
 
-  test('renders every version in a group with the tier label, album context, and album links', async () => {
+  test('renders every version in a group with the match reasons, album context, and album links', async () => {
     apiService.getDuplicateTracks.mockResolvedValue(respond([group]));
     renderPage();
 
@@ -47,7 +47,7 @@ describe('AdminDuplicateTracks', () => {
     expect(link).not.toHaveAttribute('target');
     expect(screen.getByRole('link', { name: 'I touch Myself' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'I Touch Myself (Remaster)' })).toBeInTheDocument();
-    expect(screen.getByText(/3 versions, Same audio file/)).toBeInTheDocument();
+    expect(screen.getByText(/3 versions .* matched by same audio file, same MusicBrainz recording/)).toBeInTheDocument();
     expect(screen.getByText(/Greatest Hits of the 90s/)).toBeInTheDocument();
   });
 
