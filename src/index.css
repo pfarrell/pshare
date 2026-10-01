@@ -3154,6 +3154,23 @@ body:has(.jukebox-app) {
   border-color: rgba(147, 197, 253, 0.4);
   font-weight: 600;
 }
+.jukebox-app .jukebox-settings-tab-screensaver-start {
+  flex-basis: 100%;
+  min-height: 2.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #0b1220;
+  background: #93c5fd;
+  border: 1px solid #93c5fd;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+.jukebox-app .jukebox-settings-tab-screensaver-start:disabled {
+  color: rgba(255, 255, 255, 0.3);
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.15);
+  cursor: default;
+}
 .jukebox-app .jukebox-settings-tab-error {
   margin: 0;
   font-size: 0.875rem;

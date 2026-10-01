@@ -115,6 +115,7 @@ const JukeboxSettingsTab = ({ onStartScreensaver }) => {
         </button>
         <button
           type="button"
+          className="jukebox-settings-tab-screensaver-start"
           disabled={screensaverMode === 'off'}
           onClick={onStartScreensaver}
         >
