@@ -2790,16 +2790,23 @@ body:has(.jukebox-app) {
 .jukebox-app .jukebox-screensaver-nav {
   position: absolute;
   bottom: 1.5rem;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 4.5rem;
+  height: 4.5rem;
   padding: 0;
-  font-size: 1.75rem;
+  font-size: 2.75rem;
   line-height: 1;
   color: white;
   background: rgba(20, 26, 32, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 999px;
   cursor: pointer;
+}
+/* Invisible halo: taps just outside the circle still hit the button instead
+   of falling through to the dismiss-on-tap background. */
+.jukebox-app .jukebox-screensaver-nav::before {
+  content: "";
+  position: absolute;
+  inset: -1.5rem;
 }
 .jukebox-app .jukebox-screensaver-nav-prev { left: 1.5rem; }
 .jukebox-app .jukebox-screensaver-nav-next { right: 1.5rem; }
