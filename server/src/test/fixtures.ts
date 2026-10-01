@@ -126,6 +126,20 @@ export async function cleanupFixtures(): Promise<void> {
   if (artistIds.length > 0) await db.deleteFrom('favorites').where('kind', '=', 'artist').where('target_id', 'in', artistIds).execute()
   if (albumIds.length > 0) await db.deleteFrom('favorites').where('kind', '=', 'album').where('target_id', 'in', albumIds).execute()
 
+  // factoids/factoid_generations.target_id has no FK (polymorphic by kind),
+  // so they won't cascade when the fixture rows are deleted below.
+  const trackIds = (await db.selectFrom('tracks').select('id').where('title', 'like', like).execute()).map((r) => r.id)
+  for (const [kind, ids] of [['artist', artistIds], ['album', albumIds], ['track', trackIds]] as const) {
+    if (ids.length > 0) {
+      await db.deleteFrom('factoids').where('kind', '=', kind).where('target_id', 'in', ids).execute()
+    }
+  }
+  for (const [kind, ids] of [['artist', artistIds], ['album', albumIds]] as const) {
+    if (ids.length > 0) {
+      await db.deleteFrom('factoid_generations').where('kind', '=', kind).where('target_id', 'in', ids).execute()
+    }
+  }
+
   await db.deleteFrom('tracks').where('title', 'like', like).execute()
   if (albumIds.length > 0) await db.deleteFrom('logs').where('album_id', 'in', albumIds).execute()
   if (albumIds.length > 0) await db.deleteFrom('albums').where('id', 'in', albumIds).execute()
