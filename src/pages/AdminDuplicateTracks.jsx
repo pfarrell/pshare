@@ -111,16 +111,17 @@ export default function AdminDuplicateTracks() {
     try {
       await apiService.setCanonicalTrackFile(main.id, others.map((t) => t.id));
       toast.success(`${others.length} track${others.length === 1 ? ' now uses' : 's now use'} the file from "${main.title}".`);
-      // The consolidated tracks stay in the group, now sharing the main file; the
-      // unchecked ones are untouched. The group goes away once nothing is left to review.
+      // Consolidated tracks are done, so they leave the group right away (no reload). The
+      // main version and the unchecked tracks stay, so the group can still be worked: for
+      // example removing real duplicates from it afterwards. A group left with nothing to
+      // compare goes away entirely.
       const moved = new Set(others.map((t) => t.id));
       setGroups((prev) => prev.flatMap((g) => {
         if (groupKey(g) !== key) return [g];
-        // moved tracks now play from the main file, so they take on its (working) status too
-        const tracks = g.tracks.map((t) => (moved.has(t.id)
-          ? { ...t, media_file_id: main.media_file_id, file_status: main.file_status, file_path: main.file_path }
-          : t));
-        return stillPending(tracks) ? [{ ...g, tracks }] : [];
+        const remaining = g.tracks.filter((t) => !moved.has(t.id));
+        return stillPending(remaining)
+          ? [{ ...g, tracks: remaining, album_ids: [...new Set(remaining.map((t) => t.album_id))] }]
+          : [];
       }));
       others.forEach((t) => setPlayState(t.id, false));
       deselect(others.map((t) => t.id));

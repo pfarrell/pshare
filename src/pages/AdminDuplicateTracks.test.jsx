@@ -253,7 +253,7 @@ describe('AdminDuplicateTracks', () => {
       expect(apiService.setCanonicalTrackFile).toHaveBeenCalledWith(200, [100]);
     });
 
-    test('the group stays after a partial consolidate: moved tracks show the main file, unchecked ones are untouched', async () => {
+    test('consolidated rows leave the group at once; the main version and unchecked tracks stay, untouched', async () => {
       const user = userEvent.setup();
       apiService.getDuplicateTracks.mockResolvedValue(respond([group]));
       apiService.setCanonicalTrackFile.mockResolvedValue({ data: { success: true } });
@@ -263,12 +263,33 @@ describe('AdminDuplicateTracks', () => {
       await check(user, 'I Touch Myself');
       await user.click(within(rowOf('I touch Myself')).getByText('Consolidate 1 selected to this version'));
 
-      expect(await screen.findByText(/3 versions/)).toBeInTheDocument();
-      expect(within(rowOf('I Touch Myself')).getByText(/file #1200/)).toBeInTheDocument(); // moved to track 200's file
-      expect(within(rowOf('I touch Myself')).getByText(/file #1200/)).toBeInTheDocument();
-      expect(within(rowOf('I Touch Myself (Remaster)')).getByText(/file #1300/)).toBeInTheDocument(); // untouched
-      // its checkbox is cleared once acted on
-      expect(within(rowOf('I Touch Myself')).getByRole('checkbox')).not.toBeChecked();
+      expect(await screen.findByText(/2 versions/)).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'I Touch Myself' })).not.toBeInTheDocument(); // consolidated: gone
+      expect(screen.getAllByRole('listitem')).toHaveLength(2);
+      expect(within(rowOf('I touch Myself')).getByText(/file #1200/)).toBeInTheDocument(); // the main
+      expect(within(rowOf('I Touch Myself (Remaster)')).getByText(/file #1300/)).toBeInTheDocument(); // untouched, still its own file
+    });
+
+    test('a group can be worked in several steps: consolidate some, then remove a real duplicate from what is left', async () => {
+      const user = userEvent.setup();
+      apiService.getDuplicateTracks.mockResolvedValue(respond([group]));
+      apiService.setCanonicalTrackFile.mockResolvedValue({ data: { success: true } });
+      apiService.removeOtherDuplicateTracks.mockResolvedValue({ data: { success: true, removed: 1 } });
+      renderPage();
+
+      await screen.findByRole('link', { name: 'I Touch Myself' });
+      // step 1: consolidate track 100 onto track 200
+      await check(user, 'I Touch Myself');
+      await user.click(within(rowOf('I touch Myself')).getByText('Consolidate 1 selected to this version'));
+      await screen.findByText(/2 versions/);
+
+      // step 2: from the same group, remove track 300 as a duplicate of 200
+      await check(user, 'I Touch Myself (Remaster)');
+      await user.click(within(rowOf('I touch Myself')).getByText('Remove 1 selected'));
+
+      expect(apiService.setCanonicalTrackFile).toHaveBeenCalledWith(200, [100]);
+      expect(apiService.removeOtherDuplicateTracks).toHaveBeenCalledWith(200, [300]);
+      expect(await screen.findByText('No possible duplicate tracks found.')).toBeInTheDocument();
     });
 
     test('a checked main row is ignored: only the other checked tracks are sent', async () => {
