@@ -7,85 +7,103 @@ import { apiService } from '../services/api';
 vi.mock('../services/api', () => ({
   apiService: {
     getDuplicateTracks: vi.fn(),
-    resolveDuplicateTrack: vi.fn(),
+    resolveDuplicateTrackGroup: vi.fn(),
     dismissDuplicate: vi.fn(),
   },
 }));
 
 const renderPage = () => render(<MemoryRouter><AdminDuplicateTracks /></MemoryRouter>);
 
-const pair = {
+const mk = (id, title, duration_sec = 226) => ({ id, title, duration_sec, album_id: 5, album_title: 'Greatest Hits of the 90s', url: `http://localhost:3000/stream/${id}` });
+const group = {
   tier: 1,
-  a: { id: 100, title: 'I Touch Myself', duration_sec: 226, album_id: 5, album_title: 'Greatest Hits of the 90s', url: 'http://localhost:3000/stream/100' },
-  b: { id: 200, title: 'I touch Myself', duration_sec: 227, album_id: 5, album_title: 'Greatest Hits of the 90s', url: 'http://localhost:3000/stream/200' },
+  album_id: 5,
+  album_title: 'Greatest Hits of the 90s',
+  tracks: [mk(100, 'I Touch Myself'), mk(200, 'I touch Myself', 227), mk(300, 'I Touch Myself (Remaster)', 228)],
 };
+const respond = (groups) => ({ data: { groups, pagination: { page: 1, limit: 25, total: groups.length, totalPages: 1 } } });
+const rowOf = (name) => screen.getByRole('link', { name }).parentElement;
 
 beforeEach(() => {
   vi.spyOn(window, 'confirm').mockReturnValue(true);
+  vi.clearAllMocks();
 });
 
 describe('AdminDuplicateTracks', () => {
-  test('shows an empty state when there are no candidate pairs', async () => {
-    apiService.getDuplicateTracks.mockResolvedValue({ data: { pairs: [], pagination: { page: 1, limit: 25, total: 0, totalPages: 1 } } });
+  test('shows an empty state when there are no candidate groups', async () => {
+    apiService.getDuplicateTracks.mockResolvedValue(respond([]));
     renderPage();
 
     await screen.findByText('No possible duplicate tracks found.');
   });
 
-  test('renders both tracks in a pair with the tier label, album context, and a link to the source album', async () => {
-    apiService.getDuplicateTracks.mockResolvedValue({ data: { pairs: [pair], pagination: { page: 1, limit: 25, total: 1, totalPages: 1 } } });
+  test('renders every version in a group with the tier label, album context, and album links', async () => {
+    apiService.getDuplicateTracks.mockResolvedValue(respond([group]));
     renderPage();
 
-    const linkA = await screen.findByRole('link', { name: /I Touch Myself/ });
-    expect(linkA).toHaveAttribute('href', '/album/5');
-    // Deliberately no target="_blank" — see comment on the Link: a real new
-    // tab/window on mobile either hard-navigates in place (standalone PWA,
-    // destroying playback) or just looks like it did (fresh backgrounded tab
-    // starts with an empty player). Plain in-SPA nav keeps playback intact.
-    expect(linkA).not.toHaveAttribute('target');
-    expect(screen.getByRole('link', { name: /I touch Myself/ })).toHaveAttribute('href', '/album/5');
-    expect(screen.getByText(/Same audio file/)).toBeInTheDocument();
+    const link = await screen.findByRole('link', { name: 'I Touch Myself' });
+    expect(link).toHaveAttribute('href', '/album/5');
+    // Deliberately no target="_blank": see the comment on the Link in the page.
+    expect(link).not.toHaveAttribute('target');
+    expect(screen.getByRole('link', { name: 'I touch Myself' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'I Touch Myself (Remaster)' })).toBeInTheDocument();
+    expect(screen.getByText(/3 versions, Same audio file/)).toBeInTheDocument();
     expect(screen.getByText(/Greatest Hits of the 90s/)).toBeInTheDocument();
   });
 
-  test('preview reveals an audio player pointed at the track stream url', async () => {
+  test('every track has its own preview that reveals an audio player on its stream url', async () => {
     const user = userEvent.setup();
-    apiService.getDuplicateTracks.mockResolvedValue({ data: { pairs: [pair], pagination: { page: 1, limit: 25, total: 1, totalPages: 1 } } });
+    apiService.getDuplicateTracks.mockResolvedValue(respond([group]));
     renderPage();
 
-    await screen.findByRole('link', { name: /I Touch Myself/ });
-    const leftCard = screen.getByRole('link', { name: /I Touch Myself/ }).closest('div');
-    await user.click(within(leftCard).getByText('Preview'));
+    await screen.findByRole('link', { name: 'I Touch Myself' });
+    expect(screen.getAllByText('Preview')).toHaveLength(3);
 
-    const audio = leftCard.querySelector('audio');
-    expect(audio).toHaveAttribute('src', 'http://localhost:3000/stream/100');
+    await user.click(within(rowOf('I touch Myself')).getByText('Preview'));
+    expect(rowOf('I touch Myself').querySelector('audio')).toHaveAttribute('src', 'http://localhost:3000/stream/200');
   });
 
-  test('merging keeps the chosen track and removes the pair from the list', async () => {
+  test('keeping a track merges all other versions into it and removes the group', async () => {
     const user = userEvent.setup();
-    apiService.getDuplicateTracks.mockResolvedValue({ data: { pairs: [pair], pagination: { page: 1, limit: 25, total: 1, totalPages: 1 } } });
-    apiService.resolveDuplicateTrack.mockResolvedValue({ data: { success: true } });
+    apiService.getDuplicateTracks.mockResolvedValue(respond([group]));
+    apiService.resolveDuplicateTrackGroup.mockResolvedValue({ data: { success: true } });
     renderPage();
 
-    await screen.findByRole('link', { name: /I Touch Myself/ });
-    const leftCard = screen.getByRole('link', { name: /I Touch Myself/ }).closest('div');
-    await user.click(within(leftCard).getByText('Keep this, delete the other'));
+    await screen.findByRole('link', { name: 'I Touch Myself' });
+    await user.click(within(rowOf('I touch Myself')).getByText('Keep this one'));
 
-    expect(apiService.resolveDuplicateTrack).toHaveBeenCalledWith(100, 200);
-    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('Delete "I touch Myself" and keep "I Touch Myself"'));
-    expect(screen.queryByRole('link', { name: /I touch Myself/ })).not.toBeInTheDocument();
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('Keep "I touch Myself" and delete 2 other versions'));
+    expect(apiService.resolveDuplicateTrackGroup).toHaveBeenCalledWith(200, [100, 300]);
+    expect(screen.queryByRole('link', { name: 'I Touch Myself' })).not.toBeInTheDocument();
+    expect(screen.getByText('No possible duplicate tracks found.')).toBeInTheDocument();
   });
 
-  test('dismissing a pair calls dismissDuplicate and removes it from the list', async () => {
+  test('"Not a duplicate" dismisses that track against the others and leaves the rest grouped', async () => {
     const user = userEvent.setup();
-    apiService.getDuplicateTracks.mockResolvedValue({ data: { pairs: [pair], pagination: { page: 1, limit: 25, total: 1, totalPages: 1 } } });
+    apiService.getDuplicateTracks.mockResolvedValue(respond([group]));
     apiService.dismissDuplicate.mockResolvedValue({ data: { success: true } });
     renderPage();
 
-    await screen.findByRole('link', { name: /I Touch Myself/ });
-    await user.click(screen.getByText('Not a duplicate'));
+    await screen.findByRole('link', { name: 'I Touch Myself' });
+    await user.click(within(rowOf('I Touch Myself (Remaster)')).getByText('Not a duplicate'));
 
-    expect(apiService.dismissDuplicate).toHaveBeenCalledWith('track', 100, 200);
-    expect(screen.queryByRole('link', { name: /I Touch Myself/ })).not.toBeInTheDocument();
+    expect(apiService.dismissDuplicate).toHaveBeenCalledWith('track', 300, 100);
+    expect(apiService.dismissDuplicate).toHaveBeenCalledWith('track', 300, 200);
+    expect(screen.queryByRole('link', { name: 'I Touch Myself (Remaster)' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'I Touch Myself' })).toBeInTheDocument();
+    expect(screen.getByText(/2 versions/)).toBeInTheDocument();
+  });
+
+  test('dismissing from a two-version group removes the whole group', async () => {
+    const user = userEvent.setup();
+    const pairGroup = { ...group, tracks: group.tracks.slice(0, 2) };
+    apiService.getDuplicateTracks.mockResolvedValue(respond([pairGroup]));
+    apiService.dismissDuplicate.mockResolvedValue({ data: { success: true } });
+    renderPage();
+
+    await screen.findByRole('link', { name: 'I Touch Myself' });
+    await user.click(within(rowOf('I Touch Myself')).getByText('Not a duplicate'));
+
+    expect(screen.getByText('No possible duplicate tracks found.')).toBeInTheDocument();
   });
 });

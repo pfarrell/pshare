@@ -4,6 +4,7 @@ import { db } from '../../db/database.js'
 import { titlesRoughlyMatch } from '../../utils/titleMatch.js'
 import { mergeAlbumInto } from '../../services/albumMergeService.js'
 import { mergeTrackInto } from '../../services/trackMergeService.js'
+import { groupDuplicateTracks } from '../../services/duplicateTrackGroups.js'
 import { countsService } from '../../services/countsService.js'
 import { streamBase } from '../../db/streamUrl.js'
 
@@ -167,61 +168,20 @@ router.get('/duplicates/tracks', async (c) => {
     .where('tracks.album_id', 'is not', null)
     .execute()
 
-  const byAlbum = new Map<number, typeof tracks>()
-  for (const t of tracks) {
-    const list = byAlbum.get(t.album_id!) ?? []
-    list.push(t)
-    byAlbum.set(t.album_id!, list)
-  }
+  const groups = groupDuplicateTracks(tracks, dismissedSet)
 
-  type TrackRow = (typeof tracks)[number]
-  type Pair = { tier: 1 | 2; a: TrackRow; b: TrackRow }
-  const pairs: Pair[] = []
-  const tier1Keys = new Set<string>()
-
-  for (const albumTracks of byAlbum.values()) {
-    const byMediaFile = new Map<number, TrackRow[]>()
-    for (const t of albumTracks) {
-      if (!t.media_file_id) continue
-      const list = byMediaFile.get(t.media_file_id) ?? []
-      list.push(t)
-      byMediaFile.set(t.media_file_id, list)
-    }
-    for (const group of byMediaFile.values()) {
-      if (group.length < 2) continue
-      for (const [a, b] of chainPairs(group)) {
-        const key = pairKey(a.id, b.id)
-        if (dismissedSet.has(key)) continue
-        pairs.push({ tier: 1, a, b })
-        tier1Keys.add(key)
-      }
-    }
-
-    // Same null-title guard as the albums route above — tracks.title is nullable too.
-    const titledTracks = albumTracks.filter((t) => t.title)
-    for (const cluster of clusterByTitle(titledTracks)) {
-      for (const [a, b] of chainPairs(cluster)) {
-        const key = pairKey(a.id, b.id)
-        if (dismissedSet.has(key) || tier1Keys.has(key)) continue
-        pairs.push({ tier: 2, a, b })
-      }
-    }
-  }
-
-  pairs.sort((x, y) => x.tier - y.tier)
-
-  const total = pairs.length
+  const total = groups.length
   const totalPages = Math.max(1, Math.ceil(total / limit))
-  const shape = (row: TrackRow) => ({
+  const shape = (row: (typeof tracks)[number]) => ({
     id: row.id, title: row.title, duration_sec: row.duration_sec,
     album_id: row.album_id, album_title: row.album_title,
     url: `${streamBase(c)}/stream/${row.id}`,
   })
-  const pageItems = pairs.slice((page - 1) * limit, page * limit).map((p) => ({
-    tier: p.tier, a: shape(p.a), b: shape(p.b),
+  const pageItems = groups.slice((page - 1) * limit, page * limit).map((g) => ({
+    tier: g.tier, album_id: g.album_id, album_title: g.tracks[0].album_title, tracks: g.tracks.map(shape),
   }))
 
-  return c.json({ pairs: pageItems, pagination: { page, limit, total, totalPages } })
+  return c.json({ groups: pageItems, pagination: { page, limit, total, totalPages } })
 })
 
 router.post('/duplicates/albums/:targetId/resolve', async (c) => {
@@ -277,6 +237,32 @@ router.post('/duplicates/tracks/:targetId/resolve', async (c) => {
   } catch (error) {
     console.error('Error resolving duplicate track:', error)
     return c.json({ error: 'Failed to merge track' }, 500)
+  }
+})
+
+router.post('/duplicates/tracks/:targetId/resolve-group', async (c) => {
+  const targetId = parseInt(c.req.param('targetId'))
+  const body = await c.req.json()
+  const loserIds: number[] = Array.isArray(body.loser_ids) ? body.loser_ids.map((v: unknown) => parseInt(String(v))) : []
+  if (!Number.isInteger(targetId) || loserIds.length === 0
+    || loserIds.some((id) => !Number.isInteger(id) || id === targetId)
+    || new Set(loserIds).size !== loserIds.length) {
+    return c.json({ error: 'targetId and loser_ids must be distinct integers' }, 400)
+  }
+  const ids = [targetId, ...loserIds]
+  const existing = await db.selectFrom('tracks').select('id').where('id', 'in', ids).execute()
+  if (existing.length !== ids.length) {
+    return c.json({ error: 'Track not found (it may have already been merged)' }, 404)
+  }
+  try {
+    // One transaction: either every version folds into the canonical track or none do.
+    await db.transaction().execute(async (trx) => {
+      for (const loserId of loserIds) await mergeTrackInto(targetId, loserId, trx)
+    })
+    return c.json({ success: true, merged: loserIds.length })
+  } catch (error) {
+    console.error('Error resolving duplicate track group:', error)
+    return c.json({ error: 'Failed to merge tracks' }, 500)
   }
 })
 
