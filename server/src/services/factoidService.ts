@@ -257,16 +257,15 @@ export async function generateFactoidsFor(
       messages: [{ role: 'user', content: context.prompt }],
     }, { signal: controller.signal })
 
-    // Iterating (rather than a bare `await runner`) does two necessary jobs:
-    // it exposes each turn's content so search-result hosts can be collected,
-    // and it lets us resume `pause_turn`. The runner does NOT auto-resume
-    // pause_turn, and server tools like web_search are exactly what triggers
-    // it, so `await runner` would silently return a truncated result.
+    // Iterating (rather than a bare `await runner`) is what exposes each turn's
+    // content, so search-result hosts can be collected for the citation check.
+    // pause_turn needs no handling here: this SDK (BetaToolRunner, 0.128) sends a
+    // paused turn back unchanged and continues it itself. Older SDKs (0.110) did
+    // not, and a manual pushMessages() here was once dead code that claimed
+    // otherwise. factoidService.fakeApi.test.ts pins the resume behavior, so an
+    // SDK change that stops it fails a test instead of silently truncating runs.
     for await (const message of runner) {
       collectSearchHosts(message.content as unknown[], searchHosts)
-      if (message.stop_reason === 'pause_turn') {
-        runner.pushMessages({ role: 'assistant', content: message.content })
-      }
     }
   } catch (err) {
     if (!controller.signal.aborted) throw err
