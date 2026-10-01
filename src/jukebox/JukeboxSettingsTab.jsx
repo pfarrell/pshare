@@ -97,6 +97,14 @@ const JukeboxSettingsTab = () => {
         >
           Photos
         </button>
+        <button
+          type="button"
+          className="jukebox-settings-tab-screensaver-toggle"
+          aria-pressed={screensaverMode === 'visualizer'}
+          onClick={() => setScreensaverMode('visualizer')}
+        >
+          Visualizer
+        </button>
       </div>
       <div className="jukebox-settings-tab-divider" />
       <button type="button" aria-pressed={activeProfileId === null} onClick={() => setProfile(null)}>

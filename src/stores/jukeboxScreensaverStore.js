@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 const STORAGE_KEY = 'jukebox-screensaver-mode';
 const LEGACY_ENABLED_KEY = 'jukebox-screensaver-enabled';
-const VALID_MODES = ['off', 'music', 'photos'];
+const VALID_MODES = ['off', 'music', 'photos', 'visualizer'];
 
 // Defaults to 'music' — equivalent to the previous enabled-by-default
 // behavior. A persisted value that isn't one of the three valid modes

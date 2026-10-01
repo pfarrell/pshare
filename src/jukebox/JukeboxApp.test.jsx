@@ -79,6 +79,16 @@ vi.mock('./JukeboxScreensaver', () => ({
     </div>
   ),
 }));
+// The real MilkdropCanvas needs WebGL and Web Audio, neither of which jsdom has.
+// The stub exposes its two callbacks as buttons so tests can drive them.
+vi.mock('../components/visualizer/MilkdropCanvas', () => ({
+  default: ({ onDismiss, onFail }) => (
+    <div data-testid="milkdrop-canvas">
+      <button onClick={onDismiss}>trigger-visualizer-dismiss</button>
+      <button onClick={onFail}>trigger-visualizer-fail</button>
+    </div>
+  ),
+}));
 vi.mock('./useJukeboxKeyboardFocus', () => ({ useJukeboxKeyboardFocus: vi.fn() }));
 
 import { useAuthStore } from '../stores/authStore';
@@ -588,4 +598,108 @@ test('tapping the footer queue button while on Next Up returns to Browse', () =>
   fireEvent.click(screen.getByText('trigger-open-queue'));
   fireEvent.click(screen.getByText('trigger-open-queue'));
   expect(activeDestination()).toBe('browse');
+});
+
+// A testing aid: localStorage 'jukebox-screensaver-idle-seconds' shortens the
+// idle delay without a redeploy. The default stays 2 minutes.
+describe('screensaver idle override', () => {
+  const KEY = 'jukebox-screensaver-idle-seconds';
+  const DEFAULT_MS = 2 * 60 * 1000;
+
+  afterEach(() => {
+    localStorage.removeItem(KEY);
+  });
+
+  test('a stored override shortens the idle delay', async () => {
+    localStorage.setItem(KEY, '15');
+    vi.useFakeTimers();
+    renderApp();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(14000); });
+    expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(screen.getByTestId('jukebox-screensaver')).toBeInTheDocument();
+  });
+
+  test.each([
+    ['not a number', 'soon'],
+    ['zero', '0'],
+    ['negative', '-5'],
+    ['below the 5 second floor', '2'],
+  ])('an override that is %s falls back to the 2 minute default', async (_label, value) => {
+    localStorage.setItem(KEY, value);
+    vi.useFakeTimers();
+    renderApp();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(DEFAULT_MS - 1000); });
+    expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(screen.getByTestId('jukebox-screensaver')).toBeInTheDocument();
+  });
+
+  test('with no override the default is still 2 minutes', async () => {
+    vi.useFakeTimers();
+    renderApp();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
+
+    expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+  });
+});
+
+describe('visualizer screensaver', () => {
+  const SCREENSAVER_IDLE_MS = 2 * 60 * 1000;
+
+  beforeEach(() => {
+    useJukeboxScreensaverStore.mockReturnValue('visualizer');
+  });
+
+  test('shows the visualizer, not the art screensaver, when the screensaver activates', async () => {
+    vi.useFakeTimers();
+    renderApp();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
+
+    expect(screen.getByTestId('milkdrop-canvas')).toBeInTheDocument();
+    expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+  });
+
+  test('does not mount the visualizer in any other screensaver mode', async () => {
+    useJukeboxScreensaverStore.mockReturnValue('music');
+    vi.useFakeTimers();
+    renderApp();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
+
+    expect(screen.queryByTestId('milkdrop-canvas')).not.toBeInTheDocument();
+    expect(screen.getByTestId('jukebox-screensaver')).toBeInTheDocument();
+  });
+
+  // Review Focus #1: a kiosk with visualizer persisted but no WebGL must not
+  // sit on a black rectangle, which is indistinguishable from a dead kiosk.
+  test('falls back to the music screensaver when the visualizer fails to start', async () => {
+    vi.useFakeTimers();
+    renderApp();
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
+    expect(screen.getByTestId('milkdrop-canvas')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('trigger-visualizer-fail'));
+
+    expect(screen.queryByTestId('milkdrop-canvas')).not.toBeInTheDocument();
+    const fallback = screen.getByTestId('jukebox-screensaver');
+    expect(fallback).toHaveAttribute('data-mode', 'music');
+  });
+
+  test('dismissing the visualizer closes the screensaver', async () => {
+    vi.useFakeTimers();
+    renderApp();
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCREENSAVER_IDLE_MS); });
+
+    fireEvent.click(screen.getByText('trigger-visualizer-dismiss'));
+
+    expect(screen.queryByTestId('milkdrop-canvas')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('jukebox-screensaver')).not.toBeInTheDocument();
+  });
 });

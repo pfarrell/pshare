@@ -30,6 +30,11 @@ test('shows album art when the current track has an image_path', () => {
   expect(img.src).toContain('a.jpg');
 });
 
+test('offers the visualizer button alongside the track info', () => {
+  renderNP();
+  expect(screen.getByRole('button', { name: 'Visualizer' })).toBeInTheDocument();
+});
+
 test('falls back to the music-notes icon when the track has no image_path', () => {
   usePlayerStore.setState({ currentTrack: { ...track, image_path: null } });
   renderNP();

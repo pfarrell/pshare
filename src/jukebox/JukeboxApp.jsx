@@ -12,6 +12,7 @@ import { useJukeboxStatePublisher } from './jukeboxStatePublisher';
 import MusicPlayerWrapper from '../components/player/MusicPlayerWrapper';
 import { useJukeboxScreensaverStore } from '../stores/jukeboxScreensaverStore';
 import JukeboxScreensaver from './JukeboxScreensaver';
+import MilkdropCanvas from '../components/visualizer/MilkdropCanvas';
 
 // How long the drawer can sit open with no touch inside it before it closes
 // itself back to Now Playing.
@@ -21,6 +22,22 @@ const TOAST_DURATION_MS = 2500;
 // How long the kiosk must sit untouched (drawer closed; playback or not)
 // before the screensaver takes over.
 const SCREENSAVER_IDLE_MS = 2 * 60 * 1000;
+// Testing aid: a whole number of seconds in localStorage under this key
+// shortens the idle delay without a redeploy (e.g. to watch the screensaver
+// without waiting two minutes). Anything unusable, or under the floor, is
+// ignored so a typo can never make the screensaver fire constantly.
+const SCREENSAVER_IDLE_OVERRIDE_KEY = 'jukebox-screensaver-idle-seconds';
+const SCREENSAVER_IDLE_MIN_SECONDS = 5;
+
+const screensaverIdleMs = () => {
+  try {
+    const seconds = Number(localStorage.getItem(SCREENSAVER_IDLE_OVERRIDE_KEY));
+    if (Number.isFinite(seconds) && seconds >= SCREENSAVER_IDLE_MIN_SECONDS) return seconds * 1000;
+  } catch {
+    // localStorage can throw (private windows, blocked site data); use the default.
+  }
+  return SCREENSAVER_IDLE_MS;
+};
 
 const JukeboxApp = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -139,6 +156,10 @@ const JukeboxApp = () => {
   // opening or the feature being turned off in Settings force it off
   // immediately, not just block future activations.
   const [screensaverActive, setScreensaverActive] = useState(false);
+  // Set when the visualizer cannot start (no WebGL, lazy chunk failed to
+  // fetch). A black rectangle is indistinguishable from a dead kiosk, so we
+  // fall back to the music screensaver for the rest of this page's life.
+  const [visualizerFailed, setVisualizerFailed] = useState(false);
   const screensaverTimerRef = useRef(null);
   useEffect(() => {
     if (activeDestination !== null || screensaverMode === 'off') {
@@ -148,7 +169,7 @@ const JukeboxApp = () => {
     }
     const arm = () => {
       clearTimeout(screensaverTimerRef.current);
-      screensaverTimerRef.current = setTimeout(() => setScreensaverActive(true), SCREENSAVER_IDLE_MS);
+      screensaverTimerRef.current = setTimeout(() => setScreensaverActive(true), screensaverIdleMs());
     };
     arm();
     document.addEventListener('pointerdown', arm);
@@ -183,11 +204,18 @@ const JukeboxApp = () => {
       <JukeboxNowPlaying onTap={toggleBrowse} />
       <JukeboxToast message={toastMessage} />
       {screensaverActive && (
-        <JukeboxScreensaver
-          mode={screensaverMode}
-          onDismiss={() => setScreensaverActive(false)}
-          onView={handleScreensaverView}
-        />
+        screensaverMode === 'visualizer' && !visualizerFailed ? (
+          <MilkdropCanvas
+            onDismiss={() => setScreensaverActive(false)}
+            onFail={() => setVisualizerFailed(true)}
+          />
+        ) : (
+          <JukeboxScreensaver
+            mode={screensaverMode === 'visualizer' ? 'music' : screensaverMode}
+            onDismiss={() => setScreensaverActive(false)}
+            onView={handleScreensaverView}
+          />
+        )
       )}
       <JukeboxBrowsePanel
         activeDestination={activeDestination}
