@@ -152,6 +152,28 @@ export function collectSearchHosts(content: unknown[], into: Set<string>): void 
   }
 }
 
+// One log line per generation. It always prints (not only when something was
+// discarded) because the failure it exists to expose prints nothing otherwise:
+// if the tool-runner loop yields turns without their web_search_tool_result
+// blocks, searchHosts stays empty, every citation is discarded as invented, the
+// run records "empty", and the worker keeps spending on a feature producing zero.
+export function summarizeRun(r: {
+  kind: 'artist' | 'album'
+  targetId: number
+  name: string
+  searchHosts: number
+  submitted: number
+  accepted: number
+  rejected: string[]
+}): string {
+  let line = `[factoids] ${r.kind} ${r.targetId} (${r.name}): search hosts=${r.searchHosts}, submitted=${r.submitted}, accepted=${r.accepted}, discarded=${r.rejected.length}`
+  if (r.rejected.length > 0) line += `: ${r.rejected.join('; ')}`
+  if (r.submitted > 0 && r.searchHosts === 0) {
+    line += ' (WARNING: the model submitted facts but no web search results were seen, so every citation was discarded; check that the tool runner yields web_search_tool_result blocks)'
+  }
+  return line
+}
+
 const SYSTEM_PROMPT = `You are a music researcher for a personal music library called P·Share. You will be given one artist or one album. Find genuinely interesting, specific facts about it and submit them by calling the submit_factoids tool exactly once.
 
 What makes a good factoid:
@@ -261,9 +283,15 @@ export async function generateFactoidsFor(
     tracklist: context.tracklist,
     existingTexts: await existingTextsForRun(kind, targetId, context.tracklist),
   })
-  if (rejected.length > 0) {
-    console.log(`[factoids] ${kind} ${targetId} (${context.name}): ${accepted.length} accepted, ${rejected.length} discarded: ${rejected.map((r) => r.reason).join('; ')}`)
-  }
+  console.log(summarizeRun({
+    kind,
+    targetId,
+    name: context.name,
+    searchHosts: searchHosts.size,
+    submitted: Array.isArray(submitted) ? submitted.length : 0,
+    accepted: accepted.length,
+    rejected: rejected.map((r) => r.reason),
+  }))
 
   const count = await insertFactoids(accepted, FACTOID_MODEL, generationId)
   return { status: count > 0 ? 'ok' : 'empty', count }

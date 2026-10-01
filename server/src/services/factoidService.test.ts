@@ -6,7 +6,7 @@ import { createArtist, createAlbum, createTrack, cleanupFixtures } from '../test
 import { claimEntity } from './factoidLedger.js'
 import { insertFactoids } from './factoidStore.js'
 import {
-  buildArtistContext, buildAlbumContext, collectSearchHosts, existingTextsForRun,
+  buildArtistContext, buildAlbumContext, collectSearchHosts, existingTextsForRun, summarizeRun,
 } from './factoidService.js'
 
 beforeEach(async () => { await cleanupFixtures() })
@@ -92,6 +92,43 @@ test('collectSearchHosts ignores malformed blocks and unparseable urls', () => {
     { type: 'web_search_tool_result', content: [{ type: 'web_search_result' }, { url: 'nonsense' }] },
   ] as unknown[], hosts)
   assert.equal(hosts.size, 0)
+})
+
+test('summarizeRun reports hosts, submitted, accepted, and discarded counts with reasons', () => {
+  const line = summarizeRun({
+    kind: 'album', targetId: 9, name: 'Aja', searchHosts: 3, submitted: 6, accepted: 4,
+    rejected: ['duplicate text', 'length over 240'],
+  })
+  assert.match(line, /album 9 \(Aja\)/)
+  assert.match(line, /search hosts=3/)
+  assert.match(line, /submitted=6/)
+  assert.match(line, /accepted=4/)
+  assert.match(line, /discarded=2/)
+  assert.match(line, /duplicate text; length over 240/)
+})
+
+test('summarizeRun flags the failure mode where the model submitted facts but no search results were seen', () => {
+  // The live tool-runner loop is the one thing no local check exercises. If it
+  // yields turns without the web_search_tool_result blocks, searchHosts stays
+  // empty and EVERY citation is discarded: the run records "empty" and the worker
+  // keeps spending. That has to be diagnosable from the log line alone.
+  const line = summarizeRun({
+    kind: 'artist', targetId: 2, name: 'Steely Dan', searchHosts: 0, submitted: 5, accepted: 0,
+    rejected: Array(5).fill('source_url host was never returned by web search'),
+  })
+  assert.match(line, /WARNING/)
+  assert.match(line, /no web search results were seen/)
+})
+
+test('summarizeRun does not warn when nothing was submitted or hosts were seen', () => {
+  assert.doesNotMatch(
+    summarizeRun({ kind: 'album', targetId: 1, name: 'X', searchHosts: 0, submitted: 0, accepted: 0, rejected: [] }),
+    /WARNING/,
+  )
+  assert.doesNotMatch(
+    summarizeRun({ kind: 'album', targetId: 1, name: 'X', searchHosts: 2, submitted: 3, accepted: 3, rejected: [] }),
+    /WARNING/,
+  )
 })
 
 test('existingTextsForRun covers the album and every track on it', async () => {
