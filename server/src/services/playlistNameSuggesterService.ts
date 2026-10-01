@@ -27,7 +27,7 @@ export async function suggestPlaylistName(
   try {
     const response = await client.messages.create(
       {
-        model: 'claude-sonnet-5',
+        model: 'claude-sonnet-5-5',
         max_tokens: 30,
         system: `You name music playlists for a personal library called P·Share. Given a list of tracks (as "Artist - Title"), reply with ONLY a short, evocative playlist name, at most ${MAX_SUGGESTED_NAME_LENGTH} characters. No quotation marks, no explanation, no em dash, just the name itself.`,
         messages: [{ role: 'user', content: trackDescriptions.join('\n') }],

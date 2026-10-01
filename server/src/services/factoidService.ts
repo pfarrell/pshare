@@ -9,7 +9,7 @@ import { MAX_MB_TAGS_FOR_MODEL } from './playlistGeneratorService.js'
 import { validateFactoids, MAX_FACTOID_LENGTH, type SubmittedFactoid } from './factoidValidation.js'
 import { insertFactoids, existingTexts } from './factoidStore.js'
 
-export const FACTOID_MODEL = 'claude-opus-5-5'
+export const FACTOID_MODEL = 'claude-sonnet-5-5'
 const MAX_TOOL_ITERATIONS = 8
 const OVERALL_TIMEOUT_MS = 60_000
 const MAX_SEARCHES = 5
@@ -238,7 +238,7 @@ export async function generateFactoidsFor(
   const timeoutHandle = setTimeout(() => controller.abort(), OVERALL_TIMEOUT_MS)
   try {
     // tool_choice is deliberately left at the default `auto`: forced tool use
-    // ({type:'any'} or {type:'tool'}) returns HTTP 400 on claude-opus-5-5. The
+    // ({type:'any'} or {type:'tool'}) returned HTTP 400 on claude-opus-5-5 (not retested on sonnet). The
     // system prompt names submit_factoids instead.
     const runner = client.beta.messages.toolRunner({
       model: FACTOID_MODEL,

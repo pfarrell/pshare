@@ -8,7 +8,7 @@ import { suggestPlaylistName, MAX_SUGGESTED_NAME_LENGTH } from './playlistNameSu
 function anthropicMessage(content: unknown[], stopReason: string) {
   return new Response(
     JSON.stringify({
-      id: 'msg_test', type: 'message', role: 'assistant', model: 'claude-sonnet-5',
+      id: 'msg_test', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5',
       content, stop_reason: stopReason, stop_sequence: null,
       usage: { input_tokens: 10, output_tokens: 10 },
     }),

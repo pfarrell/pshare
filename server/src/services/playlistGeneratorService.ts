@@ -191,7 +191,7 @@ export async function generatePlaylist(
   try {
     await client.beta.messages.toolRunner(
       {
-        model: 'claude-sonnet-5',
+        model: 'claude-sonnet-5-5',
         max_tokens: 4096,
         max_iterations: MAX_TOOL_ITERATIONS,
         system: systemPrompt,

@@ -56,7 +56,7 @@ after(async () => {
 const message = (content: Json[], stop_reason: string) => ({
   status: 200,
   body: {
-    id: `msg_fake_${++counter}`, type: 'message', role: 'assistant', model: 'claude-opus-5-5',
+    id: `msg_fake_${++counter}`, type: 'message', role: 'assistant', model: 'claude-sonnet-5-5',
     content, stop_reason, stop_sequence: null, usage: { input_tokens: 10, output_tokens: 10 },
   },
 })
@@ -104,9 +104,9 @@ test('a normal run stores cited facts, discards the invented citation, and sends
   assert.deepEqual(await storedTexts(generationId), ['album: An album fact with a real source.', 'track: A track fact with a real source.'])
 
   const first = requests[0]
-  assert.equal(first.model, 'claude-opus-5-5')
+  assert.equal(first.model, 'claude-sonnet-5-5')
   assert.equal(first.output_config?.effort, 'low', 'effort is set explicitly: this model defaults to medium')
-  assert.equal(first.tool_choice, undefined, 'forced tool_choice returns HTTP 400 on claude-opus-5-5')
+  assert.equal(first.tool_choice, undefined, 'forced tool_choice returned HTTP 400 on claude-opus-5-5')
   const toolTypes = first.tools.map((t: Json) => t.type)
   assert.ok(toolTypes.includes('web_search_20260209'), 'uses the current web search tool')
   assert.ok(!toolTypes.some((t: string) => String(t).startsWith('code_execution')), 'no separate code_execution next to dynamic-filtering web search')
