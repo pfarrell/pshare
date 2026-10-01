@@ -185,7 +185,7 @@ router.get('/duplicates/tracks', async (c) => {
     url: `${streamBase(c)}/stream/${row.id}`,
   })
   const pageItems = groups.slice((page - 1) * limit, page * limit).map((g) => ({
-    reasons: g.reasons, album_id: g.album_id, album_title: g.tracks[0].album_title, tracks: g.tracks.map(shape),
+    reasons: g.reasons, album_ids: g.album_ids, tracks: g.tracks.map(shape),
   }))
 
   return c.json({ groups: pageItems, pagination: { page, limit, total, totalPages } })

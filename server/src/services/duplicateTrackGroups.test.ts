@@ -133,6 +133,85 @@ test('same title but very different lengths are different songs; close lengths s
   assert.equal(groupDuplicateTracks([d(1, 'Hello World', null), d(2, 'Hello World', 227)], new Set()).length, 1)
 })
 
+// ---- same recording across albums ----
+const onAlbum = (id: number, album_id: number, title: string, extra: Extra = {}, media_file_id: number | null = null) =>
+  ({ id, album_id, title, media_file_id, ...extra })
+
+test('the same recording on different albums groups by MusicBrainz id when titles and lengths agree', () => {
+  const g = groupDuplicateTracks([
+    onAlbum(1, 10, 'The Humpty Dance', { musicbrainz_recording_id: 'm', duration_sec: 313 }, 1),
+    onAlbum(2, 20, 'Humpty Dance', { musicbrainz_recording_id: 'm', duration_sec: 314 }, 2),
+    onAlbum(3, 30, 'The Humpty Dance', { musicbrainz_recording_id: 'm', duration_sec: 313 }, 3),
+  ], new Set())
+  assert.equal(g.length, 1)
+  assert.deepEqual(g[0].album_ids, [10, 20, 30])
+  assert.deepEqual(g[0].reasons, ['musicbrainz'])
+})
+
+test('a polluted MusicBrainz id pairing unrelated songs on different albums is not a duplicate', () => {
+  const g = groupDuplicateTracks([
+    onAlbum(1, 10, 'Private Idaho', { musicbrainz_recording_id: 'm', duration_sec: 211 }, 1),
+    onAlbum(2, 20, '52 Girls', { musicbrainz_recording_id: 'm', duration_sec: 212 }, 2),
+  ], new Set())
+  assert.deepEqual(g, [])
+})
+
+test('across albums a MusicBrainz match still needs lengths within a few seconds', () => {
+  const g = groupDuplicateTracks([
+    onAlbum(1, 10, 'Some Song Here', { musicbrainz_recording_id: 'm', duration_sec: 200 }, 1),
+    onAlbum(2, 20, 'Some Song Here', { musicbrainz_recording_id: 'm', duration_sec: 260 }, 2),
+  ], new Set())
+  assert.deepEqual(g, [])
+})
+
+test('identical chromaprint on different albums groups even with different titles, if the bucket is small', () => {
+  const small = groupDuplicateTracks([
+    onAlbum(1, 10, 'Reels: College Groves', { chromaprint_key: 'fp', duration_sec: 117 }, 1),
+    onAlbum(2, 20, 'The College Groves / The Flogging Reel', { chromaprint_key: 'fp', duration_sec: 117 }, 2),
+  ], new Set())
+  assert.deepEqual(small.map((r) => r.album_ids), [[10, 20]])
+  const big = groupDuplicateTracks(
+    Array.from({ length: 8 }, (_, i) => onAlbum(i + 1, 10 + i, `Different Song ${i}`, { chromaprint_key: 'fp', duration_sec: 117 }, i + 1)),
+    new Set(),
+  )
+  assert.deepEqual(big, [], 'an oversized fingerprint bucket across albums is a collision')
+})
+
+test('title alone never links tracks on different albums', () => {
+  const g = groupDuplicateTracks([
+    onAlbum(1, 10, 'Hello World Song', { duration_sec: 200 }, 1),
+    onAlbum(2, 20, 'Hello World Song', { duration_sec: 200 }, 2),
+  ], new Set())
+  assert.deepEqual(g, [])
+})
+
+test('tracks on different albums that already share one media file are finished, not reported', () => {
+  const g = groupDuplicateTracks([
+    onAlbum(1, 10, 'The Humpty Dance', { musicbrainz_recording_id: 'm', duration_sec: 313 }, 7),
+    onAlbum(2, 20, 'The Humpty Dance', { musicbrainz_recording_id: 'm', duration_sec: 313 }, 7),
+  ], new Set())
+  assert.deepEqual(g, [])
+})
+
+test('a pending group lists every album it spans and still reports same-album duplicates inside it', () => {
+  const g = groupDuplicateTracks([
+    onAlbum(1, 10, 'Fame', { musicbrainz_recording_id: 'm', duration_sec: 260 }, 1),
+    onAlbum(2, 10, 'Fame', { duration_sec: 261 }, 2),
+    onAlbum(3, 20, 'Fame', { musicbrainz_recording_id: 'm', duration_sec: 260 }, 3),
+  ], new Set())
+  assert.equal(g.length, 1)
+  assert.deepEqual(g[0].album_ids, [10, 20])
+  assert.deepEqual(g[0].tracks.map((tr) => tr.id), [1, 2, 3])
+})
+
+test('dismissed pairs are not linked across albums', () => {
+  const g = groupDuplicateTracks([
+    onAlbum(1, 10, 'The Humpty Dance', { musicbrainz_recording_id: 'm', duration_sec: 313 }, 1),
+    onAlbum(2, 20, 'The Humpty Dance', { musicbrainz_recording_id: 'm', duration_sec: 313 }, 2),
+  ], new Set(['1-2']))
+  assert.deepEqual(g, [])
+})
+
 test('never groups across albums and tolerates null titles', () => {
   const groups = groupDuplicateTracks(
     [t(1, 'Song', 1), t(2, 'Song', 2), { id: 3, title: null as unknown as string, album_id: 1, media_file_id: null }],

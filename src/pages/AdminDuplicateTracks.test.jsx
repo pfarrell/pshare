@@ -18,8 +18,7 @@ const renderPage = () => render(<MemoryRouter><AdminDuplicateTracks /></MemoryRo
 const mk = (id, title, duration_sec = 226) => ({ id, title, duration_sec, media_file_id: 1000 + id, album_id: 5, album_title: 'Greatest Hits of the 90s', url: `http://localhost:3000/stream/${id}` });
 const group = {
   reasons: ['file', 'musicbrainz'],
-  album_id: 5,
-  album_title: 'Greatest Hits of the 90s',
+  album_ids: [5],
   tracks: [mk(100, 'I Touch Myself'), mk(200, 'I touch Myself', 227), mk(300, 'I Touch Myself (Remaster)', 228)],
 };
 const respond = (groups) => ({ data: { groups, pagination: { page: 1, limit: 25, total: groups.length, totalPages: 1 } } });
@@ -125,11 +124,73 @@ describe('AdminDuplicateTracks', () => {
     await user.click(within(rowOf('I touch Myself')).getByText('Remove others'));
 
     const prompt = window.confirm.mock.calls[0][0];
-    expect(prompt).toContain('REMOVE 2 other tracks from the album and keep "I touch Myself"');
+    expect(prompt).toContain('REMOVE 2 other tracks from this album and keep "I touch Myself"');
     expect(prompt).toContain('cannot be undone');
     expect(apiService.removeOtherDuplicateTracks).toHaveBeenCalledWith(200, [100, 300]);
     expect(apiService.setCanonicalTrackFile).not.toHaveBeenCalled();
     expect(screen.getByText('No possible duplicate tracks found.')).toBeInTheDocument();
+  });
+
+  describe('a group spanning several albums', () => {
+    const onAlbum = (id, title, album_id, album_title) => ({ ...mk(id, title), album_id, album_title, album_artist: 'Genesis' });
+    const spanning = {
+      reasons: ['musicbrainz'],
+      album_ids: [5, 9],
+      tracks: [
+        onAlbum(100, 'Invisible Touch', 5, 'Invisible Touch'),
+        onAlbum(150, 'Invisible Touch (Remaster)', 5, 'Invisible Touch'),
+        onAlbum(200, 'Invisible Touch', 9, 'Platinum Collection'),
+      ],
+    };
+
+    test('is labelled with how many albums it spans, and each row names its own album', async () => {
+      apiService.getDuplicateTracks.mockResolvedValue(respond([spanning]));
+      renderPage();
+
+      await screen.findByText(/3 versions - across 2 albums/);
+      expect(within(rowOf('Invisible Touch (Remaster)')).getByRole('link', { name: 'Invisible Touch' })).toHaveAttribute('href', '/album/5');
+      expect(screen.getByRole('link', { name: 'Platinum Collection' })).toHaveAttribute('href', '/album/9');
+    });
+
+    test('"Remove" only offers tracks on the chosen track\'s own album and says how many', async () => {
+      apiService.getDuplicateTracks.mockResolvedValue(respond([spanning]));
+      renderPage();
+
+      await screen.findByText(/across 2 albums/);
+      expect(within(rowOf('Invisible Touch (Remaster)')).getByText('Remove 1 on this album')).toBeEnabled();
+      // the only track on album 9 has nothing else on its album to remove
+      const platinum = screen.getByRole('link', { name: 'Platinum Collection' }).closest('div');
+      expect(within(platinum).getByText('Remove 0 on this album')).toBeDisabled();
+    });
+
+    test('removing same-album duplicates sends only those ids and keeps the group while other albums remain', async () => {
+      const user = userEvent.setup();
+      apiService.getDuplicateTracks.mockResolvedValue(respond([spanning]));
+      apiService.removeOtherDuplicateTracks.mockResolvedValue({ data: { success: true, removed: 1 } });
+      renderPage();
+
+      await screen.findByText(/across 2 albums/);
+      await user.click(within(rowOf('Invisible Touch (Remaster)')).getByText('Remove 1 on this album'));
+
+      expect(apiService.removeOtherDuplicateTracks).toHaveBeenCalledWith(150, [100]);
+      expect(await screen.findByText(/2 versions - across 2 albums/)).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Invisible Touch (Remaster)' })).toBeInTheDocument();
+      expect(screen.getAllByRole('link', { name: 'Invisible Touch' }).length).toBeGreaterThan(0);
+    });
+
+    test('consolidating a spanning group points every other track, on any album, at the chosen file', async () => {
+      const user = userEvent.setup();
+      apiService.getDuplicateTracks.mockResolvedValue(respond([spanning]));
+      apiService.setCanonicalTrackFile.mockResolvedValue({ data: { success: true } });
+      renderPage();
+
+      await screen.findByText(/across 2 albums/);
+      const platinum = screen.getByRole('link', { name: 'Platinum Collection' }).closest('div');
+      await user.click(within(platinum).getByText('Consolidate to this version'));
+
+      expect(apiService.setCanonicalTrackFile).toHaveBeenCalledWith(200, [100, 150]);
+      expect(screen.getByText('No possible duplicate tracks found.')).toBeInTheDocument();
+    });
   });
 
   test('cancelling the confirmation changes nothing for either action', async () => {

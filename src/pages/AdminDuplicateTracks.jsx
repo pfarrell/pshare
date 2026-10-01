@@ -24,7 +24,10 @@ const pauseOtherPreviews = (event) => {
   });
 };
 
-const groupKey =(group) => group.tracks.map((t) => t.id).join('-');
+// Only tracks on the chosen track's own album can be removed; see handleRemoveOthers.
+const sameAlbumOthers = (group, keep) => group.tracks.filter((t) => t.id !== keep.id && t.album_id === keep.album_id);
+
+const groupKey = (group) => group.tracks.map((t) => t.id).join('-');
 
 const buttonStyle = (bg, busy) => ({
   padding: '0.4rem 0.75rem', backgroundColor: bg, color: 'white', border: 'none', borderRadius: '4px',
@@ -58,17 +61,28 @@ export default function AdminDuplicateTracks() {
     }
   };
 
-  // Remove others: deletes the other tracks from their album, keeping the chosen one.
+  // Remove others: deletes the other tracks on the SAME ALBUM as the chosen one. The same
+  // recording on a different release belongs to that release, so those are only ever
+  // consolidated, never deleted (the server enforces this too).
   const handleRemoveOthers = async (group, keep) => {
-    const others = group.tracks.filter((t) => t.id !== keep.id);
+    const others = sameAlbumOthers(group, keep);
     const names = others.length === 1 ? `"${others[0].title}"` : `${others.length} other tracks`;
-    if (!window.confirm(`REMOVE ${names} from the album and keep "${keep.title}"?\n\nThe removed tracks are deleted. Their playlist entries, favorites, notes and tags move to "${keep.title}". This cannot be undone.`)) return;
+    if (!window.confirm(`REMOVE ${names} from this album and keep "${keep.title}"?\n\nThe removed tracks are deleted. Their playlist entries, favorites, notes and tags move to "${keep.title}". This cannot be undone.`)) return;
     const key = groupKey(group);
     setBusyKey(key);
     try {
       await apiService.removeOtherDuplicateTracks(keep.id, others.map((t) => t.id));
       toast.success(`Removed ${others.length} track${others.length === 1 ? '' : 's'}, kept "${keep.title}".`);
-      setGroups((prev) => prev.filter((g) => groupKey(g) !== key));
+      // Tracks on other albums survive, so the group stays (smaller) while it still has
+      // two or more tracks that do not already share one media file.
+      const removed = new Set(others.map((t) => t.id));
+      setGroups((prev) => prev.flatMap((g) => {
+        if (groupKey(g) !== key) return [g];
+        const remaining = g.tracks.filter((t) => !removed.has(t.id));
+        const files = new Set(remaining.map((t) => t.media_file_id));
+        const pending = remaining.length > 1 && !(files.size === 1 && !files.has(null));
+        return pending ? [{ ...g, tracks: remaining, album_ids: [...new Set(remaining.map((t) => t.album_id))] }] : [];
+      }));
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to remove tracks'));
     } finally {
@@ -112,7 +126,7 @@ export default function AdminDuplicateTracks() {
           return (
             <div key={key} style={{ backgroundColor: 'var(--color-bg-surface)', borderRadius: '0.5rem', padding: '1rem', marginBottom: '1rem', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
               <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-                {group.tracks.length} versions - {group.album_title} - matched by {group.reasons.map((r) => REASON_LABELS[r] ?? r).join(', ')}
+                {group.tracks.length} versions - {group.album_ids.length > 1 ? `across ${group.album_ids.length} albums` : group.tracks[0].album_title} - matched by {group.reasons.map((r) => REASON_LABELS[r] ?? r).join(', ')}
               </p>
               <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
                 {group.tracks.map((track) => (
@@ -153,14 +167,22 @@ export default function AdminDuplicateTracks() {
                       >
                         Consolidate to this version
                       </button>
-                      <button
-                        disabled={busy}
-                        title="Delete the other tracks in this group and keep this one."
-                        onClick={() => handleRemoveOthers(group, track)}
-                        style={buttonStyle('#dc2626', busy)}
-                      >
-                        Remove others
-                      </button>
+                      {(() => {
+                        const removable = sameAlbumOthers(group, track).length;
+                        const spansAlbums = group.album_ids.length > 1;
+                        return (
+                          <button
+                            disabled={busy || removable === 0}
+                            title={removable === 0
+                              ? 'No other tracks from this album to remove. Tracks on other albums can only be consolidated.'
+                              : 'Delete the other tracks from this track\'s album and keep this one.'}
+                            onClick={() => handleRemoveOthers(group, track)}
+                            style={buttonStyle('#dc2626', busy || removable === 0)}
+                          >
+                            {spansAlbums ? `Remove ${removable} on this album` : 'Remove others'}
+                          </button>
+                        );
+                      })()}
                       <button disabled={busy} onClick={() => handleNotDuplicate(group, track)} style={buttonStyle('var(--color-text-muted)', busy)}>
                         Not a duplicate
                       </button>

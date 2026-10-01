@@ -31,6 +31,19 @@ test('removes the other tracks, keeps the chosen one, and carries favorites over
   assert.ok(await db.selectFrom('media_files').select('id').where('id', '=', fileKeep.id).executeTakeFirst(), 'the kept file stays')
 })
 
+test('refuses to remove a track that is on a different album than the kept one, removing nothing', async () => {
+  const artist = await createArtist('rmdupx-artist')
+  const albumA = await createAlbum('rmdupx-album-a', artist.id)
+  const albumB = await createAlbum('rmdupx-album-b', artist.id)
+  const keep = await createTrack('rmdupx-keep', albumA.id, artist.id)
+  const sameAlbum = await createTrack('rmdupx-same', albumA.id, artist.id)
+  const otherAlbum = await createTrack('rmdupx-other', albumB.id, artist.id)
+
+  await assert.rejects(db.transaction().execute((trx) => removeDuplicateTracks(keep.id, [sameAlbum.id, otherAlbum.id], trx)), CanonicalFileError)
+  assert.deepEqual(await trackIds(albumA.id), [keep.id, sameAlbum.id].sort((x, y) => x - y), 'the same-album track is not removed either')
+  assert.deepEqual(await trackIds(albumB.id), [otherAlbum.id])
+})
+
 test('refuses bad input and missing tracks, removing nothing', async () => {
   const artist = await createArtist('rmdupbad-artist')
   const album = await createAlbum('rmdupbad-album', artist.id)
