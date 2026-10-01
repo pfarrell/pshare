@@ -23,6 +23,7 @@ import { resolveRecordingMbid } from '../services/recordingResolution.js'
 import { fetchSimilarArtists } from '../services/lastfmSimilar.js'
 import { sql } from 'kysely'
 import { SINGLES_ALBUM_TITLE } from '../constants/singles.js'
+import { startFactoidPoller } from './factoidPoller.js'
 
 const POLL_INTERVAL_MS = 5000 // Poll every 5 seconds
 const UPLOAD_PATH = process.env.BEMUSED_UPLOAD_PATH
@@ -635,6 +636,11 @@ async function worker() {
   console.log(`⏱️  Poll interval: ${POLL_INTERVAL_MS}ms\n`)
 
   await reclaimStaleProcessingItems()
+
+  // Independent of the upload queue: its own interval, its own spend cap, and
+  // an off switch (FACTOIDS_DISABLED=1). It schedules itself with setTimeout,
+  // so it does not block the loop below.
+  startFactoidPoller()
 
   while (true) {
     try {
