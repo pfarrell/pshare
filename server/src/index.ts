@@ -2,6 +2,7 @@ import 'dotenv/config'
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { timing } from 'hono/timing'
 import type { Variables } from './types.js'
 import artists from './routes/artists.js'
 import albums from './routes/albums.js'
@@ -52,6 +53,13 @@ app.use('*', cors({
   maxAge: 600,
   credentials: true,
 }))
+
+// Server-Timing: total on the browse/load endpoints, so a slow load can be
+// split into server time vs. network in the browser's devtools (Network >
+// Timing) without guessing. Deliberately not on /stream (long-lived bodies).
+for (const path of ['/album/*', '/artist/*', '/playlist/*', '/collection/*', '/search', '/albums/*', '/artists/*']) {
+  app.use(path, timing())
+}
 
 // Apply auth middleware globally to extract user from cookies
 app.use('*', authMiddleware)

@@ -44,7 +44,7 @@ test('fetches and renders the artist\'s albums', async () => {
   renderView();
 
   await waitFor(() => {
-    expect(apiService.getArtist).toHaveBeenCalledWith(5);
+    expect(apiService.getArtist).toHaveBeenCalledWith(5, { summary: false });
     expect(screen.getByText('Album One')).toBeInTheDocument();
     expect(screen.getByText('Album Two')).toBeInTheDocument();
   });

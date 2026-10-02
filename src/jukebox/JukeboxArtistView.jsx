@@ -15,7 +15,7 @@ const JukeboxArtistView = ({ artist, onSelectAlbum, onBack, onEnqueue }) => {
   const load = () => {
     setError(false);
     setData(null);
-    apiService.getArtist(artist.id)
+    apiService.getArtist(artist.id, { summary: false })
       .then((response) => setData(response.data))
       .catch(() => setError(true));
   };

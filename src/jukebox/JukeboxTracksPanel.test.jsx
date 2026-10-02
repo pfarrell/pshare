@@ -65,7 +65,7 @@ test('fetches the album and renders its title, artist and tracks', async () => {
   renderPanel();
 
   await waitFor(() => {
-    expect(apiService.getAlbum).toHaveBeenCalledWith(7);
+    expect(apiService.getAlbum).toHaveBeenCalledWith(7, { summary: false });
     expect(screen.getByRole('heading', { name: 'Test Album' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Test Artist' })).toBeInTheDocument();
     expect(screen.getByText(/Track One/)).toBeInTheDocument();
@@ -193,7 +193,7 @@ test('refetches and swaps content when a different album is selected', async () 
   );
 
   await waitFor(() => {
-    expect(apiService.getAlbum).toHaveBeenLastCalledWith(8);
+    expect(apiService.getAlbum).toHaveBeenLastCalledWith(8, { summary: false });
     expect(screen.getByText(/Other Track/)).toBeInTheDocument();
     expect(screen.queryByText(/Track One/)).not.toBeInTheDocument();
   });

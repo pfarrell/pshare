@@ -11,6 +11,28 @@ import { errorLogService } from './errorLogService.js'
 
 const cache = new Map<string, WikiSummary | null>()
 
+// A hung Wikipedia request must not pin a lookup (and, before withDeadline,
+// the page load behind it) indefinitely.
+const FETCH_TIMEOUT_MS = 3000
+
+// How long a page response will wait on a Wikipedia lookup before giving up
+// and sending the page without a summary.
+export const SUMMARY_DEADLINE_MS = 1000
+
+// Resolves to the lookup's result, or null if it takes longer than `ms`. The
+// lookup is NOT cancelled: it keeps running and fills the cache, so the next
+// view of the same album/artist gets its summary instantly. Page loads (and,
+// in the jukebox, track starts) never wait on Wikipedia longer than this.
+export function withDeadline<T>(lookup: Promise<T | null>, ms: number = SUMMARY_DEADLINE_MS): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout>
+  const deadline = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), ms)
+  })
+  // A lookup that rejects after the deadline already won must not become an unhandled rejection.
+  lookup.catch(() => {})
+  return Promise.race([lookup.catch(() => null), deadline]).finally(() => clearTimeout(timer))
+}
+
 // Cut a raw extract down to a short summary: first paragraph break, or first
 // 4 sentences if there isn't one. Shared by the plain-title and section lookups
 // so both produce summaries of similar length/shape.
@@ -28,6 +50,7 @@ async function fetchWikipedia(title: string): Promise<WikiSummary | null> {
   try {
     const res = await fetch(url, {
       headers: { 'User-Agent': 'bemused-music-app/1.0' },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     })
     if (!res.ok) return null
 
@@ -136,17 +159,19 @@ async function resolveOverride(rawOverride: string): Promise<WikiSummary | null>
   return tryTitles([base])
 }
 
-// Try a list of candidate titles in order, return first hit.
+// Try a list of candidate titles, return the first hit in list order. Uncached
+// candidates are fetched concurrently (one round trip instead of up to four in
+// a row); a higher-priority candidate still wins over a faster lower one.
 async function tryTitles(titles: string[]): Promise<WikiSummary | null> {
-  for (const title of titles) {
+  const lookups = titles.map(async (title) => {
     const key = title.toLowerCase()
-    if (cache.has(key)) {
-      const cached = cache.get(key)
-      if (cached) return cached
-      continue
-    }
+    if (cache.has(key)) return cache.get(key) ?? null
     const result = await fetchWikipedia(title)
     cache.set(key, result)
+    return result
+  })
+  for (const lookup of lookups) {
+    const result = await lookup
     if (result) return result
   }
   return null

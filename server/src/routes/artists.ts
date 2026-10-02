@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { db } from '../db/database.js'
-import { getArtistSummary } from '../services/wikipedia.js'
+import { getArtistSummary, withDeadline } from '../services/wikipedia.js'
 import { streamBase } from '../db/streamUrl.js'
 import { sql } from 'kysely'
 import { countsService } from '../services/countsService.js'
@@ -179,6 +179,12 @@ artists.get('/:id', async (c) => {
 
   if (!artist) return c.json({ error: 'Not found' }, 404)
 
+  // Started now so the Wikipedia round trip overlaps the queries below. Callers
+  // that never show it (the jukebox) send ?summary=0 to skip it outright.
+  const summaryPromise = c.req.query('summary') === '0'
+    ? Promise.resolve(null)
+    : withDeadline(getArtistSummary(artist.name, artist.wikipedia))
+
   // A collaboration (role='collaborator') is treated as a full release for
   // every artist on it, not just its primary owner — so this pulls in both
   // albums this artist owns outright AND albums where they're credited as a
@@ -186,29 +192,111 @@ artists.get('/:id', async (c) => {
   // Russell's own album list, not tucked away in "Appears On"). Every other
   // non-primary role (featured/guest/compilation) stays out of this list —
   // see appears_on below.
-  const { albums: filteredAlbums, singles: ownSingles } = await fetchArtistDiscography(c, artist.id, artist.name, artist.image_path)
+  // Independent of each other, so run them concurrently instead of one round trip at a time.
+  const [discography, appearsOnRows, performancesRows, trackCreditRows, relationRows, memberOfRows, similarRows] = await Promise.all([
+    fetchArtistDiscography(c, artist.id, artist.name, artist.image_path),
+    db
+      .selectFrom('artist_albums')
+      .innerJoin('albums', 'albums.id', 'artist_albums.album_id')
+      .innerJoin('artists as al_artist', 'al_artist.id', 'albums.artist_id')
+      .select([
+        'albums.id',
+        'albums.title',
+        'albums.release_year',
+        'albums.image_path',
+        'al_artist.id as primary_artist_id',
+        'al_artist.name as primary_artist_name',
+      ])
+      .where('artist_albums.artist_id', '=', id)
+      .where((eb) => eb.or([
+        eb('artist_albums.role', 'not in', ['primary', 'collaborator', 'composer', 'performer']),
+        // A 'primary' credit on an album someone else owns (e.g. left by an older
+        // compilation merge) is still an appearance, not a dead row.
+        eb.and([eb('artist_albums.role', '=', 'primary'), eb('albums.artist_id', '!=', id)]),
+      ]))
+      .orderBy('albums.release_year', 'asc')
+      .execute(),
+    db
+      .selectFrom('artist_albums')
+      .innerJoin('albums', 'albums.id', 'artist_albums.album_id')
+      .innerJoin('artists as al_artist', 'al_artist.id', 'albums.artist_id')
+      .select([
+        'albums.id',
+        'albums.title',
+        'albums.release_year',
+        'albums.image_path',
+        'al_artist.id as primary_artist_id',
+        'al_artist.name as primary_artist_name',
+      ])
+      .where('artist_albums.artist_id', '=', id)
+      .where('artist_albums.role', 'in', ['composer', 'performer'])
+      .orderBy('albums.release_year', 'asc')
+      .execute(),
+    sql<{
+      id: number
+      title: string
+      release_year: string | null
+      image_path: string | null
+      primary_artist_id: number
+      primary_artist_name: string
+    }>`
+      SELECT DISTINCT albums.id, albums.title, albums.release_year, albums.image_path,
+             al_artist.id AS primary_artist_id, al_artist.name AS primary_artist_name
+      FROM tracks
+      INNER JOIN albums ON albums.id = tracks.album_id
+      INNER JOIN artists al_artist ON al_artist.id = albums.artist_id
+      WHERE tracks.artist_id = ${id}
+        AND tracks.approved = true
+        AND albums.artist_id != ${id}
+        AND NOT EXISTS (
+          SELECT 1 FROM artist_albums
+          WHERE artist_albums.album_id = albums.id AND artist_albums.artist_id = ${id}
+        )
+    `.execute(db),
+    db
+      .selectFrom('artist_relations')
+      .innerJoin('artists as ra', 'ra.id', 'artist_relations.related_artist_id')
+      .select(['ra.id', 'ra.name', 'artist_relations.kind', 'artist_relations.source'])
+      .where('artist_relations.artist_id', '=', id)
+      .where('artist_relations.is_hidden', '=', false)
+      .orderBy('ra.name', 'asc')
+      .execute(),
+    db
+      .selectFrom('artist_relations')
+      .innerJoin('artists as ga', 'ga.id', 'artist_relations.artist_id')
+      .select(['ga.id', 'ga.name', 'ga.image_path'])
+      .where('artist_relations.related_artist_id', '=', id)
+      .where('artist_relations.kind', '=', 'member')
+      .orderBy('ga.name', 'asc')
+      .execute(),
+    db
+      .selectFrom('artist_relations as ar')
+      .innerJoin('artists as ra', 'ra.id', 'ar.related_artist_id')
+      .select([
+        'ra.id',
+        'ra.name',
+        'ar.similarity',
+        sql<boolean>`EXISTS(
+          SELECT 1 FROM tracks t
+          INNER JOIN albums al ON al.id = t.album_id
+          WHERE al.artist_id = ra.id AND t.approved = true
+        )`.as('has_tracks'),
+      ])
+      .where('ar.artist_id', '=', id)
+      .where('ar.kind', '=', 'similar')
+      .where(eb => eb.or([
+        eb.and([
+          eb('ar.source', '=', 'lastfm'),
+          eb('ar.similarity', '>=', SIMILAR_ARTIST_MIN_SIMILARITY),
+        ]),
+        eb('ar.force_show', '=', true),
+      ]))
+      .where('ar.is_hidden', '=', false)
+      .orderBy('ar.similarity', 'desc')
+      .execute(),
+  ])
+  const { albums: filteredAlbums, singles: ownSingles } = discography
 
-  const appearsOnRows = await db
-    .selectFrom('artist_albums')
-    .innerJoin('albums', 'albums.id', 'artist_albums.album_id')
-    .innerJoin('artists as al_artist', 'al_artist.id', 'albums.artist_id')
-    .select([
-      'albums.id',
-      'albums.title',
-      'albums.release_year',
-      'albums.image_path',
-      'al_artist.id as primary_artist_id',
-      'al_artist.name as primary_artist_name',
-    ])
-    .where('artist_albums.artist_id', '=', id)
-    .where((eb) => eb.or([
-      eb('artist_albums.role', 'not in', ['primary', 'collaborator', 'composer', 'performer']),
-      // A 'primary' credit on an album someone else owns (e.g. left by an older
-      // compilation merge) is still an appearance, not a dead row.
-      eb.and([eb('artist_albums.role', '=', 'primary'), eb('albums.artist_id', '!=', id)]),
-    ]))
-    .orderBy('albums.release_year', 'asc')
-    .execute()
 
   // Classical composer/performer credits — kept out of appears_on (composer
   // and performer are full-recording credits, not guest/featured spots) and
@@ -216,24 +304,21 @@ artists.get('/:id', async (c) => {
   // artist's role on a given album is the "primary_artist" they performed
   // with/composed for, since exactly one of composer/performer is the
   // album's actual primary artist and the other is this secondary credit.
-  const performancesRows = await db
-    .selectFrom('artist_albums')
-    .innerJoin('albums', 'albums.id', 'artist_albums.album_id')
-    .innerJoin('artists as al_artist', 'al_artist.id', 'albums.artist_id')
-    .select([
-      'albums.id',
-      'albums.title',
-      'albums.release_year',
-      'albums.image_path',
-      'al_artist.id as primary_artist_id',
-      'al_artist.name as primary_artist_name',
-    ])
-    .where('artist_albums.artist_id', '=', id)
-    .where('artist_albums.role', 'in', ['composer', 'performer'])
-    .orderBy('albums.release_year', 'asc')
-    .execute()
 
-  const performancesTrackCounts = await countsService.trackCountsByAlbumIds(performancesRows.map(a => a.id))
+  // One count query and the member groups' discographies, concurrently. Counts
+  // are keyed by album id, so a single map serves performances and appears_on.
+  const [albumTrackCounts, groupDiscographies] = await Promise.all([
+    countsService.trackCountsByAlbumIds([
+      ...performancesRows.map(a => a.id),
+      ...appearsOnRows.map(a => a.id),
+      ...trackCreditRows.rows.map(a => a.id),
+    ]),
+    // Each group's own discography, shown as a section on the member's page
+    // (one-directional — a group's own page doesn't pull in its members'
+    // other work). Groups with no approved-track albums are omitted below
+    // rather than shown as an empty section.
+    Promise.all(memberOfRows.map((g) => fetchArtistDiscography(c, g.id, g.name, g.image_path))),
+  ])
 
   const performances = performancesRows.map(a => ({
     id: a.id,
@@ -241,39 +326,13 @@ artists.get('/:id', async (c) => {
     release_year: a.release_year,
     image_path: a.image_path,
     artist: { id: a.primary_artist_id, name: a.primary_artist_name },
-    track_count: performancesTrackCounts.get(a.id) ?? 0,
+    track_count: albumTrackCounts.get(a.id) ?? 0,
   }))
 
   // Albums where this artist has a track credit (tracks.artist_id) but isn't
   // the album's primary artist and isn't already covered by an artist_albums
   // secondary-credit row above — e.g. a compilation track (Easy Rider's
   // Steppenwolf track showing on Steppenwolf's own artist page).
-  const trackCreditRows = await sql<{
-    id: number
-    title: string
-    release_year: string | null
-    image_path: string | null
-    primary_artist_id: number
-    primary_artist_name: string
-  }>`
-    SELECT DISTINCT albums.id, albums.title, albums.release_year, albums.image_path,
-           al_artist.id AS primary_artist_id, al_artist.name AS primary_artist_name
-    FROM tracks
-    INNER JOIN albums ON albums.id = tracks.album_id
-    INNER JOIN artists al_artist ON al_artist.id = albums.artist_id
-    WHERE tracks.artist_id = ${id}
-      AND tracks.approved = true
-      AND albums.artist_id != ${id}
-      AND NOT EXISTS (
-        SELECT 1 FROM artist_albums
-        WHERE artist_albums.album_id = albums.id AND artist_albums.artist_id = ${id}
-      )
-  `.execute(db)
-
-  const appearsOnTrackCounts = await countsService.trackCountsByAlbumIds([
-    ...appearsOnRows.map(a => a.id),
-    ...trackCreditRows.rows.map(a => a.id),
-  ])
 
   const appears_on = [
     ...appearsOnRows.map(a => ({
@@ -282,7 +341,7 @@ artists.get('/:id', async (c) => {
       release_year: a.release_year,
       image_path: a.image_path,
       artist: { id: a.primary_artist_id, name: a.primary_artist_name },
-      track_count: appearsOnTrackCounts.get(a.id) ?? 0,
+      track_count: albumTrackCounts.get(a.id) ?? 0,
     })),
     ...trackCreditRows.rows.map(a => ({
       id: a.id,
@@ -290,68 +349,20 @@ artists.get('/:id', async (c) => {
       release_year: a.release_year,
       image_path: a.image_path,
       artist: { id: a.primary_artist_id, name: a.primary_artist_name },
-      track_count: appearsOnTrackCounts.get(a.id) ?? 0,
+      track_count: albumTrackCounts.get(a.id) ?? 0,
     })),
   ]
 
-  const relationRows = await db
-    .selectFrom('artist_relations')
-    .innerJoin('artists as ra', 'ra.id', 'artist_relations.related_artist_id')
-    .select(['ra.id', 'ra.name', 'artist_relations.kind', 'artist_relations.source'])
-    .where('artist_relations.artist_id', '=', id)
-    .where('artist_relations.is_hidden', '=', false)
-    .orderBy('ra.name', 'asc')
-    .execute()
 
   const related_artists = relationRows.filter(r => r.kind === 'related' && r.source === 'manual').map(r => ({ id: r.id, name: r.name }))
   const members = relationRows.filter(r => r.kind === 'member').map(r => ({ id: r.id, name: r.name }))
 
-  const memberOfRows = await db
-    .selectFrom('artist_relations')
-    .innerJoin('artists as ga', 'ga.id', 'artist_relations.artist_id')
-    .select(['ga.id', 'ga.name', 'ga.image_path'])
-    .where('artist_relations.related_artist_id', '=', id)
-    .where('artist_relations.kind', '=', 'member')
-    .orderBy('ga.name', 'asc')
-    .execute()
 
-  // Each group's own discography, shown as a section on the member's page
-  // (one-directional — a group's own page doesn't pull in its members'
-  // other work). Groups with no approved-track albums are omitted rather
-  // than shown as an empty section.
-  const groupDiscographies = await Promise.all(
-    memberOfRows.map((g) => fetchArtistDiscography(c, g.id, g.name, g.image_path))
-  )
   const group_albums = memberOfRows
     .map((g, i) => ({ group: { id: g.id, name: g.name }, albums: groupDiscographies[i].albums }))
     .filter((g) => g.albums.length > 0)
   const singles = [...ownSingles, ...groupDiscographies.flatMap((d) => d.singles)]
 
-  const similarRows = await db
-    .selectFrom('artist_relations as ar')
-    .innerJoin('artists as ra', 'ra.id', 'ar.related_artist_id')
-    .select([
-      'ra.id',
-      'ra.name',
-      'ar.similarity',
-      sql<boolean>`EXISTS(
-        SELECT 1 FROM tracks t
-        INNER JOIN albums al ON al.id = t.album_id
-        WHERE al.artist_id = ra.id AND t.approved = true
-      )`.as('has_tracks'),
-    ])
-    .where('ar.artist_id', '=', id)
-    .where('ar.kind', '=', 'similar')
-    .where(eb => eb.or([
-      eb.and([
-        eb('ar.source', '=', 'lastfm'),
-        eb('ar.similarity', '>=', SIMILAR_ARTIST_MIN_SIMILARITY),
-      ]),
-      eb('ar.force_show', '=', true),
-    ]))
-    .where('ar.is_hidden', '=', false)
-    .orderBy('ar.similarity', 'desc')
-    .execute()
 
   const similar_artists = similarRows.map(r => ({
     id: r.id,
@@ -360,7 +371,7 @@ artists.get('/:id', async (c) => {
     has_tracks: r.has_tracks,
   }))
 
-  const summary = await getArtistSummary(artist.name, artist.wikipedia)
+  const summary = await summaryPromise
 
   return c.json({ artist, summary: summary ?? {}, albums: filteredAlbums, singles, appears_on, performances, related_artists, members, group_albums, similar_artists })
 })

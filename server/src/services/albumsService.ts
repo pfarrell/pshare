@@ -57,25 +57,33 @@ export function createAlbumsService(db: Kysely<Database>) {
     async recentlyPlayed(size: number, tagIds: number[] | null = null) {
       if (tagIds && tagIds.length === 0) return { rows: [] } as any
 
-      const tagJoin = tagIds
-        ? sql`INNER JOIN albums_tags at ON at.album_id = al.id AND at.tag_id IN (${sql.join(tagIds)})`
+      const tagFilter = tagIds
+        ? sql`AND EXISTS (SELECT 1 FROM albums_tags at WHERE at.album_id = al.id AND at.tag_id IN (${sql.join(tagIds)}))`
         : sql``
 
+      // Collapse logs to one row per album before joining: the old shape joined
+      // every log row to albums and artists, then grouped, which hashed the
+      // whole artists table to show 30 albums.
       return sql<any>`
+        WITH played AS (
+          SELECT album_id, MAX(created_at) AS last_played
+          FROM logs
+          WHERE album_id IS NOT NULL
+          GROUP BY album_id
+        )
         SELECT al.id, al.title, al.image_path,
                ar.id AS artist_id, ar.name AS artist_name,
                EXISTS (
                  SELECT 1 FROM artist_albums caa WHERE caa.album_id = al.id AND caa.role = 'collaborator'
                ) AS has_collaborators,
-               MAX(lg.created_at) AS last_played
-        FROM logs lg
-        INNER JOIN albums al ON al.id = lg.album_id
+               p.last_played
+        FROM played p
+        INNER JOIN albums al ON al.id = p.album_id
         INNER JOIN artists ar ON ar.id = al.artist_id
-        ${tagJoin}
         WHERE al.image_path IS NOT NULL AND al.image_path != ''
           AND al.title != '_Singles'
-        GROUP BY al.id, al.title, al.image_path, ar.id, ar.name
-        ORDER BY last_played DESC
+          ${tagFilter}
+        ORDER BY p.last_played DESC
         LIMIT ${size}
       `.execute(db)
     },

@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { Variables } from '../types.js'
-import { getAlbumSummary } from '../services/wikipedia.js'
+import { getAlbumSummary, withDeadline } from '../services/wikipedia.js'
 import { streamBase } from '../db/streamUrl.js'
 import { albumsService } from '../services/albumsService.js'
 import { profilesService } from '../services/profilesService.js'
@@ -92,6 +92,12 @@ albums.get('/:id', async (c) => {
 
   if (!artist) return c.json({ error: 'Artist not found' }, 404)
 
+  // Started now so the Wikipedia round trip overlaps the queries below. Callers
+  // that never show it (the jukebox) send ?summary=0 to skip it outright.
+  const summaryPromise = c.req.query('summary') === '0'
+    ? Promise.resolve(null)
+    : withDeadline(getAlbumSummary(artist.name, album.title, artist.wikipedia, album.wikipedia))
+
   // Fetch tracks with their artist info (track-level artist override)
   const trackRows = await albumsService.findTracksByAlbumId(id)
 
@@ -136,12 +142,7 @@ albums.get('/:id', async (c) => {
     }
   }
 
-  const summary = await getAlbumSummary(
-    artist.name,
-    album.title,
-    artist.wikipedia,
-    album.wikipedia
-  )
+  const summary = await summaryPromise
 
   // Notes are personal Recall-linked journal content and must stay
   // account-only even though this album page is now public — anonymous

@@ -19,7 +19,7 @@ const JukeboxTracksPanel = ({ album, onClose, onEnqueue, onSelectArtist }) => {
   const load = () => {
     setError(false);
     setData(null);
-    apiService.getAlbum(album.id)
+    apiService.getAlbum(album.id, { summary: false })
       .then((response) => setData(response.data))
       .catch(() => setError(true));
   };
