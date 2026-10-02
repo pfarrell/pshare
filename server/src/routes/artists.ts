@@ -20,6 +20,11 @@ const artists = new Hono<{ Variables: Variables }>()
 // with any "_Singles" album split out into a flat singles list. Shared
 // between the requested artist and each group they're a member_of, so a
 // member's page can show a group's discography as its own section.
+//
+// The artist's album ids are built first (own albums UNION collaborator
+// credits) rather than written as `artist_id = X OR EXISTS (...)` with a join
+// to tracks: that OR kept Postgres from starting at this artist's albums, and
+// on prod it walked all ~143k tracks to find 2 albums (~340ms per page).
 async function fetchArtistDiscography(c: any, id: number, name: string, imagePath: string | null) {
   const albumRows = await sql<{
     id: number
@@ -30,7 +35,7 @@ async function fetchArtistDiscography(c: any, id: number, name: string, imagePat
     primary_artist_name: string
     has_collaborators: boolean
   }>`
-    SELECT DISTINCT albums.id, albums.title, albums.release_year, albums.image_path,
+    SELECT albums.id, albums.title, albums.release_year, albums.image_path,
            pa.id AS primary_artist_id, pa.name AS primary_artist_name,
            EXISTS (
              SELECT 1 FROM artist_albums caa WHERE caa.album_id = albums.id AND caa.role = 'collaborator'
@@ -39,11 +44,12 @@ async function fetchArtistDiscography(c: any, id: number, name: string, imagePat
            CASE WHEN albums.release_year IS NOT NULL AND albums.release_year != '' AND albums.release_year != '0' THEN albums.release_year END AS sort_year
     FROM albums
     INNER JOIN artists pa ON pa.id = albums.artist_id
-    INNER JOIN tracks ON tracks.album_id = albums.id AND tracks.approved = true
-    WHERE albums.artist_id = ${id}
-       OR EXISTS (
-         SELECT 1 FROM artist_albums ca WHERE ca.album_id = albums.id AND ca.artist_id = ${id} AND ca.role = 'collaborator'
-       )
+    WHERE albums.id IN (
+            SELECT id FROM albums WHERE artist_id = ${id}
+            UNION
+            SELECT album_id FROM artist_albums WHERE artist_id = ${id} AND role = 'collaborator'
+          )
+      AND EXISTS (SELECT 1 FROM tracks WHERE tracks.album_id = albums.id AND tracks.approved = true)
     ORDER BY has_release_year DESC, sort_year DESC, albums.title ASC
   `.execute(db)
 
@@ -405,11 +411,11 @@ artists.post('/:id/tracks/random', async (c) => {
     INNER JOIN artists ar ON ar.id = al.artist_id
     INNER JOIN tracks t ON t.album_id = al.id AND t.approved = true
     LEFT JOIN artists track_ar ON track_ar.id = t.artist_id
-    WHERE (al.artist_id = ${artistId}
-           OR EXISTS (
-             SELECT 1 FROM artist_albums caa
-             WHERE caa.album_id = al.id AND caa.artist_id = ${artistId} AND caa.role = 'collaborator'
-           ))
+    WHERE al.id IN (
+            SELECT id FROM albums WHERE artist_id = ${artistId}
+            UNION
+            SELECT album_id FROM artist_albums WHERE artist_id = ${artistId} AND role = 'collaborator'
+          )
       ${excludeTrackIds.length ? sql`AND t.id NOT IN (${sql.join(excludeTrackIds)})` : sql``}
     ORDER BY random()
     LIMIT ${limit}
