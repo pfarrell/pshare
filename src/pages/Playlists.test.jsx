@@ -74,4 +74,21 @@ describe('Playlists page sorting', () => {
     const headings = await screen.findAllByRole('heading', { level: 3 });
     expect(headings.map((h) => h.textContent)).toEqual(['Zebra Vibes', 'Alpha Mix', 'Mid Tempo']);
   });
+
+  // Prod has a playlist whose name is NULL. The page has no error boundary, so
+  // a throw while sorting is a white screen; where the null lands relative to
+  // the others decides which operand the comparator sees it as, so cover both.
+  test.each([
+    ['first', [{ id: 9, name: null, image_path: null, updated_at: null }, ...playlists]],
+    ['last', [...playlists, { id: 9, name: null, image_path: null, updated_at: null }]],
+    ['middle', [playlists[0], { id: 9, name: null, image_path: null, updated_at: null }, playlists[1], playlists[2]]],
+  ])('a playlist with a null name (%s) does not crash alphabetical sorting', async (_where, data) => {
+    usePlaylistSortStore.setState({ sortBy: 'alpha' });
+    apiService.getPlaylists.mockResolvedValue({ data });
+    renderPlaylists();
+
+    const headings = await screen.findAllByRole('heading', { level: 3 });
+    expect(headings).toHaveLength(4);
+    expect(headings.map((h) => h.textContent).filter(Boolean)).toEqual(['Alpha Mix', 'Mid Tempo', 'Zebra Vibes']);
+  });
 });

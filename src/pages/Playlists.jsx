@@ -17,7 +17,9 @@ import { formatCount } from '../utils/formatters';
 const sortPlaylists = (playlists, sortBy) => {
   const sorted = [...playlists];
   if (sortBy === 'alpha') {
-    sorted.sort((a, b) => a.name.localeCompare(b.name));
+    // A playlist can have a null name (one does in prod); with no error
+    // boundary an uncaught throw here is a white screen for the whole app.
+    sorted.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
   } else {
     sorted.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
   }
