@@ -15,10 +15,16 @@ test('groups all versions together and orders biggest group first', () => {
 type Extra = { duration_sec?: number | null; file_hash?: string | null; chromaprint_key?: string | null; musicbrainz_recording_id?: string | null }
 const x = (id: number, title: string, extra: Extra, media_file_id: number | null = null) => ({ ...t(id, title, 1, media_file_id), ...extra })
 
-test('same media file groups differently-titled tracks and reports the reason', () => {
+test('same media file links differently-titled tracks, shown once per file, and reports the reason', () => {
   const g = groupDuplicateTracks([t(1, 'x', 1, 9), t(2, 'y', 1, 9), t(3, 'x', 1, 8)], new Set())
-  assert.deepEqual(g.map((r) => r.tracks.map((tr) => tr.id)), [[1, 2, 3]])
+  assert.deepEqual(g.map((r) => r.tracks.map((tr) => tr.id)), [[1, 3]])
   assert.deepEqual(g[0].reasons, ['file', 'title'])
+})
+
+test('tracks already consolidated onto one media file collapse to one entry in a larger group', () => {
+  const groups = groupDuplicateTracks([t(1, 'Song', 1, 10), t(2, 'Song', 1, 10), t(3, 'Song', 1, 11)], new Set())
+  assert.equal(groups.length, 1)
+  assert.deepEqual(groups[0].tracks.map((m) => m.id), [1, 3])
 })
 
 test('a group whose tracks already share one media file is resolved and not reported', () => {

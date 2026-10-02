@@ -182,12 +182,19 @@ export function groupDuplicateTracks<T extends DupTrack>(tracks: T[], dismissed:
     components.set(root, list)
   }
   const groups: DupGroup<T>[] = []
-  for (const members of components.values()) {
+  for (const allMembers of components.values()) {
+    // Tracks pointing at the same media file are already consolidated: they are one
+    // recording, not duplicates of each other. Keep one per file (lowest id) so only
+    // genuinely different files are left to compare. A group left with fewer than two
+    // is finished.
+    const seenFiles = new Set<number>()
+    const members = allMembers.filter((m) => {
+      if (m.media_file_id == null) return true
+      if (seenFiles.has(m.media_file_id)) return false
+      seenFiles.add(m.media_file_id)
+      return true
+    })
     if (members.length < 2) continue
-    // Resolving a group points every track at one definitive media file and keeps the
-    // tracks, so a group already sharing a single file is done, not pending.
-    const fileIds = new Set(members.map((m) => m.media_file_id))
-    if (fileIds.size === 1 && !fileIds.has(null)) continue
     const reasons = new Set<DupReason>()
     for (const m of members) for (const r of reasonsByTrack.get(m.id) ?? []) reasons.add(r)
     groups.push({
