@@ -6,6 +6,7 @@ import { streamsService } from '../services/streamsService.js'
 import { requireAuth } from '../middleware/auth.js'
 import type { Variables } from '../types.js'
 import { pipeFile } from '../utils/pipeFile.js'
+import { id3v2TagLength, parseByteRange } from '../utils/audioRange.js'
 
 const streams = new Hono()
 export const downloads = new Hono<{ Variables: Variables }>()
@@ -69,23 +70,29 @@ streams.get('/:id', async (c) => {
     return c.json({ error: 'File not found' }, 404)
   }
 
-  const fileSize = stat.size
-  const rangeHeader = c.req.header('range')
+  // Serve the file without its leading ID3v2 tag (see utils/audioRange.ts): the client
+  // sees a resource that starts at the first audio frame, and every byte range it asks
+  // for is shifted by `skip` to find the real offset on disk. /download is untouched.
+  const skip = await id3v2TagLength(filePath, stat.size, stat.mtimeMs)
+  const fileSize = stat.size - skip
+  const range = parseByteRange(c.req.header('range'), fileSize)
 
-  if (rangeHeader) {
-    const [startStr, endStr] = rangeHeader.replace('bytes=', '').split('-')
-    const start = parseInt(startStr, 10)
-    const end = endStr ? parseInt(endStr, 10) : fileSize - 1
-    const chunkSize = end - start + 1
+  if (range === 'unsatisfiable') {
+    c.header('Content-Range', `bytes */${fileSize}`)
+    return c.body(null, 416)
+  }
+
+  if (range) {
+    const { start, end } = range
 
     return stream(c, async (stream) => {
       c.header('Content-Range', `bytes ${start}-${end}/${fileSize}`)
       c.header('Accept-Ranges', 'bytes')
-      c.header('Content-Length', String(chunkSize))
+      c.header('Content-Length', String(end - start + 1))
       c.header('Content-Type', 'audio/mpeg')
       c.status(206)
 
-      await pipeFile(stream, filePath, { start, end })
+      await pipeFile(stream, filePath, { start: start + skip, end: end + skip })
     })
   }
 
@@ -95,7 +102,7 @@ streams.get('/:id', async (c) => {
     c.header('Content-Type', 'audio/mpeg')
     c.header('Accept-Ranges', 'bytes')
 
-    await pipeFile(stream, filePath)
+    await pipeFile(stream, filePath, skip > 0 ? { start: skip, end: stat.size - 1 } : undefined)
   })
 })
 
