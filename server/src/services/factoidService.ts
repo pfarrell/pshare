@@ -200,7 +200,7 @@ export function summarizeRun(r: {
   return line
 }
 
-const SYSTEM_PROMPT = `You are a music researcher for a personal music library called P·Share. You will be given one artist or one album. Find genuinely interesting, specific facts about it and submit them by calling the submit_factoids tool exactly once.
+export const SYSTEM_PROMPT = `You are a music researcher for a personal music library called P·Share. You will be given one artist or one album. Find genuinely interesting, specific facts about it and submit them by calling the submit_factoids tool exactly once.
 
 What makes a good factoid:
 - A specific story: how a part was recorded, where a sample came from, why a title is what it is, an unexpected player on the session, a happy accident that made the record.
@@ -214,7 +214,8 @@ Rules:
 - Use the web_search tool to find and verify facts. Every factoid must set source_url to a page that your search actually returned. Do not construct, guess, or recall a URL.
 - Keep each factoid under ${MAX_FACTOID_LENGTH} characters. One fact per factoid, written as a plain sentence a screen can show on its own.
 - Never use an em-dash. Use a comma, colon, or hyphen instead.
-- For an album you may also submit facts about individual songs on it: set scope to "track" and track_title to the exact title from the tracklist you were given.
+- For an artist, every factoid has scope "artist": a fact about the artist as a whole. Facts about one particular album or song are researched separately, so leave them out.
+- For an album, use scope "album" for the album itself. You may also submit facts about individual songs on it: set scope to "track" and track_title to the exact title from the tracklist you were given.
 - When you are done, call submit_factoids exactly once. If you found nothing worth saying, call it with an empty list.`
 
 export async function generateFactoidsFor(
@@ -244,8 +245,15 @@ export async function generateFactoidsFor(
               text: { type: 'string', description: `The fact, one sentence, under ${MAX_FACTOID_LENGTH} characters, no em-dashes` },
               source_url: { type: 'string', description: 'An https URL that web_search returned' },
               source_title: { type: 'string', description: 'The page or publication title' },
-              scope: { type: 'string', enum: ['artist', 'album', 'track'] },
-              track_title: { type: 'string', description: 'Required when scope is "track": the exact title from the given tracklist' },
+              // Must mirror validateFactoids' allowed scopes. With one shared enum the
+              // model labelled artist-run facts "album"/"track" and the validator
+              // threw them all away (30 of 80 prod runs).
+              ...(kind === 'artist'
+                ? { scope: { type: 'string', enum: ['artist'] } }
+                : {
+                    scope: { type: 'string', enum: ['album', 'track'] },
+                    track_title: { type: 'string', description: 'Required when scope is "track": the exact title from the given tracklist' },
+                  }),
             },
             required: ['text', 'source_url', 'scope'],
             additionalProperties: false,
@@ -255,10 +263,9 @@ export async function generateFactoidsFor(
       required: ['factoids'],
       additionalProperties: false,
     },
-    run: async (input) => {
-      submitted = (input as { factoids: SubmittedFactoid[] }).factoids ?? []
-      return 'Factoids received.'
-    },
+    // Never reached: the loop below stops at the first submit_factoids call,
+    // before the runner would execute it. The block's input is read directly.
+    run: async () => 'Factoids received.',
   })
 
   const controller = new AbortController()
@@ -271,7 +278,10 @@ export async function generateFactoidsFor(
       model: FACTOID_MODEL,
       max_tokens: 4096,
       max_iterations: MAX_TOOL_ITERATIONS,
-      system: SYSTEM_PROMPT,
+      // The breakpoint sits on the system block so tools + system (identical on
+      // every run) are cached across runs. A top-level cache_control would cache
+      // the last block instead, the per-entity user message, which never repeats.
+      system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
       // effort is set explicitly: this model defaults to `medium`, and this is
       // recall-and-summarize work, not reasoning.
       output_config: { effort: 'low' },
@@ -291,9 +301,20 @@ export async function generateFactoidsFor(
     // not, and a manual pushMessages() here was once dead code that claimed
     // otherwise. factoidService.fakeApi.test.ts pins the resume behavior, so an
     // SDK change that stops it fails a test instead of silently truncating runs.
+    //
+    // The loop ends at the first submit_factoids call. Left alone, the runner
+    // answers it with "Factoids received." and makes a second full-price call that
+    // re-sends the whole conversation, every search result included, only for the
+    // model to say "Done". Every prod run logged turns=2 for exactly that reason.
     for await (const message of runner) {
       collectSearchHosts(message.content as unknown[], searchHosts)
       addUsage(usage, message.usage)
+      const call = (message.content as { type: string, name?: string, input?: unknown }[])
+        .find((b) => b.type === 'tool_use' && b.name === 'submit_factoids')
+      if (call) {
+        submitted = (call.input as { factoids?: SubmittedFactoid[] } | null)?.factoids ?? []
+        break
+      }
     }
   } catch (err) {
     if (!controller.signal.aborted) throw err

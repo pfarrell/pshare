@@ -102,8 +102,16 @@ test('a normal run stores cited facts, discards the invented citation, and sends
 
   assert.deepEqual(result, { status: 'ok', count: 2 })
   assert.deepEqual(await storedTexts(generationId), ['album: An album fact with a real source.', 'track: A track fact with a real source.'])
+  // The runner would otherwise send "Factoids received." back for a second full-price
+  // call that re-sends every search result and produces nothing we use.
+  assert.equal(requests.length, 1, 'no follow-up call once submit_factoids has been called')
 
   const first = requests[0]
+  // The stable prefix (tools + system) is cached; a top-level cache_control would
+  // instead cache the per-entity user message, which never repeats.
+  assert.ok(Array.isArray(first.system), 'system is sent as blocks so it can carry cache_control')
+  assert.deepEqual(first.system.at(-1).cache_control, { type: 'ephemeral' })
+  assert.equal(first.cache_control, undefined, 'no top-level cache_control')
   assert.equal(first.model, 'claude-sonnet-5-5')
   assert.equal(first.output_config?.effort, 'low', 'effort is set explicitly: this model defaults to medium')
   assert.equal(first.tool_choice, undefined, 'forced tool_choice returned HTTP 400 on claude-opus-5-5')
@@ -128,8 +136,8 @@ test('a paused turn is resumed exactly once and the run still finishes', async (
   const result = await generateFactoidsFor('album', album.id, generationId)
 
   assert.deepEqual(result, { status: 'ok', count: 2 })
-  assert.equal(requests.length, 3, 'paused turn resumed, then tool result sent back')
-  const lastMessages = requests[2].messages as Json[]
+  assert.equal(requests.length, 2, 'paused turn resumed once, and no call after submit_factoids')
+  const lastMessages = requests[1].messages as Json[]
   const pausedCopies = lastMessages.filter((m) =>
     m.role === 'assistant' && Array.isArray(m.content) && m.content.some((b: Json) => b.type === 'web_search_tool_result'))
   assert.equal(pausedCopies.length, 1, 'the paused assistant turn must be sent back once, not duplicated')
@@ -163,4 +171,36 @@ test('an entity that no longer exists returns empty without calling the API', as
 
   assert.deepEqual(result, { status: 'empty', count: 0 })
   assert.equal(requests.length, 0, 'a deleted entity must never cost an API call')
+})
+
+const scopeProps = (req: Json) =>
+  req.tools.find((t: Json) => t.name === 'submit_factoids').input_schema.properties.factoids.items.properties
+
+// 30 of 80 prod runs (artist runs) were thrown away whole because the model
+// submitted scope "album"/"track" and the validator allows only "artist" there.
+// The tool schema is the contract the model sees, so it has to match the validator.
+test('an artist run offers only the artist scope, so its facts cannot be rejected for scope', async () => {
+  const artist = await createArtist('fake-artistscope-artist')
+  const generationId = (await claimEntity('artist', artist.id))!
+  scripted = [message([serverToolUse, searchOk, submit([
+    { text: 'An artist fact with a real source.', source_url: 'https://www.rollingstone.com/story', source_title: 'Rolling Stone', scope: 'artist' },
+  ])], 'tool_use')]
+
+  const result = await generateFactoidsFor('artist', artist.id, generationId)
+
+  assert.deepEqual(result, { status: 'ok', count: 1 })
+  const props = scopeProps(requests[0])
+  assert.deepEqual(props.scope.enum, ['artist'])
+  assert.ok(!('track_title' in props), 'track_title is meaningless on an artist run')
+})
+
+test('an album run offers album and track scopes, never artist', async () => {
+  const { album, track, generationId } = await scaffold('fake-albumscope')
+  scripted = [message([serverToolUse, searchOk, submit(facts(track.title))], 'tool_use')]
+
+  await generateFactoidsFor('album', album.id, generationId)
+
+  const props = scopeProps(requests[0])
+  assert.deepEqual(props.scope.enum, ['album', 'track'])
+  assert.ok('track_title' in props)
 })
