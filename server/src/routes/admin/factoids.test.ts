@@ -202,6 +202,10 @@ test('GET /admin/factoids/all still returns a track whose album row is gone', as
   assert.equal(body.factoids.length, 1)
   assert.equal(body.factoids[0].subject, track.title)
   assert.equal(body.factoids[0].link, null, 'no album page to link to')
+  // cleanupFixtures finds ledger rows through their entities, and the album is
+  // gone: without this the claim stays "pending" in the shared DB forever and
+  // later trips factoidLedger's global reapStalePending test.
+  await db.deleteFrom('factoid_generations').where('id', '=', generationId).execute()
 })
 
 test('GET /admin/factoids/all still returns a factoid whose subject was deleted', async () => {
@@ -218,7 +222,11 @@ test('GET /admin/factoids/all still returns a factoid whose subject was deleted'
   assert.equal(body.factoids.length, 1, 'a stranded factoid is exactly what an admin needs to see and delete')
   assert.equal(body.factoids[0].subject, null)
   assert.equal(body.factoids[0].link, null)
-  await db.deleteFrom('factoids').where('text', 'like', `${tag}%`).execute() // cleanupFixtures keys on the (now gone) artist
+  // cleanupFixtures keys on the (now gone) artist, so remove both rows by hand.
+  // A leftover "pending" ledger row would later trip factoidLedger's global
+  // reapStalePending test.
+  await db.deleteFrom('factoids').where('text', 'like', `${tag}%`).execute()
+  await db.deleteFrom('factoid_generations').where('id', '=', generationId).execute()
 })
 
 // ---- PATCH /admin/factoids/:id: edit the text -------------------------------

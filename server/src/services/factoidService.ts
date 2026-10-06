@@ -13,7 +13,7 @@ import { isSkippedArtistName } from './factoidLedger.js'
 export const FACTOID_MODEL = 'claude-sonnet-5-5'
 const MAX_TOOL_ITERATIONS = 8
 const OVERALL_TIMEOUT_MS = 60_000
-const MAX_SEARCHES = 5
+export const MAX_SEARCHES = 5
 const MAX_LIBRARY_ALBUMS_IN_PROMPT = 12
 
 export interface EntityContext {
@@ -223,20 +223,10 @@ Rules:
 - For an album, use scope "album" for the album itself. You may also submit facts about individual songs on it: set scope to "track" and track_title to the exact title from the tracklist you were given.
 - When you are done, call submit_factoids exactly once. If you found nothing worth saying, call it with an empty list.`
 
-export async function generateFactoidsFor(
-  kind: 'artist' | 'album',
-  targetId: number,
-  generationId: number,
-): Promise<{ status: 'ok' | 'empty', count: number }> {
-  const context = kind === 'artist' ? await buildArtistContext(targetId) : await buildAlbumContext(targetId)
-  if (!context) return { status: 'empty', count: 0 }
-
-  const client = new Anthropic()
-  const searchHosts = new Set<string>()
-  const usage = emptyUsage()
-  let submitted: SubmittedFactoid[] = []
-
-  const submitFactoids = betaTool({
+// The submit_factoids tool, per kind. Exported so the batch probe sends exactly
+// what the live worker sends.
+export function submitFactoidsTool(kind: 'artist' | 'album') {
+  return {
     name: 'submit_factoids',
     description: 'Submit your final list of factoids. Call this exactly once, at the end. Every factoid must cite a source_url from a page web_search actually returned.',
     inputSchema: {
@@ -254,10 +244,10 @@ export async function generateFactoidsFor(
               // model labelled artist-run facts "album"/"track" and the validator
               // threw them all away (30 of 80 prod runs).
               ...(kind === 'artist'
-                ? { scope: { type: 'string', enum: ['artist'] } }
+                ? { scope: { type: 'string', enum: ['artist'] } as const }
                 : {
-                    scope: { type: 'string', enum: ['album', 'track'] },
-                    track_title: { type: 'string', description: 'Required when scope is "track": the exact title from the given tracklist' },
+                    scope: { type: 'string', enum: ['album', 'track'] } as const,
+                    track_title: { type: 'string', description: 'Required when scope is "track": the exact title from the given tracklist' } as const,
                   }),
             },
             required: ['text', 'source_url', 'scope'],
@@ -268,6 +258,24 @@ export async function generateFactoidsFor(
       required: ['factoids'],
       additionalProperties: false,
     },
+  } as const
+}
+
+export async function generateFactoidsFor(
+  kind: 'artist' | 'album',
+  targetId: number,
+  generationId: number,
+): Promise<{ status: 'ok' | 'empty', count: number }> {
+  const context = kind === 'artist' ? await buildArtistContext(targetId) : await buildAlbumContext(targetId)
+  if (!context) return { status: 'empty', count: 0 }
+
+  const client = new Anthropic()
+  const searchHosts = new Set<string>()
+  const usage = emptyUsage()
+  let submitted: SubmittedFactoid[] = []
+
+  const submitFactoids = betaTool({
+    ...submitFactoidsTool(kind),
     // Never reached: the loop below stops at the first submit_factoids call,
     // before the runner would execute it. The block's input is read directly.
     run: async () => 'Factoids received.',
