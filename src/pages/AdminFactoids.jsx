@@ -12,6 +12,9 @@ import Pagination from '../components/admin/Pagination';
 // per-entity panel (FactoidsPanel on the admin artist/album pages).
 
 const PAGE_SIZE = 25;
+// Mirrors MAX_FACTOID_LENGTH on the server, which is the real check: it keeps a
+// fact short enough to show on a screen by itself.
+const MAX_LENGTH = 240;
 
 // A stored source_url becomes a live link here, so the row is not trusted: the
 // backend only stores https urls, but a javascript: or data: href would run in
@@ -59,6 +62,38 @@ const FactoidList = ({ kind, q }) => {
       reload();
     } catch {
       setActionError('Could not delete that factoid.');
+    }
+  };
+
+  // One row is edited at a time. Opening another discards the open draft, which
+  // is cheap here: a draft is a sentence.
+  const [editing, setEditing] = useState(null); // { id, text }
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState(null);
+
+  const startEdit = (f) => {
+    setEditing({ id: f.id, text: f.text });
+    setEditError(null);
+  };
+  const cancelEdit = () => {
+    setEditing(null);
+    setEditError(null);
+  };
+  const saveEdit = async (f) => {
+    setSaving(true);
+    setEditError(null);
+    try {
+      const res = await apiService.adminUpdateFactoid(f.id, editing.text.trim());
+      // The server cleans the text (em-dashes, spacing); show what it stored.
+      const stored = res?.data?.factoid?.text;
+      setItems((rows) => rows.map((r) => (r.id === f.id ? { ...r, text: typeof stored === 'string' ? stored : editing.text.trim() } : r)));
+      setEditing(null);
+    } catch {
+      // The editor stays open with the draft intact: a failed save must not
+      // throw away someone's rewrite.
+      setEditError('Could not save that edit.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -111,7 +146,25 @@ const FactoidList = ({ kind, q }) => {
                       )}
                     </td>
                     <td style={td}>{f.kind}</td>
-                    <td style={{ ...td, minWidth: '16rem' }}>{typeof f.text === 'string' ? f.text : ''}</td>
+                    <td style={{ ...td, minWidth: '16rem' }}>
+                      {editing?.id === f.id ? (
+                        <>
+                          <textarea
+                            aria-label="Edit fact text"
+                            value={editing.text}
+                            onChange={(e) => setEditing({ id: f.id, text: e.target.value })}
+                            rows={4}
+                            style={{ ...controlStyle, width: '100%', resize: 'vertical' }}
+                          />
+                          <div style={{ fontSize: '0.75rem', color: editing.text.trim().length > MAX_LENGTH ? '#ef4444' : 'var(--color-text-muted)' }}>
+                            {editing.text.trim().length} / {MAX_LENGTH}
+                          </div>
+                          {editError && <p role="alert" style={{ color: '#ef4444', margin: '0.25rem 0 0' }}>{editError}</p>}
+                        </>
+                      ) : (
+                        typeof f.text === 'string' ? f.text : ''
+                      )}
+                    </td>
                     <td style={td}>
                       {typeof f.source_url === 'string' && isHttps(f.source_url) ? (
                         <a href={f.source_url} target="_blank" rel="noreferrer" style={{ color: '#3b82f6' }}>
@@ -125,8 +178,24 @@ const FactoidList = ({ kind, q }) => {
                     </td>
                     <td style={{ ...td, color: 'var(--color-text-muted)', fontFamily: 'monospace', fontSize: '0.75rem' }}>{f.model}</td>
                     <td style={{ ...td, whiteSpace: 'nowrap' }}>{formatDate(f.created_at)}</td>
-                    <td style={td}>
-                      <button type="button" onClick={() => handleDelete(f.id)}>Delete</button>
+                    <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                      {editing?.id === f.id ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => saveEdit(f)}
+                            disabled={saving || !editing.text.trim() || editing.text.trim().length > MAX_LENGTH || editing.text.trim() === f.text}
+                          >
+                            Save
+                          </button>{' '}
+                          <button type="button" onClick={cancelEdit} disabled={saving}>Cancel</button>
+                        </>
+                      ) : (
+                        <>
+                          <button type="button" onClick={() => startEdit(f)}>Edit</button>{' '}
+                          <button type="button" onClick={() => handleDelete(f.id)}>Delete</button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))

@@ -7,6 +7,7 @@ vi.mock('../services/api', () => ({
   apiService: {
     adminListAllFactoids: vi.fn(),
     adminDeleteFactoid: vi.fn(),
+    adminUpdateFactoid: vi.fn(),
   },
 }));
 
@@ -115,6 +116,85 @@ describe('AdminFactoids', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/could not delete/i);
     expect(screen.getByText('Recorded in a single night.')).toBeInTheDocument();
+  });
+
+  describe('editing', () => {
+    const startEdit = async () => {
+      renderPage();
+      const tr = (await screen.findByText('Recorded in a single night.')).closest('tr');
+      fireEvent.click(within(tr).getByRole('button', { name: 'Edit' }));
+      return tr;
+    };
+    const box = () => screen.getByRole('textbox', { name: /edit fact text/i });
+
+    test('Edit swaps the text for a textarea holding it, with Save and Cancel', async () => {
+      const tr = await startEdit();
+
+      expect(box()).toHaveValue('Recorded in a single night.');
+      expect(within(tr).getByRole('button', { name: 'Save' })).toBeInTheDocument();
+      expect(within(tr).getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+      expect(within(tr).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    });
+
+    test('Save sends the new text and shows it in place of the old', async () => {
+      apiService.adminUpdateFactoid.mockResolvedValue({
+        data: { factoid: { id: 1, text: 'Axis was recorded in a single night.' } },
+      });
+      const tr = await startEdit();
+
+      fireEvent.change(box(), { target: { value: '  Axis was recorded in a single night.  ' } });
+      fireEvent.click(within(tr).getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => expect(apiService.adminUpdateFactoid).toHaveBeenCalledWith(1, 'Axis was recorded in a single night.'));
+      expect(await screen.findByText('Axis was recorded in a single night.')).toBeInTheDocument();
+      expect(screen.queryByRole('textbox', { name: /edit fact text/i })).not.toBeInTheDocument();
+      expect(screen.queryByText('Recorded in a single night.')).not.toBeInTheDocument();
+    });
+
+    test('shows the text the server stored, not what was typed (it cleans em-dashes)', async () => {
+      apiService.adminUpdateFactoid.mockResolvedValue({ data: { factoid: { id: 1, text: 'She wrote it, on the bus.' } } });
+      const tr = await startEdit();
+
+      fireEvent.change(box(), { target: { value: 'She wrote it — on the bus.' } });
+      fireEvent.click(within(tr).getByRole('button', { name: 'Save' }));
+
+      expect(await screen.findByText('She wrote it, on the bus.')).toBeInTheDocument();
+    });
+
+    test('Cancel discards the edit without calling the API', async () => {
+      const tr = await startEdit();
+
+      fireEvent.change(box(), { target: { value: 'Something else entirely.' } });
+      fireEvent.click(within(tr).getByRole('button', { name: 'Cancel' }));
+
+      expect(screen.getByText('Recorded in a single night.')).toBeInTheDocument();
+      expect(apiService.adminUpdateFactoid).not.toHaveBeenCalled();
+    });
+
+    test('a failed save keeps the editor open with what was typed, and says so', async () => {
+      apiService.adminUpdateFactoid.mockRejectedValue(new Error('boom'));
+      const tr = await startEdit();
+
+      fireEvent.change(box(), { target: { value: 'A careful rewrite I do not want to lose.' } });
+      fireEvent.click(within(tr).getByRole('button', { name: 'Save' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(/could not save/i);
+      expect(box()).toHaveValue('A careful rewrite I do not want to lose.');
+    });
+
+    test('Save is disabled when the text is empty, unchanged, or over the 240 character limit', async () => {
+      const tr = await startEdit();
+      const save = () => within(tr).getByRole('button', { name: 'Save' });
+
+      expect(save()).toBeDisabled(); // unchanged
+      fireEvent.change(box(), { target: { value: '   ' } });
+      expect(save()).toBeDisabled(); // empty
+      fireEvent.change(box(), { target: { value: 'x'.repeat(241) } });
+      expect(save()).toBeDisabled(); // too long
+      expect(within(tr).getByText('241 / 240')).toBeInTheDocument();
+      fireEvent.change(box(), { target: { value: 'x'.repeat(240) } });
+      expect(save()).toBeEnabled();
+    });
   });
 
   test('says so when nothing matches', async () => {

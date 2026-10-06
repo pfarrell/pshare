@@ -8,6 +8,7 @@ import { db } from '../db/database.js'
 import { MAX_MB_TAGS_FOR_MODEL } from './playlistGeneratorService.js'
 import { validateFactoids, MAX_FACTOID_LENGTH, type SubmittedFactoid } from './factoidValidation.js'
 import { insertFactoids, existingTexts } from './factoidStore.js'
+import { isSkippedArtistName } from './factoidLedger.js'
 
 export const FACTOID_MODEL = 'claude-sonnet-5-5'
 const MAX_TOOL_ITERATIONS = 8
@@ -52,6 +53,9 @@ export async function buildArtistContext(artistId: number): Promise<EntityContex
     .selectFrom('artists').select(['id', 'name', 'wikipedia'])
     .where('id', '=', artistId).executeTakeFirst()
   if (!artist) return null
+  // Same rule as the poller's candidate query, so a manual "Research again" or
+  // the try script cannot spend a call on a catch-all either.
+  if (isSkippedArtistName(artist.name)) return null
 
   const tags = await artistMbTags(artistId)
   const albums = await db
@@ -213,6 +217,7 @@ What to avoid:
 Rules:
 - Use the web_search tool to find and verify facts. Every factoid must set source_url to a page that your search actually returned. Do not construct, guess, or recall a URL.
 - Keep each factoid under ${MAX_FACTOID_LENGTH} characters. One fact per factoid, written as a plain sentence a screen can show on its own.
+- Each factoid must stand on its own: it is shown by itself, with no other factoid beside it. Name the artist, album, or song it is about instead of saying "he", "the album", or "that track", and never refer to another factoid or assume the reader saw one. Include the few words of context a stranger would need.
 - Never use an em-dash. Use a comma, colon, or hyphen instead.
 - For an artist, every factoid has scope "artist": a fact about the artist as a whole. Facts about one particular album or song are researched separately, so leave them out.
 - For an album, use scope "album" for the album itself. You may also submit facts about individual songs on it: set scope to "track" and track_title to the exact title from the tracklist you were given.

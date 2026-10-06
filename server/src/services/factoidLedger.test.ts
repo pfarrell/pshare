@@ -148,6 +148,43 @@ test('nextCandidate skips entities that already have a ledger row', async () => 
   assert.ok(!isOurs)
 })
 
+// "Various Artists" is a catch-all with nothing specific to say. The row needs
+// its real name (not the fixture prefix) so it is created and removed by hand.
+test('nextCandidate never picks the Various Artists catch-all, whatever its case or padding', async () => {
+  for (const name of ['Various Artists', 'various artists', '  VARIOUS ARTISTS ']) {
+    const va = await db.insertInto('artists').values({ name }).returning('id').executeTakeFirstOrThrow()
+    // album_id null so the artist is the only candidate row this play produces.
+    const log = await db.insertInto('logs')
+      .values({ album_id: null, track_id: null, artist_id: va.id, action: 'stream', created_at: fakeAgo(0), ip_address: null })
+      .returning('id')
+      .executeTakeFirstOrThrow()
+    try {
+      const candidate = await nextCandidate(FAKE_NOW)
+      assert.ok(
+        !(candidate?.kind === 'artist' && candidate.targetId === va.id),
+        `"${name}" must never be researched: it would cost a call and a daily slot for nothing`,
+      )
+    } finally {
+      await db.deleteFrom('logs').where('id', '=', log.id).execute()
+      await db.deleteFrom('artists').where('id', '=', va.id).execute()
+    }
+  }
+})
+
+test('nextCandidate still picks an ordinary artist played with no album', async () => {
+  const artist = await createArtist('cand-plain-artist')
+  const log = await db.insertInto('logs')
+    .values({ album_id: null, track_id: null, artist_id: artist.id, action: 'stream', created_at: fakeAgo(0), ip_address: null })
+    .returning('id')
+    .executeTakeFirstOrThrow()
+  try {
+    const candidate = await nextCandidate(FAKE_NOW)
+    assert.deepEqual(candidate, { kind: 'artist', targetId: artist.id })
+  } finally {
+    await db.deleteFrom('logs').where('id', '=', log.id).execute()
+  }
+})
+
 test('a log row with null album_id and null artist_id yields no candidate', async () => {
   const artist = await createArtist('cand-null-artist')
   const album = await createAlbum('cand-null-album', artist.id)

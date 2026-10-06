@@ -14,6 +14,13 @@ export const STALE_PENDING_MS = 15 * 60 * 1000
 export const MAX_GENERATIONS_PER_DAY = 50
 export const FAILED_RETRY_AFTER_MS = 24 * 60 * 60 * 1000
 export const MAX_ATTEMPTS = 3
+
+// Catch-all artist entries with nothing specific to research: every call would
+// be spent on a name that is not a real act. Matched lower-cased and trimmed.
+// Add to this list to skip more.
+export const SKIPPED_ARTIST_NAMES = ['various artists']
+export const isSkippedArtistName = (name: string | null | undefined): boolean =>
+  SKIPPED_ARTIST_NAMES.includes((name ?? '').trim().toLowerCase())
 // Only entities played recently are worth researching; cost follows listening.
 const CANDIDATE_LOOKBACK_DAYS = 7
 
@@ -101,6 +108,7 @@ export async function nextCandidate(now: number = Date.now()): Promise<{ kind: F
         FROM logs l
         JOIN artists ar ON ar.id = l.artist_id
        WHERE l.artist_id IS NOT NULL AND l.created_at > ${since}
+         AND lower(btrim(ar.name)) NOT IN (${sql.join(SKIPPED_ARTIST_NAMES)})
        GROUP BY l.artist_id
     ) played
     WHERE NOT EXISTS (

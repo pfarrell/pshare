@@ -4,7 +4,8 @@
 // is the recourse for one that is wrong or dull.
 import { Hono } from 'hono'
 import { db } from '../../db/database.js'
-import { listForTarget, deleteFactoid, countAllForAdmin, listAllForAdmin, type AdminFactoidFilter } from '../../services/factoidStore.js'
+import { listForTarget, deleteFactoid, updateFactoidText, countAllForAdmin, listAllForAdmin, type AdminFactoidFilter } from '../../services/factoidStore.js'
+import { sanitizeText, MAX_FACTOID_LENGTH } from '../../services/factoidValidation.js'
 import { paginate } from '../../utils/http.js'
 
 const router = new Hono()
@@ -55,6 +56,30 @@ router.get('/factoids/all', async (c) => {
   } catch (error) {
     console.error('Error listing all factoids:', error)
     return c.json({ error: 'Failed to list factoids' }, 500)
+  }
+})
+
+// PATCH /admin/factoids/:id { text }: a human edit, usually to add the few
+// words of context a fact lacks. Held to the same rules as generated text.
+router.patch('/factoids/:id', async (c) => {
+  const id = parseInt(c.req.param('id'), 10)
+  if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400)
+
+  const body = await c.req.json().catch(() => null) as { text?: unknown } | null
+  if (typeof body?.text !== 'string') return c.json({ error: 'text is required' }, 400)
+  const text = sanitizeText(body.text)
+  if (!text) return c.json({ error: 'text must not be empty' }, 400)
+  if (text.length > MAX_FACTOID_LENGTH) {
+    return c.json({ error: `text must be at most ${MAX_FACTOID_LENGTH} characters` }, 400)
+  }
+
+  try {
+    const updated = await updateFactoidText(id, text)
+    if (!updated) return c.json({ error: 'Factoid not found' }, 404)
+    return c.json({ factoid: updated })
+  } catch (error) {
+    console.error('Error updating factoid:', error)
+    return c.json({ error: 'Failed to update factoid' }, 500)
   }
 })
 

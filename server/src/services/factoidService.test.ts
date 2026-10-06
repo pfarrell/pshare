@@ -7,6 +7,7 @@ import { claimEntity } from './factoidLedger.js'
 import { insertFactoids } from './factoidStore.js'
 import {
   buildArtistContext, buildAlbumContext, collectSearchHosts, existingTextsForRun, summarizeRun, addUsage, emptyUsage,
+  SYSTEM_PROMPT,
 } from './factoidService.js'
 
 beforeEach(async () => { await cleanupFixtures() })
@@ -22,6 +23,20 @@ test('buildArtistContext includes the name and the stored wikipedia text', async
   assert.equal(ctx.name, artist.name)
   assert.match(ctx.prompt, /A band from Kent\./)
   assert.deepEqual(ctx.tracklist, [], 'an artist context carries no tracklist')
+})
+
+test('buildArtistContext returns null for Various Artists, so no API call is ever made for it', async () => {
+  const va = await db.insertInto('artists').values({ name: 'Various Artists' }).returning('id').executeTakeFirstOrThrow()
+  try {
+    assert.equal(await buildArtistContext(va.id), null)
+  } finally {
+    await db.deleteFrom('artists').where('id', '=', va.id).execute()
+  }
+})
+
+test('the system prompt asks for facts that stand on their own', () => {
+  assert.match(SYSTEM_PROMPT, /stand on its own/i)
+  assert.match(SYSTEM_PROMPT, /name the (artist|subject)/i)
 })
 
 test('buildArtistContext returns null for a missing artist', async () => {

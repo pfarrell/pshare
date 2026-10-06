@@ -194,6 +194,18 @@ export async function listAllForAdmin(
   return result.rows
 }
 
+// Only the text is editable: the source, subject and kind describe where the
+// fact came from and what it is about. Returns null when the row is gone.
+export async function updateFactoidText(id: number, text: string): Promise<{ id: number, text: string } | null> {
+  const row = await db
+    .updateTable('factoids')
+    .set({ text })
+    .where('id', '=', id)
+    .returning(['id', 'text'])
+    .executeTakeFirst()
+  return row ?? null
+}
+
 export async function deleteFactoid(id: number): Promise<boolean> {
   const deleted = await db.deleteFrom('factoids').where('id', '=', id).returning('id').executeTakeFirst()
   return deleted !== undefined

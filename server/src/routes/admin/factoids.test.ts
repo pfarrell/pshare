@@ -221,6 +221,71 @@ test('GET /admin/factoids/all still returns a factoid whose subject was deleted'
   await db.deleteFrom('factoids').where('text', 'like', `${tag}%`).execute() // cleanupFixtures keys on the (now gone) artist
 })
 
+// ---- PATCH /admin/factoids/:id: edit the text -------------------------------
+
+const patch = (id: number | string, body: unknown) =>
+  app.request(`/admin/factoids/${id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: typeof body === 'string' ? body : JSON.stringify(body),
+  })
+
+const rowFor = async (albumId: number) =>
+  db.selectFrom('factoids').selectAll().where('kind', '=', 'album').where('target_id', '=', albumId).executeTakeFirstOrThrow()
+
+test('PATCH /admin/factoids/:id replaces the text and leaves source, kind, target and model alone', async () => {
+  const { album } = await seed('adm-edit')
+  const before = await rowFor(album.id)
+
+  const res = await patch(before.id, { text: 'Axis was recorded in a single night, with the band reading the sleeve notes.' })
+
+  assert.equal(res.status, 200)
+  assert.deepEqual(await res.json(), { factoid: { id: before.id, text: 'Axis was recorded in a single night, with the band reading the sleeve notes.' } })
+  const after = await rowFor(album.id)
+  assert.equal(after.text, 'Axis was recorded in a single night, with the band reading the sleeve notes.')
+  for (const col of ['kind', 'target_id', 'source_url', 'source_title', 'model', 'generation_id', 'created_at'] as const) {
+    assert.deepEqual(after[col], before[col], `${col} must not change`)
+  }
+})
+
+test('PATCH /admin/factoids/:id trims, collapses whitespace, and replaces em-dashes like generated facts', async () => {
+  const { album } = await seed('adm-edit-clean')
+  const row = await rowFor(album.id)
+
+  await patch(row.id, { text: '  She wrote it — on the bus  home.  ' })
+
+  assert.equal((await rowFor(album.id)).text, 'She wrote it, on the bus home.')
+})
+
+test('PATCH /admin/factoids/:id rejects empty, over-long, and non-string text without changing the row', async () => {
+  const { album } = await seed('adm-edit-bad')
+  const row = await rowFor(album.id)
+
+  assert.equal((await patch(row.id, { text: '' })).status, 400)
+  assert.equal((await patch(row.id, { text: '   ' })).status, 400)
+  assert.equal((await patch(row.id, { text: 'x'.repeat(241) })).status, 400)
+  assert.equal((await patch(row.id, { text: 42 })).status, 400)
+  assert.equal((await patch(row.id, {})).status, 400)
+  assert.equal((await patch(row.id, 'not json')).status, 400)
+  assert.equal((await patch(row.id, { text: 'x'.repeat(240) })).status, 200, '240 characters is the limit, inclusive')
+  assert.equal((await rowFor(album.id)).text, 'x'.repeat(240))
+})
+
+test('PATCH /admin/factoids/:id 404s for a missing factoid and 400s for a bad id', async () => {
+  assert.equal((await patch(2_000_000_999, { text: 'Hello.' })).status, 404)
+  assert.equal((await patch('abc', { text: 'Hello.' })).status, 400)
+})
+
+test('an edited factoid shows its new text in the global list', async () => {
+  const { album } = await seed('adm-edit-list')
+  const row = await rowFor(album.id)
+  const tag = fixtureName('adm-edit-list')
+  await patch(row.id, { text: `${tag} now with the missing context.` })
+
+  const body = await getAll(`q=${encodeURIComponent(tag)}`)
+  assert.deepEqual(body.factoids.map((f) => f.text), [`${tag} now with the missing context.`])
+})
+
 test('GET /admin/factoids/all rejects a bad kind', async () => {
   assert.equal((await app.request('/admin/factoids/all?kind=label')).status, 400)
 })
