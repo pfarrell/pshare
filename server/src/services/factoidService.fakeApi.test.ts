@@ -119,6 +119,11 @@ test('a normal run stores cited facts, discards the invented citation, and sends
   assert.ok(toolTypes.includes('web_search_20260209'), 'uses the current web search tool')
   assert.ok(!toolTypes.some((t: string) => String(t).startsWith('code_execution')), 'no separate code_execution next to dynamic-filtering web search')
   assert.equal(first.tools.find((t: Json) => t.type === 'web_search_20260209').max_uses, 5)
+  // On web_search_20260209 the model calls search from inside code execution by
+  // default, and about a third of those calls failed with invalid_tool_input
+  // (input wrapped as {"params": ...} or truncated JSON), leaving ~1 in 5 runs
+  // with no facts. Direct calls had 0 failures in 103.
+  assert.deepEqual(first.tools.find((t: Json) => t.type === 'web_search_20260209').allowed_callers, ['direct'])
   assert.ok(!('max_iterations' in first), 'max_iterations is a client-side runner option and must not leak into the request body')
 })
 

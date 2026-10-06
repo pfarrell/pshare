@@ -302,7 +302,13 @@ export async function generateFactoidsFor(
         submitFactoids,
         // No code_execution alongside this: the _20260209 variant already
         // runs code execution internally.
-        { type: 'web_search_20260209', name: 'web_search', max_uses: MAX_SEARCHES } as never,
+        // allowed_callers: ["direct"] makes the model call search itself instead of
+        // from inside code execution (the 20260209 default, "dynamic filtering").
+        // The code-execution path failed ~31% of searches with invalid_tool_input
+        // (wrapped or truncated input), so ~1 in 5 runs got no facts at all.
+        // Measured on the same 100 entities: direct had 0 failed searches in 103,
+        // 2% empty runs (was 20%), and 2x the facts for a similar cost per entity.
+        { type: 'web_search_20260209', name: 'web_search', max_uses: MAX_SEARCHES, allowed_callers: ['direct'] } as never,
       ],
       messages: [{ role: 'user', content: context.prompt }],
     }, { signal: controller.signal })
