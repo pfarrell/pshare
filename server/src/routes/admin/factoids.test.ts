@@ -4,8 +4,9 @@
 import { test, after, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { Hono } from 'hono'
+import { sql } from 'kysely'
 import { db } from '../../db/database.js'
-import { createArtist, createAlbum, cleanupFixtures } from '../../test/fixtures.js'
+import { createArtist, createAlbum, createTrack, cleanupFixtures, fixtureName } from '../../test/fixtures.js'
 import { claimEntity, recordResult } from '../../services/factoidLedger.js'
 import { insertFactoids } from '../../services/factoidStore.js'
 import factoidsAdmin from './factoids.js'
@@ -84,4 +85,142 @@ test('clearing a generation leaves the published factoids in place', async () =>
 test('DELETE generations rejects kind="track" and a non-numeric id', async () => {
   assert.equal((await app.request('/admin/factoids/generations/track/1', { method: 'DELETE' })).status, 400)
   assert.equal((await app.request('/admin/factoids/generations/album/abc', { method: 'DELETE' })).status, 400)
+})
+
+// ---- GET /admin/factoids/all: the global review list --------------------------
+// The dev DB holds other factoids, so each test finds its own rows by searching
+// for a string unique to the run (which also exercises the q filter itself).
+
+type AdminRow = {
+  id: number, kind: string, text: string, subject: string | null, by: string | null,
+  model: string, source_url: string, link: { kind: string, id: number } | null,
+}
+type AllBody = { factoids: AdminRow[], pagination: { page: number, limit: number, total: number, totalPages: number } }
+const getAll = async (query: string) => {
+  const res = await app.request(`/admin/factoids/all?${query}`)
+  assert.equal(res.status, 200)
+  return await res.json() as AllBody
+}
+
+test('GET /admin/factoids/all lists across kinds, newest first, with subject, byline and link', async () => {
+  const tag = fixtureName('all-mix')
+  const artist = await createArtist('all-mix-artist')
+  const album = await createAlbum('all-mix-album', artist.id)
+  const track = await createTrack('all-mix-track', album.id, artist.id)
+  const generationId = (await claimEntity('album', album.id))!
+  await insertFactoids([
+    { kind: 'artist', targetId: artist.id, text: `${tag} about the artist`, sourceUrl: 'https://example.com/a', sourceTitle: null },
+    { kind: 'album', targetId: album.id, text: `${tag} about the album`, sourceUrl: 'https://example.com/b', sourceTitle: 'B' },
+    { kind: 'track', targetId: track.id, text: `${tag} about the track`, sourceUrl: 'https://example.com/c', sourceTitle: 'C' },
+  ], 'test-model', generationId)
+  // One INSERT statement gives every row the same created_at; space them out.
+  for (const [suffix, when] of [['artist', '2026-01-01'], ['album', '2026-01-03'], ['track', '2026-01-02']] as const) {
+    await sql`UPDATE factoids SET created_at = ${new Date(when)} WHERE text = ${`${tag} about the ${suffix}`}`.execute(db)
+  }
+
+  const body = await getAll(`q=${encodeURIComponent(tag)}`)
+
+  assert.deepEqual(body.factoids.map((f) => f.kind), ['album', 'track', 'artist'], 'newest first')
+  assert.equal(body.pagination.total, 3)
+  const [alb, trk, art] = body.factoids
+  assert.equal(art.subject, artist.name)
+  assert.deepEqual(art.link, { kind: 'artist', id: artist.id })
+  assert.equal(alb.subject, album.title)
+  assert.equal(alb.by, artist.name)
+  assert.deepEqual(alb.link, { kind: 'album', id: album.id })
+  assert.equal(trk.subject, track.title)
+  assert.equal(trk.by, artist.name)
+  assert.deepEqual(trk.link, { kind: 'album', id: album.id }, 'a track links to its album page')
+  assert.equal(alb.model, 'test-model')
+})
+
+test('GET /admin/factoids/all filters by kind', async () => {
+  const tag = fixtureName('all-kind')
+  const artist = await createArtist('all-kind-artist')
+  const album = await createAlbum('all-kind-album', artist.id)
+  const generationId = (await claimEntity('album', album.id))!
+  await insertFactoids([
+    { kind: 'artist', targetId: artist.id, text: `${tag} a`, sourceUrl: 'https://example.com/a', sourceTitle: null },
+    { kind: 'album', targetId: album.id, text: `${tag} b`, sourceUrl: 'https://example.com/b', sourceTitle: null },
+  ], 'm', generationId)
+
+  const body = await getAll(`q=${encodeURIComponent(tag)}&kind=artist`)
+  assert.deepEqual(body.factoids.map((f) => f.kind), ['artist'])
+  assert.equal(body.pagination.total, 1)
+})
+
+test('GET /admin/factoids/all treats % and _ in the search as literal characters', async () => {
+  const tag = fixtureName('all-like')
+  const artist = await createArtist('all-like-artist')
+  const generationId = (await claimEntity('artist', artist.id))!
+  await insertFactoids([
+    { kind: 'artist', targetId: artist.id, text: `${tag} sold 100% of them`, sourceUrl: 'https://example.com/a', sourceTitle: null },
+    { kind: 'artist', targetId: artist.id, text: `${tag} sold 100 of them`, sourceUrl: 'https://example.com/b', sourceTitle: null },
+    { kind: 'artist', targetId: artist.id, text: `${tag} snake_case`, sourceUrl: 'https://example.com/c', sourceTitle: null },
+    { kind: 'artist', targetId: artist.id, text: `${tag} snakeXcase`, sourceUrl: 'https://example.com/d', sourceTitle: null },
+  ], 'm', generationId)
+
+  // Unescaped, "100% of" would be "100" + anything + " of" and match both sold-100 rows.
+  const pct = await getAll(`q=${encodeURIComponent(`${tag} sold 100% of`)}`)
+  assert.deepEqual(pct.factoids.map((f) => f.text), [`${tag} sold 100% of them`], '% must be literal')
+
+  // Unescaped, "snake_case" would also match "snakeXcase".
+  const underscore = await getAll(`q=${encodeURIComponent(`${tag} snake_case`)}`)
+  assert.deepEqual(underscore.factoids.map((f) => f.text), [`${tag} snake_case`], '_ must be literal')
+})
+
+test('GET /admin/factoids/all paginates', async () => {
+  const tag = fixtureName('all-page')
+  const artist = await createArtist('all-page-artist')
+  const generationId = (await claimEntity('artist', artist.id))!
+  await insertFactoids(
+    [1, 2, 3].map((n) => ({ kind: 'artist' as const, targetId: artist.id, text: `${tag} fact ${n}`, sourceUrl: 'https://example.com/a', sourceTitle: null })),
+    'm', generationId,
+  )
+
+  const first = await getAll(`q=${encodeURIComponent(tag)}&limit=2&page=1`)
+  const second = await getAll(`q=${encodeURIComponent(tag)}&limit=2&page=2`)
+  assert.equal(first.factoids.length, 2)
+  assert.equal(second.factoids.length, 1)
+  assert.deepEqual(first.pagination, { page: 1, limit: 2, total: 3, totalPages: 2 })
+  assert.equal(new Set([...first.factoids, ...second.factoids].map((f) => f.id)).size, 3, 'no row repeats across pages')
+})
+
+test('GET /admin/factoids/all still returns a track whose album row is gone', async () => {
+  const tag = fixtureName('all-dangle')
+  const artist = await createArtist('all-dangle-artist')
+  const album = await createAlbum('all-dangle-album', artist.id)
+  const track = await createTrack('all-dangle-track', album.id, artist.id)
+  const generationId = (await claimEntity('album', album.id))!
+  await insertFactoids(
+    [{ kind: 'track', targetId: track.id, text: `${tag} orphaned`, sourceUrl: 'https://example.com/a', sourceTitle: null }],
+    'm', generationId,
+  )
+  await db.deleteFrom('albums').where('id', '=', album.id).execute() // tracks.album_id has no FK
+
+  const body = await getAll(`q=${encodeURIComponent(tag)}`)
+  assert.equal(body.factoids.length, 1)
+  assert.equal(body.factoids[0].subject, track.title)
+  assert.equal(body.factoids[0].link, null, 'no album page to link to')
+})
+
+test('GET /admin/factoids/all still returns a factoid whose subject was deleted', async () => {
+  const tag = fixtureName('all-gone')
+  const artist = await createArtist('all-gone-artist')
+  const generationId = (await claimEntity('artist', artist.id))!
+  await insertFactoids(
+    [{ kind: 'artist', targetId: artist.id, text: `${tag} stranded`, sourceUrl: 'https://example.com/a', sourceTitle: null }],
+    'm', generationId,
+  )
+  await db.deleteFrom('artists').where('id', '=', artist.id).execute()
+
+  const body = await getAll(`q=${encodeURIComponent(tag)}`)
+  assert.equal(body.factoids.length, 1, 'a stranded factoid is exactly what an admin needs to see and delete')
+  assert.equal(body.factoids[0].subject, null)
+  assert.equal(body.factoids[0].link, null)
+  await db.deleteFrom('factoids').where('text', 'like', `${tag}%`).execute() // cleanupFixtures keys on the (now gone) artist
+})
+
+test('GET /admin/factoids/all rejects a bad kind', async () => {
+  assert.equal((await app.request('/admin/factoids/all?kind=label')).status, 400)
 })

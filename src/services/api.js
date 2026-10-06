@@ -96,6 +96,7 @@ export const apiService = {
   getFactoidsForTrack: (trackId) => api.get(`/factoids${qs({ track_id: trackId })}`),
   getRandomFactoids: () => api.get('/factoids/random'),
   adminListFactoids: (kind, targetId) => api.get(`/admin/factoids${qs({ kind, target_id: targetId })}`),
+  adminListAllFactoids: (page = 1, limit = 25, kind = '', q = '') => api.get(`/admin/factoids/all${qs({ page, limit, kind, q })}`),
   adminDeleteFactoid: (id) => api.delete(`/admin/factoids/${id}`),
   adminClearFactoidGeneration: (kind, targetId) => api.delete(`/admin/factoids/generations/${kind}/${targetId}`),
 

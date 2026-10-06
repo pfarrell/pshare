@@ -129,6 +129,71 @@ export async function randomFactoids(limit = DEFAULT_RANDOM_LIMIT): Promise<Fact
   return result.rows
 }
 
+export interface AdminFactoidRow extends FactoidRow {
+  model: string
+  // Name of whatever the factoid is about; null when that row no longer exists.
+  subject: string | null
+  // Artist name for an album or track factoid, for context.
+  by: string | null
+  // The admin page for the subject (a track links to its album); null when
+  // there is nothing to link to.
+  link: { kind: 'artist' | 'album', id: number } | null
+}
+
+export interface AdminFactoidFilter {
+  kind?: 'artist' | 'album' | 'track'
+  q?: string
+}
+
+// ILIKE treats \, % and _ as pattern syntax; an admin searching "100%" or
+// "snake_case" means those characters literally.
+const escapeLike = (s: string) => s.replace(/[\\%_]/g, '\\$&')
+
+const adminWhere = ({ kind, q }: AdminFactoidFilter) => {
+  const conds = [sql`TRUE`]
+  if (kind) conds.push(sql`f.kind = ${kind}`)
+  if (q) conds.push(sql`f.text ILIKE ${`%${escapeLike(q)}%`}`)
+  return sql.join(conds, sql` AND `)
+}
+
+export async function countAllForAdmin(filter: AdminFactoidFilter): Promise<number> {
+  const result = await sql<{ n: string }>`SELECT COUNT(*) AS n FROM factoids f WHERE ${adminWhere(filter)}`.execute(db)
+  return Number(result.rows[0]?.n ?? 0)
+}
+
+// The global review list. Every join is a LEFT join and nothing is filtered on
+// the subject existing: a factoid whose artist/album/track was deleted (the
+// tables have no foreign keys) is exactly what an admin needs to find and prune.
+export async function listAllForAdmin(
+  filter: AdminFactoidFilter,
+  limit: number,
+  offset: number,
+): Promise<AdminFactoidRow[]> {
+  const result = await sql<AdminFactoidRow>`
+    SELECT f.id, f.kind, f.target_id, f.text, f.source_url, f.source_title, f.model, f.created_at,
+           CASE f.kind WHEN 'artist' THEN ar.name WHEN 'album' THEN al.title ELSE t.title END AS subject,
+           byline.name AS by,
+           CASE
+             WHEN f.kind = 'artist' AND ar.id IS NOT NULL THEN json_build_object('kind', 'artist', 'id', ar.id)
+             WHEN f.kind = 'album'  AND al.id IS NOT NULL THEN json_build_object('kind', 'album',  'id', al.id)
+             WHEN f.kind = 'track'  AND tal.id IS NOT NULL THEN json_build_object('kind', 'album', 'id', tal.id)
+           END AS link
+      FROM factoids f
+      LEFT JOIN artists ar  ON f.kind = 'artist' AND ar.id = f.target_id
+      LEFT JOIN albums  al  ON f.kind = 'album'  AND al.id = f.target_id
+      LEFT JOIN tracks  t   ON f.kind = 'track'  AND t.id  = f.target_id
+      LEFT JOIN albums  tal ON f.kind = 'track'  AND tal.id = t.album_id
+      LEFT JOIN artists byline ON byline.id = CASE f.kind
+                                                WHEN 'album' THEN al.artist_id
+                                                WHEN 'track' THEN COALESCE(t.artist_id, tal.artist_id)
+                                              END
+     WHERE ${adminWhere(filter)}
+     ORDER BY f.created_at DESC, f.id DESC
+     LIMIT ${limit} OFFSET ${offset}
+  `.execute(db)
+  return result.rows
+}
+
 export async function deleteFactoid(id: number): Promise<boolean> {
   const deleted = await db.deleteFrom('factoids').where('id', '=', id).returning('id').executeTakeFirst()
   return deleted !== undefined

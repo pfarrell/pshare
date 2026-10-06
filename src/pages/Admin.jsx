@@ -65,6 +65,9 @@ const Admin = () => {
         <button onClick={() => navigate('/admin/logs')} style={buttonStyle}>Logs</button>
       </div>
       <div style={cardStyle}>
+        <button onClick={() => navigate('/admin/factoids')} style={buttonStyle}>Factoids</button>
+      </div>
+      <div style={cardStyle}>
         <button onClick={() => navigate('/admin/tags')} style={buttonStyle}>Tags</button>
       </div>
       <div style={cardStyle}>

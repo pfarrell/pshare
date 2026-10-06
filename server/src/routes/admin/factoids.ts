@@ -4,7 +4,8 @@
 // is the recourse for one that is wrong or dull.
 import { Hono } from 'hono'
 import { db } from '../../db/database.js'
-import { listForTarget, deleteFactoid } from '../../services/factoidStore.js'
+import { listForTarget, deleteFactoid, countAllForAdmin, listAllForAdmin, type AdminFactoidFilter } from '../../services/factoidStore.js'
+import { paginate } from '../../utils/http.js'
 
 const router = new Hono()
 
@@ -28,6 +29,31 @@ router.get('/factoids', async (c) => {
     return c.json({ factoids, generation: generation ?? null })
   } catch (error) {
     console.error('Error listing factoids:', error)
+    return c.json({ error: 'Failed to list factoids' }, 500)
+  }
+})
+
+// GET /admin/factoids/all?page=1&limit=25&kind=album&q=text: every factoid,
+// newest first, for the global review page. Registered as /factoids/all (not
+// /factoids?list=1) so it cannot be confused with the per-entity lookup above.
+router.get('/factoids/all', async (c) => {
+  const rawKind = c.req.query('kind') || undefined
+  const validKind = rawKind === 'artist' || rawKind === 'album' || rawKind === 'track'
+  if (rawKind !== undefined && !validKind) {
+    return c.json({ error: 'kind must be artist, album, or track' }, 400)
+  }
+  const filter: AdminFactoidFilter = {
+    kind: validKind ? rawKind : undefined,
+    q: c.req.query('q')?.trim().slice(0, 200) || undefined,
+  }
+  try {
+    const { items, pagination } = await paginate(c, {
+      count: () => countAllForAdmin(filter),
+      listPage: (limit, offset) => listAllForAdmin(filter, limit, offset),
+    })
+    return c.json({ factoids: items, pagination })
+  } catch (error) {
+    console.error('Error listing all factoids:', error)
     return c.json({ error: 'Failed to list factoids' }, 500)
   }
 })

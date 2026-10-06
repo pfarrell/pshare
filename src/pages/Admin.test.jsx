@@ -19,6 +19,7 @@ const renderAdmin = () =>
         <Route path="/admin/upload" element={<div>Upload page</div>} />
         <Route path="/admin/new" element={<div>New page</div>} />
         <Route path="/admin/logs" element={<div>Logs page</div>} />
+        <Route path="/admin/factoids" element={<div>Factoids page</div>} />
         <Route path="/admin/errors" element={<div>Errors page</div>} />
         <Route path="/admin/signups" element={<div>Signups page</div>} />
       </Routes>
@@ -93,6 +94,12 @@ describe('Admin', () => {
     renderAdmin();
     fireEvent.click(screen.getByText('Logs'));
     expect(screen.getByText('Logs page')).toBeInTheDocument();
+  });
+
+  test('clicking Factoids navigates to /admin/factoids', () => {
+    renderAdmin();
+    fireEvent.click(screen.getByText('Factoids'));
+    expect(screen.getByText('Factoids page')).toBeInTheDocument();
   });
 
   test('clicking Errors navigates to /admin/errors', () => {
