@@ -19,16 +19,24 @@ const JukeboxKeyboard = ({ targetElement }) => {
 
   if (!targetElement) return null;
 
-  const insert = (char) => {
-    const current = targetElement.value ?? '';
-    setReactInputValue(targetElement, current + char);
+  // Edit at the caret/selection (not the end), so touching inside the text
+  // to reposition the cursor works. Setting the value moves the caret to the
+  // end, so it's restored explicitly afterwards.
+  const replaceSelection = (text, deleteBack = 0) => {
+    const value = targetElement.value ?? '';
+    const end = targetElement.selectionEnd ?? value.length;
+    let start = targetElement.selectionStart ?? end;
+    if (start === end && deleteBack > 0) start = Math.max(0, start - deleteBack);
+    setReactInputValue(targetElement, value.slice(0, start) + text + value.slice(end));
+    const caret = start + text.length;
+    targetElement.setSelectionRange?.(caret, caret);
   };
 
-  const backspace = () => {
-    const current = targetElement.value ?? '';
-    setReactInputValue(targetElement, current.slice(0, -1));
-  };
+  const insert = (char) => replaceSelection(char);
+  const backspace = () => replaceSelection('', 1);
 
+  // The whole keyboard container also preventDefaults mousedown, so taps on
+  // the gaps/padding between keys can't blur the input and dismiss it.
   // onMouseDown (not onClick) with preventDefault, on every key: this is
   // what keeps the target input focused while typing — without it, tapping
   // a key would steal focus away from the input, which would both blur it
@@ -47,7 +55,12 @@ const JukeboxKeyboard = ({ targetElement }) => {
   );
 
   return (
-    <div className="jukebox-keyboard" role="group" aria-label="On-screen keyboard">
+    <div
+      className="jukebox-keyboard"
+      role="group"
+      aria-label="On-screen keyboard"
+      onMouseDown={(e) => e.preventDefault()}
+    >
       {ROWS.map((row, i) => (
         <div className="jukebox-keyboard-row" key={i}>
           {row.map(renderKey)}

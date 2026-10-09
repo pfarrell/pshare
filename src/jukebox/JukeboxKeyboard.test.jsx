@@ -76,3 +76,22 @@ test('keys use onMouseDown to prevent default, so tapping one does not blur the 
   fireEvent.mouseDown(screen.getByText('q'));
   expect(input).toHaveFocus();
 });
+
+test('keys insert and backspace at the caret, not the end', () => {
+  render(<Harness />);
+  const input = screen.getByTestId('target');
+  fireEvent.click(screen.getByText('a'));
+  fireEvent.click(screen.getByText('c'));
+  input.setSelectionRange(1, 1);
+  fireEvent.click(screen.getByText('b'));
+  expect(input).toHaveValue('abc');
+  expect(input.selectionStart).toBe(2);
+  fireEvent.click(screen.getByLabelText('Backspace'));
+  expect(input).toHaveValue('ac');
+});
+
+test('mousedown on the keyboard background is default-prevented so focus stays', () => {
+  render(<Harness />);
+  const kb = screen.getByRole('group', { name: 'On-screen keyboard' });
+  expect(fireEvent.mouseDown(kb)).toBe(false);
+});
