@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { vi } from 'vitest';
 import JukeboxFooterStrip from './JukeboxFooterStrip';
 
@@ -65,4 +65,36 @@ test('the settings gear calls onOpenSettings and is compact', () => {
   fireEvent.click(gear);
   expect(onOpenSettings).toHaveBeenCalledTimes(1);
   expect(gear).toHaveClass('jukebox-footer-gear');
+});
+
+describe('buffering spinner', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  test('is hidden when not buffering', () => {
+    render(<JukeboxFooterStrip onOpenQueue={vi.fn()} />);
+    act(() => { vi.advanceTimersByTime(2000); });
+    expect(screen.queryByTestId('play-spinner')).not.toBeInTheDocument();
+  });
+
+  test('appears only after the delay, and play stays clickable', () => {
+    setState({ isBuffering: true });
+    render(<JukeboxFooterStrip onOpenQueue={vi.fn()} />);
+    expect(screen.queryByTestId('play-spinner')).not.toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(500); });
+    expect(screen.getByTestId('play-spinner')).toBeInTheDocument();
+    const btn = screen.getByRole('button', { name: 'Play' });
+    expect(btn).toBeEnabled();
+    fireEvent.click(btn);
+    expect(actions.togglePlayPause).toHaveBeenCalledTimes(1);
+  });
+
+  test('goes away when buffering ends', () => {
+    setState({ isBuffering: true });
+    const { rerender } = render(<JukeboxFooterStrip onOpenQueue={vi.fn()} />);
+    act(() => { vi.advanceTimersByTime(500); });
+    setState({ isBuffering: false });
+    rerender(<JukeboxFooterStrip onOpenQueue={vi.fn()} />);
+    expect(screen.queryByTestId('play-spinner')).not.toBeInTheDocument();
+  });
 });
