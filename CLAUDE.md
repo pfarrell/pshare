@@ -78,7 +78,7 @@ Images are served externally: `https://patf.net/images/` in production, `/images
 - `Home` — random artists or albums grid (controlled by `homeModeStore`), tag-filtered via `tagFilterStore`
 - `Artist` (`/artist/:id`) — fetches `getArtist(id)` → `{ artist, summary, albums }`; clicking artist name reloads
 - `Album` (`/album/:id`) — fetches `getAlbum(id)` → `{ artist, album, tracks, summary }`; clicking album title reloads
-- `Search` (`/search?q=...`) — fetches `search(query)` → `{ artists, albums, tracks, playlists }`; also fires `searchSpotify(query)` in parallel (first page only, never blocking local results) and renders a link-out-only "From Spotify" section (`SpotifyResults`) below them, de-duped against local results via `utils/spotifyDedupe.js` and silently omitted when unconfigured or on any error
+- `Search` (`/search?q=...`) — fetches `search(query)` → `{ artists, albums, tracks, playlists }`; also fires `searchSpotify(query)` in parallel (first page only, never blocking local results) and renders a link-out-only "From Spotify" section (`SpotifyResults`) below them, hiding anything the backend matched to the library (non-null `localId`, filtered in `utils/spotifyResults.js`) and silently omitted when unconfigured or on any error; a "Spotify" pill (only when Spotify returned results) switches to Spotify-only mode, hiding local results and showing every Spotify item including library matches
 - `Library` — user's personal library view
 - `Playlists` — list all playlists
 - `Playlist` — single playlist with track list
@@ -126,7 +126,7 @@ Images are served externally: `https://patf.net/images/` in production, `/images
 - `auth` (`/auth`) — login, logout, signup, `/auth/me`, default-tag update
 - `artists` (`/artists`, `/artist`) — list, random (tag-filterable), detail; singular alias used by frontend
 - `albums` (`/albums`, `/album`) — list, random (tag-filterable), detail; singular alias
-- `search` (`/search`) — full-text search across artists, albums, tracks, playlists
+- `search` (`/search`) — full-text search across artists, albums, tracks, playlists; `/search/spotify` (experimental, #72) drops query-unrelated Spotify artists and tags every Spotify item with `localId` from a whole-library exact-normalized-name match (`services/spotifyLibraryMatch.ts`)
   - `GET /search/spotify?q=` — Spotify catalog search (Client Credentials, `services/spotify.ts`); returns `{ configured, tracks, albums, artists }`, `configured: false` with empty lists when `SPOTIFY_CLIENT_ID`/`SPOTIFY_CLIENT_SECRET` are unset; 429 passthrough with `retryAfter`, 502 on other upstream errors
 - `streams` (`/stream`) — audio file streaming
 - `logs` (`/log`) — playback event logging; admin log viewer

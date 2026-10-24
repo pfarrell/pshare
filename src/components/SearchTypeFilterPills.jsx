@@ -7,9 +7,11 @@ const TYPE_LABELS = {
   collection: 'Collections',
 };
 
-const SearchTypeFilterPills = ({ counts, activeTypes, onToggle }) => {
+// `children` are extra pills rendered after the type pills (the Search page
+// passes its Spotify-only pill here); the row renders if either is present.
+const SearchTypeFilterPills = ({ counts, activeTypes, onToggle, children }) => {
   const visibleTypes = TYPE_ORDER.filter((type) => counts[type] > 0);
-  if (visibleTypes.length === 0) return null;
+  if (visibleTypes.length === 0 && !children) return null;
 
   return (
     <div className="search-type-pills">
@@ -23,6 +25,7 @@ const SearchTypeFilterPills = ({ counts, activeTypes, onToggle }) => {
           {TYPE_LABELS[type]} {counts[type]}
         </button>
       ))}
+      {children}
     </div>
   );
 };

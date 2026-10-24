@@ -617,28 +617,43 @@ test('still renders local results when Spotify rejects before the local search r
   errorSpy.mockRestore();
 });
 
-test('hides a Spotify track that matches a local track by normalized title and first artist', async () => {
+test('hides Spotify items the library already has (non-null localId) by default', async () => {
   apiService.search.mockResolvedValue(LOCAL_WITH_TRACK);
   apiService.searchSpotify.mockResolvedValue(spotifyResponse({
     artists: [],
-    albums: [],
-    tracks: [
-      { id: 'dup', name: 'DREAMS!', artists: [{ id: 'f', name: 'fleetwood mac' }], album: { name: 'Rumours', imageUrl: null }, durationMs: 1000, externalUrl: 'https://open.spotify.com/track/dup' },
-      { id: 'keep', name: 'Dreams', artists: [{ id: 'c', name: 'The Cranberries' }], album: { name: 'Everybody Else', imageUrl: null }, durationMs: 1000, externalUrl: 'https://open.spotify.com/track/keep' },
+    albums: [
+      { id: 'owned', name: 'OK Computer', artists: [{ id: 'r', name: 'Radiohead' }], localId: 12, externalUrl: 'https://open.spotify.com/album/owned' },
+      { id: 'new', name: 'Hail to the Thief (Live)', artists: [{ id: 'r', name: 'Radiohead' }], localId: null, externalUrl: 'https://open.spotify.com/album/new' },
     ],
+    tracks: [],
   }));
 
-  renderSearch('dreams');
+  renderSearch('radiohead');
 
   await screen.findByText('From Spotify');
-  expect(screen.getByRole('link', { name: 'Open Dreams in Spotify' })).toHaveAttribute('href', 'https://open.spotify.com/track/keep');
-  expect(screen.queryByRole('link', { name: 'Open DREAMS! in Spotify' })).toBeNull();
+  expect(screen.getByText('Hail to the Thief (Live)')).toBeInTheDocument();
+  expect(screen.queryByText('OK Computer')).toBeNull();
 });
 
-test('omits the whole section when every Spotify result is a local duplicate', async () => {
+test('hides a matched Spotify artist but still shows that artist\'s unmatched album', async () => {
   apiService.search.mockResolvedValue(LOCAL_WITH_TRACK);
   apiService.searchSpotify.mockResolvedValue(spotifyResponse({
-    artists: [{ id: 'r', name: 'Local Artist', imageUrl: null, externalUrl: 'https://open.spotify.com/artist/r' }],
+    artists: [{ id: 'r', name: 'Radiohead', imageUrl: null, externalUrl: 'https://open.spotify.com/artist/r', localId: 3 }],
+    albums: [{ id: 'new', name: 'Unowned Album', artists: [{ id: 'r', name: 'Radiohead' }], localId: null, externalUrl: 'https://open.spotify.com/album/new' }],
+    tracks: [],
+  }));
+
+  renderSearch('radiohead');
+
+  await screen.findByText('From Spotify');
+  expect(screen.queryByRole('link', { name: 'Open Radiohead in Spotify' })).toBeNull();
+  expect(screen.getByRole('link', { name: 'Open Unowned Album in Spotify' })).toBeInTheDocument();
+});
+
+test('omits the whole section when every Spotify result is already in the library', async () => {
+  apiService.search.mockResolvedValue(LOCAL_WITH_TRACK);
+  apiService.searchSpotify.mockResolvedValue(spotifyResponse({
+    artists: [{ id: 'r', name: 'Local Artist', imageUrl: null, externalUrl: 'https://open.spotify.com/artist/r', localId: 1 }],
     albums: [],
     tracks: [],
   }));
@@ -648,6 +663,102 @@ test('omits the whole section when every Spotify result is a local duplicate', a
   await screen.findByText('Local Artist');
   await waitFor(() => expect(screen.queryByTestId('spotify-loading')).toBeNull());
   expect(screen.queryByText('From Spotify')).toBeNull();
+  // ...but the Spotify pill is still offered, since there are Spotify results to show.
+  expect(screen.getByRole('button', { name: 'Spotify 1' })).toBeInTheDocument();
+});
+
+// ---------------------------------------------------------------------------
+// "Spotify" (Spotify-only) pill
+// ---------------------------------------------------------------------------
+
+test('shows no Spotify pill when Spotify is unconfigured, failed, or returned nothing', async () => {
+  apiService.search.mockResolvedValue(LOCAL_WITH_TRACK);
+  apiService.searchSpotify.mockResolvedValue(spotifyResponse({ artists: [], albums: [], tracks: [] }));
+
+  renderSearch('nothing');
+
+  await screen.findByText('Local Artist');
+  await waitFor(() => expect(screen.queryByTestId('spotify-loading')).toBeNull());
+  expect(screen.queryByRole('button', { name: /^Spotify/ })).toBeNull();
+  // The local type pills are unaffected.
+  expect(screen.getByRole('button', { name: 'Artists 1' })).toBeInTheDocument();
+});
+
+test('shows no Spotify pill when Spotify is not configured, even if lists are non-empty', async () => {
+  apiService.search.mockResolvedValue(LOCAL_WITH_TRACK);
+  apiService.searchSpotify.mockResolvedValue(spotifyResponse({ configured: false }));
+
+  renderSearch('unconfigured');
+
+  await screen.findByText('Local Artist');
+  await waitFor(() => expect(screen.queryByTestId('spotify-loading')).toBeNull());
+  expect(screen.queryByRole('button', { name: /^Spotify/ })).toBeNull();
+});
+
+test('the Spotify pill hides local results and shows every Spotify result, library matches included', async () => {
+  apiService.search.mockResolvedValue(LOCAL_WITH_TRACK);
+  apiService.searchSpotify.mockResolvedValue(spotifyResponse({
+    albums: [
+      { id: 'owned', name: 'Owned Album', artists: [{ id: 'x', name: 'X' }], localId: 12, externalUrl: 'https://open.spotify.com/album/owned' },
+      { id: 'new', name: 'New Album', artists: [{ id: 'x', name: 'X' }], localId: null, externalUrl: 'https://open.spotify.com/album/new' },
+    ],
+  }));
+
+  renderSearch('spot');
+
+  await screen.findByText('From Spotify');
+  expect(screen.queryByText('Owned Album')).toBeNull();
+  const pill = screen.getByRole('button', { name: 'Spotify 4' });
+  expect(pill).not.toHaveClass('active');
+
+  fireEvent.click(pill);
+
+  expect(pill).toHaveClass('active');
+  expect(screen.queryByText('Local Artist')).toBeNull();
+  expect(screen.queryByText('Results (1)')).toBeNull();
+  expect(screen.queryByText('Tracks (1)')).toBeNull();
+  expect(screen.getByText('Owned Album')).toBeInTheDocument();
+  expect(screen.getByText('New Album')).toBeInTheDocument();
+  expect(screen.getByText('Spotify Artist')).toBeInTheDocument();
+  // Type pills stay available to switch back.
+  expect(screen.getByRole('button', { name: 'Artists 1' })).toBeInTheDocument();
+
+  fireEvent.click(pill);
+
+  expect(screen.getByText('Local Artist')).toBeInTheDocument();
+  expect(screen.queryByText('Owned Album')).toBeNull();
+});
+
+test('choosing a type pill turns Spotify-only off', async () => {
+  apiService.search.mockResolvedValue(LOCAL_WITH_TRACK);
+  apiService.searchSpotify.mockResolvedValue(spotifyResponse());
+
+  renderSearch('spot');
+
+  await screen.findByText('From Spotify');
+  fireEvent.click(screen.getByRole('button', { name: 'Spotify 3' }));
+  expect(screen.queryByText('Local Artist')).toBeNull();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Artists 1' }));
+
+  expect(screen.getByText('Local Artist')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Spotify 3' })).not.toHaveClass('active');
+  expect(screen.getByRole('button', { name: 'Artists 1' })).toHaveClass('active');
+});
+
+test('in Spotify-only mode the local "No results" message is hidden', async () => {
+  apiService.search.mockResolvedValue({ data: { results: [], tracks: [], count: 0 } });
+  apiService.searchSpotify.mockResolvedValue(spotifyResponse());
+
+  renderSearch('onlyspotify');
+
+  await screen.findByText('From Spotify');
+  expect(screen.getByText('No results found for "onlyspotify"')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Spotify 3' }));
+
+  expect(screen.queryByText('No results found for "onlyspotify"')).toBeNull();
+  expect(screen.getByText('Spotify Track')).toBeInTheDocument();
 });
 
 test('tolerates null imageUrl, empty/missing artists arrays, and missing fields', async () => {

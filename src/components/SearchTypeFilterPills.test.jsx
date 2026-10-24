@@ -44,3 +44,13 @@ test('clicking a pill calls onToggle with that type', () => {
   fireEvent.click(screen.getByText('Albums 2'));
   expect(onToggle).toHaveBeenCalledWith('album');
 });
+
+test('renders extra pills passed as children, even when every count is zero', () => {
+  const zeroCounts = { album: 0, artist: 0, playlist: 0, collection: 0 };
+  render(
+    <SearchTypeFilterPills counts={zeroCounts} activeTypes={new Set()} onToggle={vi.fn()}>
+      <button type="button">Extra</button>
+    </SearchTypeFilterPills>
+  );
+  expect(screen.getByRole('button', { name: 'Extra' })).toBeInTheDocument();
+});

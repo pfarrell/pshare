@@ -10,7 +10,7 @@ import SearchResultCard from '../components/SearchResultCard';
 import SearchTypeFilterPills from '../components/SearchTypeFilterPills';
 import CardGrid from '../components/CardGrid';
 import SpotifyResults from '../components/SpotifyResults';
-import { filterSpotifyDuplicates } from '../utils/spotifyDedupe';
+import { visibleSpotifyResults, spotifyItemCount } from '../utils/spotifyResults';
 
 const EMPTY_COUNTS = { album: 0, artist: 0, playlist: 0, collection: 0 };
 const PAGE_SIZE = 30;
@@ -47,6 +47,9 @@ const Search = () => {
   // Spotify results for the current query: { loading, data } where data is
   // the /search/spotify body, or null when unconfigured/failed/not yet back.
   const [spotify, setSpotify] = useState({ loading: false, data: null });
+  // "Spotify" pill: show only Spotify results, including ones the library
+  // already has (see toggleSpotifyOnly). Per-search, never persisted.
+  const [spotifyOnly, setSpotifyOnly] = useState(false);
 
   // Fired alongside (not after) the local search and never awaited, so local
   // results render as soon as they arrive. First page only — loadMore never
@@ -78,6 +81,7 @@ const Search = () => {
     setLoading(true);
     setError(null);
     setLoadMoreError(null);
+    setSpotifyOnly(false);
     fetchSpotify(searchQuery, searchGenerationRef.current);
 
     try {
@@ -169,7 +173,17 @@ const Search = () => {
     return () => observer.disconnect();
   }, [hasMore, loadMore]);
 
+  // The Spotify pill and the type pills are mutually exclusive views rather
+  // than combinable filters (type pills only apply to local results, which
+  // Spotify-only mode hides): turning Spotify on clears the type selection,
+  // and picking a type pill turns Spotify-only off.
+  const toggleSpotifyOnly = () => {
+    if (!spotifyOnly) setActiveTypes(new Set());
+    setSpotifyOnly(!spotifyOnly);
+  };
+
   const toggleType = (type) => {
+    setSpotifyOnly(false);
     setActiveTypes((prev) => {
       const next = new Set(prev);
       if (next.has(type)) {
@@ -214,13 +228,32 @@ const Search = () => {
   const totalResultCount = activeTypes.size === 0
     ? Object.values(resultCounts).reduce((sum, n) => sum + n, 0)
     : [...activeTypes].reduce((sum, type) => sum + (resultCounts[type] || 0), 0);
+  // spotify.data is only non-null when Spotify is configured and responded.
+  const spotifyCount = spotifyItemCount(spotify.data);
+  const showLocal = !spotifyOnly;
 
   return (
     <div style={{ padding: '.5rem', maxWidth: '1400px', margin: '0 auto' }}>
+      <SearchTypeFilterPills
+        counts={allResults.length > 0 ? resultCounts : EMPTY_COUNTS}
+        activeTypes={activeTypes}
+        onToggle={toggleType}
+      >
+        {spotifyCount > 0 && (
+          <button
+            type="button"
+            className={`search-type-pill${spotifyOnly ? ' active' : ''}`}
+            aria-pressed={spotifyOnly}
+            onClick={toggleSpotifyOnly}
+          >
+            Spotify {spotifyCount}
+          </button>
+        )}
+      </SearchTypeFilterPills>
+
       {/* Ranked results: albums, artists, playlists, collections, interleaved by confidence */}
-      {allResults.length > 0 && (
+      {showLocal && allResults.length > 0 && (
         <div className="search-section">
-          <SearchTypeFilterPills counts={resultCounts} activeTypes={activeTypes} onToggle={toggleType} />
           <h2 className="search-section-title">Results ({totalResultCount})</h2>
           <div className="artist-grid" style={{ padding: '0' }}>
             <CardGrid>
@@ -248,7 +281,7 @@ const Search = () => {
       )}
 
       {/* Tracks Section */}
-      {results.tracks && results.tracks.length > 0 && (
+      {showLocal && results.tracks && results.tracks.length > 0 && (
         <div className="search-section">
           <h2 className="search-section-title">Tracks ({results.tracks.length})</h2>
           <div className="track-list">
@@ -260,17 +293,18 @@ const Search = () => {
       )}
 
       {/* No results */}
-      {results.results?.length === 0 && results.tracks?.length === 0 && (
+      {showLocal && results.results?.length === 0 && results.tracks?.length === 0 && (
         <div style={{ textAlign: 'center', padding: '3rem' }}>
           <p style={{ color: 'var(--color-text-muted)' }}>No results found for "{query}"</p>
         </div>
       )}
 
-      {/* External Spotify results, minus anything already in the library */}
+      {/* External Spotify results: by default minus anything the library
+          already has (server-matched localId); everything in Spotify-only mode */}
       {spotify.loading ? (
         <SpotifyResults loading />
       ) : spotify.data && (
-        <SpotifyResults {...filterSpotifyDuplicates(spotify.data, results)} />
+        <SpotifyResults {...visibleSpotifyResults(spotify.data, { includeLibraryMatches: spotifyOnly })} />
       )}
     </div>
   );

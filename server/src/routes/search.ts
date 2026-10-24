@@ -5,6 +5,7 @@ import { logService } from '../services/logService.js'
 import { extractIpAddress } from '../utils/requestIp.js'
 import { resolveProfileTagIds } from '../services/profileFilter.js'
 import { isSpotifyConfigured, searchSpotify, SpotifyRateLimitError } from '../services/spotify.js'
+import { filterRelevantArtists, spotifyLibraryMatcher, withNullLocalIds, type AnnotatedSpotifyResult } from '../services/spotifyLibraryMatch.js'
 
 const search = new Hono()
 
@@ -173,13 +174,25 @@ search.get('/', handleSearchRequest)
 // below local results. Uses the raw query (quotes stripped), not the
 // stop-word-filtered one, since Spotify does its own matching. Unconfigured
 // is a normal 200 with empty lists so the frontend can just hide the section.
+// Every item carries `localId` (matching library row, or null) so the
+// frontend can hide what the library already owns; artists unrelated to the
+// query are dropped. A failed library lookup degrades to localId: null.
 search.get('/spotify', async (c) => {
   const { query } = parseQuoted(c.req.query('q') ?? '')
   if (!query) return c.json({ error: 'Missing q' }, 400)
   if (!isSpotifyConfigured()) return c.json({ configured: false, tracks: [], albums: [], artists: [] })
 
   try {
-    const { tracks, albums, artists } = await searchSpotify(query)
+    const raw = await searchSpotify(query)
+    const relevant = { ...raw, artists: filterRelevantArtists(raw.artists, query) }
+    let annotated: AnnotatedSpotifyResult
+    try {
+      annotated = await spotifyLibraryMatcher.annotate(relevant)
+    } catch (err) {
+      console.error('Spotify library match failed:', err)
+      annotated = withNullLocalIds(relevant)
+    }
+    const { tracks, albums, artists } = annotated
     return c.json({ configured: true, tracks, albums, artists })
   } catch (err) {
     if (err instanceof SpotifyRateLimitError) {
