@@ -1,5 +1,6 @@
 // Queue entries are either local library tracks (numeric id + stream url) or Spotify
-// entries (uri only: no numeric id, no url, no artist.id / album.id).
+// entries (uri only: no numeric id, no url, no artist.id / album.id; the Spotify
+// album id is album.spotifyId, for the Spotify play log).
 export const isSpotifyTrack = (track) => track?.source === 'spotify';
 
 // Stable React key / identity for a queue entry.
@@ -22,7 +23,7 @@ export const toSpotifyQueueTrack = (item, album) => {
     spotifyId: item.id,
     title: item.name ?? '',
     artist: { name: artistName },
-    album: { title: item.album?.name ?? album?.name ?? '' },
+    album: { title: item.album?.name ?? album?.name ?? '', spotifyId: item.album?.id || album?.id || null },
     imageUrl: item.album?.imageUrl ?? album?.imageUrl ?? null,
     duration: Number.isFinite(durationMs) ? durationMs / 1000 : 0,
   };

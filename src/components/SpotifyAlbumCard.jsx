@@ -5,6 +5,7 @@ import PlayButton from './PlayButton';
 import { SpotifyLogo } from './OpenInSpotify';
 import { useQueueActions } from '../hooks/useQueueActions';
 import { albumQueueTracks } from '../player/spotify/albumQueue';
+import { apiService } from '../services/api';
 
 const FALLBACK_COVER = `${import.meta.env.BASE_URL}icons/icon-192.png`;
 
@@ -12,9 +13,19 @@ const FALLBACK_COVER = `${import.meta.env.BASE_URL}icons/icon-192.png`;
 // AlbumCard, plus a small Spotify logo in the cover corner. No context menu,
 // favorite or collection actions — those need a library album id. Spotify
 // adds pass no queueSource, so end-of-queue continuation never fires.
+// An album the library owns (non-null localId, from the Spotify artist page)
+// opens and plays the library copy instead, without the Spotify marker.
 const SpotifyAlbumCard = ({ album, localArtistId }) => {
   const navigate = useNavigate();
-  const queue = useQueueActions(albumQueueTracks(album), { errorLabel: 'Failed to play Spotify album' });
+  const localId = Number.isInteger(album?.localId) ? album.localId : null;
+  const queue = useQueueActions(
+    localId !== null
+      ? () => apiService.getAlbum(localId).then((response) => response.data.tracks)
+      : albumQueueTracks(album),
+    localId !== null
+      ? { queueSource: { type: 'album', id: localId }, errorLabel: 'Failed to play album' }
+      : { errorLabel: 'Failed to play Spotify album' },
+  );
   const title = typeof album?.name === 'string' ? album.name : '';
   const year = typeof album?.releaseYear === 'string' ? album.releaseYear : '';
   const imageUrl = typeof album?.imageUrl === 'string' && album.imageUrl ? album.imageUrl : FALLBACK_COVER;
@@ -25,9 +36,11 @@ const SpotifyAlbumCard = ({ album, localArtistId }) => {
       imageUrl={imageUrl}
       imageAlt={title}
       cardImageStyle={{ cursor: 'pointer' }}
-      imageBadge={<SpotifyLogo className="spotify-album-marker" />}
-      listSubtitle={['Album', year, 'Spotify'].filter(Boolean).join(' · ')}
-      onClick={() => navigate(`/spotify/album/${album.id}`, { state: { localArtistId, year } })}
+      imageBadge={localId === null ? <SpotifyLogo className="spotify-album-marker" /> : null}
+      listSubtitle={['Album', year, localId === null ? 'Spotify' : ''].filter(Boolean).join(' · ')}
+      onClick={() => (localId !== null
+        ? navigate(`/album/${localId}`)
+        : navigate(`/spotify/album/${album.id}`, { state: { localArtistId, year } }))}
       play={{
         loading: queue.loading,
         onPlay: queue.play,

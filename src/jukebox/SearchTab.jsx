@@ -370,9 +370,9 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
       {!isEmpty && !error && results !== null && !noResults && effectiveFilter === 'playlists' && renderPlaylists(playlistResults)}
       {!isEmpty && !error && results !== null && !noResults && effectiveFilter === 'collections' && renderCollections(collectionResults)}
       {!isEmpty && !error && results !== null && !noResults && effectiveFilter === 'tracks' && renderTracks(trackResults)}
-      {/* #72: Spotify albums/tracks the library doesn't have, under All (or when nothing local matched). */}
+      {/* #72: Spotify artists/albums/tracks the library doesn't have, under All (or when nothing local matched). */}
       {!isEmpty && !error && results !== null && (effectiveFilter === 'all' || noResults) && (
-        <JukeboxSpotifySection query={searchedQuery} onEnqueue={onEnqueue} />
+        <JukeboxSpotifySection query={searchedQuery} onEnqueue={onEnqueue} onSelectArtist={onSelectArtist} />
       )}
       </div>
     </div>

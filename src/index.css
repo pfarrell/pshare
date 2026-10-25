@@ -4704,6 +4704,15 @@ body:has(.jukebox-app) {
   color: var(--color-text-muted);
 }
 
+.spotify-result-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.spotify-result-link:hover {
+  text-decoration: underline;
+}
+
 .spotify-album-unavailable {
   padding: 2rem 1rem;
   text-align: center;

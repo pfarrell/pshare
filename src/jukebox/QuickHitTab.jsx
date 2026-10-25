@@ -3,6 +3,8 @@ import { apiService } from '../services/api';
 import JukeboxAlbumTile from './JukeboxAlbumTile';
 import JukeboxPlaylistTile from './JukeboxPlaylistTile';
 import JukeboxCollectionTile from './JukeboxCollectionTile';
+import { useCanPlaySpotify } from '../player/spotify/useCanPlaySpotify';
+import { SpotifyLogo } from '../components/OpenInSpotify';
 
 const GRID_SIZE = 20;
 
@@ -13,17 +15,44 @@ const timeOf = (item) => {
   return Number.isNaN(t) ? -Infinity : t;
 };
 
-const merge = (albums, playlists, collections) =>
-  [
-    ...albums.map((data) => ({ kind: 'album', data })),
-    ...playlists.map((data) => ({ kind: 'playlist', data })),
-    ...collections.map((data) => ({ kind: 'collection', data })),
-  ]
-    .sort((a, b) => timeOf(b.data) - timeOf(a.data))
-    .slice(0, GRID_SIZE);
+const byTime = (items) => items.sort((a, b) => timeOf(b.data) - timeOf(a.data)).slice(0, GRID_SIZE);
+
+const merge = (albums, playlists, collections) => byTime([
+  ...albums.map((data) => ({ kind: 'album', data })),
+  ...playlists.map((data) => ({ kind: 'playlist', data })),
+  ...collections.map((data) => ({ kind: 'collection', data })),
+]);
+
+// #72: recently played Spotify albums (GET /spotify/plays/recent-albums) as
+// Spotify album tiles; JukeboxBrowsePanel routes source: 'spotify' albums to
+// the Spotify tracks panel. Only while the kiosk can play Spotify.
+const spotifyTileAlbum = (a) => ({
+  id: a.id,
+  title: typeof a.name === 'string' ? a.name : '',
+  source: 'spotify',
+  imageUrl: typeof a.imageUrl === 'string' ? a.imageUrl : null,
+  artist: { name: typeof a.artistName === 'string' ? a.artistName : '' },
+});
+
+const useRecentSpotifyAlbums = (canPlay) => {
+  const [albums, setAlbums] = useState([]);
+  useEffect(() => {
+    if (!canPlay) return undefined;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => apiService.getRecentSpotifyAlbums(GRID_SIZE))
+      .then((response) => {
+        if (cancelled || !Array.isArray(response?.data)) return;
+        setAlbums(response.data.filter((a) => a && typeof a.id === 'string' && a.id));
+      })
+      .catch((err) => { if (!cancelled) console.warn('Recent Spotify albums unavailable:', err); });
+    return () => { cancelled = true; };
+  }, [canPlay]);
+  return canPlay ? albums : [];
+};
 
 // A plain vertical grid of tiles, recently played albums, playlists and
-// collections mixed by time: tapping one drills into it via onSelectAlbum /
+// collections (and Spotify albums, #72) mixed by time: tapping one drills into it via onSelectAlbum /
 // onSelectPlaylist / onSelectCollection (owned by JukeboxBrowsePanel, same as
 // a search result's tap). Rendered inside the Recent drawer (see
 // JukeboxRecentsPanel.jsx), which owns the vertical scrolling - there is
@@ -31,6 +60,7 @@ const merge = (albums, playlists, collections) =>
 const QuickHitTab = ({ onSelectAlbum, onSelectPlaylist, onSelectCollection, profileId = null }) => {
   const [items, setItems] = useState(null);
   const [error, setError] = useState(false);
+  const spotifyAlbums = useRecentSpotifyAlbums(useCanPlaySpotify());
 
   const load = () => {
     setError(false);
@@ -66,13 +96,27 @@ const QuickHitTab = ({ onSelectAlbum, onSelectPlaylist, onSelectCollection, prof
     return <div className="jukebox-panel-loading">Loading…</div>;
   }
 
-  if (items.length === 0) {
+  // items is already newest-first and capped, so re-merging with the Spotify
+  // list and capping again gives the overall newest GRID_SIZE.
+  const shown = spotifyAlbums.length > 0
+    ? byTime([...items, ...spotifyAlbums.map((data) => ({ kind: 'spotify-album', data }))])
+    : items;
+
+  if (shown.length === 0) {
     return <p className="jukebox-panel-empty">Nothing played yet</p>;
   }
 
   return (
     <div className="jukebox-album-grid">
-      {items.map(({ kind, data }) => (kind === 'album' ? (
+      {shown.map(({ kind, data }) => (kind === 'spotify-album' ? (
+        <JukeboxAlbumTile
+          key={`spotify-${data.id}`}
+          album={spotifyTileAlbum(data)}
+          imageUrl={typeof data.imageUrl === 'string' ? data.imageUrl : null}
+          badge={<SpotifyLogo className="jukebox-spotify-logo jukebox-album-tile-badge" />}
+          onSelect={onSelectAlbum}
+        />
+      ) : kind === 'album' ? (
         <JukeboxAlbumTile
           key={`album-${data.id}`}
           album={data}

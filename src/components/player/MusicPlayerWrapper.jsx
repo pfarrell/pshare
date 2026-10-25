@@ -3,6 +3,7 @@ import { usePlayerStore } from '../../stores/playerStore';
 import { useAuthStore } from '../../stores/authStore';
 import { usePlayerEngine } from '../../hooks/usePlayerEngine';
 import { useSpotifyPlayback } from '../../player/spotify/useSpotifyPlayback';
+import { useSpotifyPlayLog } from '../../player/spotify/useSpotifyPlayLog';
 import PlaylistDrawer from './PlaylistDrawer';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { formatPlaybackTime } from '../../utils/formatters';
@@ -41,6 +42,7 @@ const MusicPlayerWrapper = ({ className = '' }) => {
   const audioRefB = useRef(null);
   usePlayerEngine(audioRefA, audioRefB);
   useSpotifyPlayback();
+  useSpotifyPlayLog();
 
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const isBuffering = usePlayerStore((s) => s.isBuffering);

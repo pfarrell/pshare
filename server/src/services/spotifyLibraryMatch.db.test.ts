@@ -26,6 +26,7 @@ test('annotate finds artists, albums (primary or artist_albums credit) and appro
   const credited = await createAlbum('lib-credited-album', band.id)
   await db.insertInto('artist_albums').values({ artist_id: guest.id, album_id: credited.id, role: 'featured', order: 1 }).execute()
   const song = await createTrack('lib-song', owned.id, band.id)
+  await createTrack('lib-credited-song', credited.id, band.id)
   const pending = await createTrack('lib-pending-song', owned.id, band.id)
   await db.updateTable('tracks').set({ approved: false }).where('id', '=', pending.id).execute()
 
@@ -48,6 +49,31 @@ test('annotate finds artists, albums (primary or artist_albums credit) and appro
   assert.deepEqual(out.artists.map((a) => a.localId), [band.id, null])
   assert.deepEqual(out.albums.map((a) => a.localId), [owned.id, credited.id, null])
   assert.deepEqual(out.tracks.map((t) => t.localId), [song.id, null])
+})
+
+// Stub rows (no approved tracks) don't appear in local search, so they must not
+// hide the Spotify result either — otherwise the artist shows up nowhere ("sza").
+test('annotate ignores artists and albums with no approved tracks', async () => {
+  const stub = await createArtist('lib-stub')
+  await createAlbum('lib-empty-album', stub.id)
+  const pendingOnly = await createAlbum('lib-pending-album', stub.id)
+  const pending = await createTrack('lib-pending-only', pendingOnly.id, stub.id)
+  await db.updateTable('tracks').set({ approved: false }).where('id', '=', pending.id).execute()
+  const solo = await createArtist('lib-solo')
+  const host = await createArtist('lib-host')
+  const hostAlbum = await createAlbum('lib-host-album', host.id)
+  await createTrack('lib-solo-song', hostAlbum.id, solo.id) // via tracks.artist_id only
+
+  const out = await spotifyLibraryMatcher.annotate({
+    artists: [spotifyArtist(fixtureName('lib-stub')), spotifyArtist(fixtureName('lib-solo'))],
+    albums: [
+      spotifyAlbum(fixtureName('lib-empty-album'), [fixtureName('lib-stub')]),
+      spotifyAlbum(fixtureName('lib-pending-album'), [fixtureName('lib-stub')]),
+    ],
+    tracks: [],
+  })
+  assert.deepEqual(out.artists.map((a) => a.localId), [null, solo.id])
+  assert.deepEqual(out.albums.map((a) => a.localId), [null, null])
 })
 
 test('annotate on an empty result returns empty lists', async () => {

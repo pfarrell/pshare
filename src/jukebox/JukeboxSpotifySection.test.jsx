@@ -99,4 +99,20 @@ describe('JukeboxSpotifySection', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(screen.queryByText('Cruel Summer')).toBeNull();
   });
+
+  test('shows unowned Spotify artists; tapping one opens it as a Spotify artist', async () => {
+    const onSelectArtist = vi.fn();
+    apiService.searchSpotify.mockResolvedValue({ data: {
+      ...searchBody,
+      artists: [
+        { id: 'sza1', name: 'SZA', imageUrl: null, localId: null },
+        { id: 'owned', name: 'Taylor Swift', imageUrl: null, localId: 3 },
+      ],
+    } });
+    render(<JukeboxSpotifySection query="sza" onSelectArtist={onSelectArtist} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open SZA' }));
+    expect(onSelectArtist).toHaveBeenCalledWith({ id: 'sza1', name: 'SZA', source: 'spotify' });
+    expect(screen.queryByRole('button', { name: 'Open Taylor Swift' })).toBeNull();
+    expect(addTracks).not.toHaveBeenCalled();
+  });
 });

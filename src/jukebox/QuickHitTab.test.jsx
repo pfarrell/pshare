@@ -8,14 +8,19 @@ vi.mock('../services/api', () => ({
     getRecentAlbums: vi.fn(),
     getRecentPlaylists: vi.fn(),
     getRecentCollections: vi.fn(),
+    getRecentSpotifyAlbums: vi.fn(),
     getImageUrl: vi.fn(() => '/img/sm/x.jpg'),
   },
 }));
+
+const canPlay = { value: false };
+vi.mock('../player/spotify/useCanPlaySpotify', () => ({ useCanPlaySpotify: () => canPlay.value }));
 
 import { apiService } from '../services/api';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  canPlay.value = false;
   apiService.getRecentPlaylists.mockResolvedValue({ data: [] });
   apiService.getRecentCollections.mockResolvedValue({ data: [] });
 });
@@ -183,4 +188,37 @@ test('still shows recent albums when the collections request fails', async () =>
   apiService.getRecentCollections.mockRejectedValue(new Error('boom'));
   renderTab();
   expect(await screen.findByText('Still Here')).toBeInTheDocument();
+});
+
+describe('#72 Spotify albums', () => {
+  const spotifyAlbum = { id: 'sos1', name: 'SOS', imageUrl: 'https://i.scdn.co/sos', artistName: 'SZA', last_played: '2026-10-25T12:00:00Z' };
+  const localAlbum = { id: 1, title: 'Album One', image_path: 'a.jpg', artist: { id: 1, name: 'Artist One' }, track_count: 10, last_played: '2026-10-25T10:00:00Z' };
+
+  test('mixed in by time when the kiosk can play Spotify; a tap selects a Spotify album', async () => {
+    canPlay.value = true;
+    apiService.getRecentAlbums.mockResolvedValue({ data: [localAlbum] });
+    apiService.getRecentSpotifyAlbums.mockResolvedValue({ data: [spotifyAlbum] });
+    const onSelectAlbum = vi.fn();
+    const { container } = renderTab({ onSelectAlbum });
+    await waitFor(() => screen.getByText('SOS'));
+    const titles = [...container.querySelectorAll('.jukebox-album-tile-title')].map((n) => n.textContent);
+    expect(titles).toEqual(['SOS', 'Album One']);
+    fireEvent.click(screen.getByText('SOS'));
+    expect(onSelectAlbum).toHaveBeenCalledWith({ id: 'sos1', title: 'SOS', source: 'spotify', imageUrl: 'https://i.scdn.co/sos', artist: { name: 'SZA' } });
+  });
+
+  test('not requested when the kiosk cannot play Spotify; a failure leaves the local list alone', async () => {
+    apiService.getRecentAlbums.mockResolvedValue({ data: [localAlbum] });
+    renderTab();
+    await waitFor(() => screen.getByText('Album One'));
+    expect(apiService.getRecentSpotifyAlbums).not.toHaveBeenCalled();
+
+    canPlay.value = true;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    apiService.getRecentSpotifyAlbums.mockRejectedValue(new Error('500'));
+    renderTab();
+    await waitFor(() => expect(apiService.getRecentSpotifyAlbums).toHaveBeenCalled());
+    expect(screen.getAllByText('Album One').length).toBeGreaterThan(0);
+    warn.mockRestore();
+  });
 });

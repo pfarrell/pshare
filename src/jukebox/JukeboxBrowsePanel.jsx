@@ -4,6 +4,7 @@ import JukeboxNextUpTab from './JukeboxNextUpTab';
 import JukeboxSettingsTab from './JukeboxSettingsTab';
 import JukeboxAiMixTab from './JukeboxAiMixTab';
 import JukeboxArtistView from './JukeboxArtistView';
+import JukeboxSpotifyArtistView from './JukeboxSpotifyArtistView';
 import JukeboxCollectionView from './JukeboxCollectionView';
 import JukeboxTracksPanel from './JukeboxTracksPanel';
 import JukeboxSpotifyTracksPanel from './JukeboxSpotifyTracksPanel';
@@ -111,7 +112,15 @@ const JukeboxBrowsePanel = ({ activeDestination, onSelectDestination, onEnqueue,
   return (
     <>
       <div className="jukebox-browse-panel" ref={panelRef} hidden={!open}>
-        {currentView?.type === 'artist' && (
+        {/* #72: a Spotify artist (from the search tab's Spotify section) has no library id. */}
+        {currentView?.type === 'artist' && currentView.data?.source === 'spotify' && (
+          <JukeboxSpotifyArtistView
+            artist={currentView.data}
+            onSelectAlbum={selectAlbum}
+            onBack={popView}
+          />
+        )}
+        {currentView?.type === 'artist' && currentView.data?.source !== 'spotify' && (
           <JukeboxArtistView
             artist={currentView.data}
             onSelectAlbum={selectAlbum}

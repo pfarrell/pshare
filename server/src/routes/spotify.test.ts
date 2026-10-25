@@ -174,3 +174,83 @@ test('artist albums: 429 passes through with Retry-After', async () => {
   assert.equal(res.headers.get('Retry-After'), '7')
   assert.equal((await res.json()).retryAfter, 7)
 })
+
+// --- GET /spotify/catalog/artists/:spotifyId/albums (Spotify-only artist view) ---
+const catalogApi = (opts: { artist?: unknown; artistStatus?: number; albums?: unknown[] } = {}) => (url: string) => {
+  if (/\/artists\/[^/?]+$/.test(url.split('?')[0])) {
+    if (opts.artistStatus) return new Response('', { status: opts.artistStatus })
+    return new Response(JSON.stringify(opts.artist ?? { id: 'sza1', name: 'SZA', images: [{ url: 'http://img', width: 640 }], external_urls: { spotify: 'http://open/sza' } }))
+  }
+  return new Response(JSON.stringify({ items: opts.albums ?? [], next: null }))
+}
+
+test('catalog artist albums: 400 for a bad id, configured:false when env unset', async () => {
+  stubArtistSpotify(catalogApi())
+  assert.equal((await app.request('/spotify/catalog/artists/a-b/albums')).status, 400)
+  delete process.env.SPOTIFY_CLIENT_ID
+  const res = await app.request('/spotify/catalog/artists/sza1/albums')
+  assert.deepEqual(await res.json(), { configured: false, spotifyArtist: null, albums: [] })
+  assert.equal(apiCalls.length, 0)
+})
+
+test('catalog artist albums: every album, owned ones carrying their localId', async () => {
+  ownedAlbumIds = new Set(['owned'])
+  stubArtistSpotify(catalogApi({ albums: [albumRaw('owned', 'Ctrl'), albumRaw('new', 'SOS')] }))
+  const body = await (await app.request('/spotify/catalog/artists/sza1/albums')).json()
+  assert.equal(body.configured, true)
+  assert.deepEqual(body.spotifyArtist, { id: 'sza1', name: 'SZA', imageUrl: 'http://img', externalUrl: 'http://open/sza' })
+  assert.deepEqual(body.albums.map((a: any) => [a.id, a.localId]), [['owned', 77], ['new', null]])
+})
+
+test('catalog artist albums: cached per Spotify id, matching re-runs', async () => {
+  stubArtistSpotify(catalogApi({ albums: [albumRaw('a', 'SOS')] }))
+  await app.request('/spotify/catalog/artists/sza1/albums')
+  const callsAfterFirst = apiCalls.length
+  await app.request('/spotify/catalog/artists/sza1/albums')
+  assert.equal(apiCalls.length, callsAfterFirst)
+  assert.equal(matcherCalls, 2)
+})
+
+test('catalog artist albums: 404 when Spotify has no such artist', async () => {
+  stubArtistSpotify(catalogApi({ artistStatus: 404 }))
+  assert.equal((await app.request('/spotify/catalog/artists/nope/albums')).status, 404)
+})
+
+// --- POST /spotify/plays, GET /spotify/plays/recent-albums (spotifyPlays stubbed) ---
+import { spotifyPlays } from '../services/spotifyPlays.js'
+
+const recorded: unknown[] = []
+mock.method(spotifyPlays, 'record', async (play: unknown, meta: unknown) => { recorded.push({ play, meta }) })
+let recentSizes: number[] = []
+mock.method(spotifyPlays, 'recentAlbums', async (size: number) => {
+  recentSizes.push(size)
+  return [{ id: 'sos1', name: 'SOS', imageUrl: null, artistName: 'SZA', last_played: '2026-10-25T00:00:00.000Z' }]
+})
+
+const postPlay = (body: unknown) => app.request('/spotify/plays', {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+})
+
+test('plays: records a valid Spotify track play', async () => {
+  recorded.length = 0
+  const res = await postPlay({ trackUri: 'spotify:track:abc', trackName: 'Snooze', albumSpotifyId: 'sos1', albumName: 'SOS' })
+  assert.equal(res.status, 204)
+  assert.equal(recorded.length, 1)
+  assert.equal((recorded[0] as any).play.albumSpotifyId, 'sos1')
+  assert.equal((recorded[0] as any).meta.userId, null)
+})
+
+test('plays: 400 for a non-track uri or a non-JSON body, nothing recorded', async () => {
+  recorded.length = 0
+  assert.equal((await postPlay({ trackUri: 'spotify:album:abc' })).status, 400)
+  assert.equal((await app.request('/spotify/plays', { method: 'POST', body: 'nope' })).status, 400)
+  assert.equal(recorded.length, 0)
+})
+
+test('plays: recent albums, size defaulted and capped', async () => {
+  recentSizes = []
+  const body = await (await app.request('/spotify/plays/recent-albums')).json()
+  assert.deepEqual(body.map((a: any) => a.id), ['sos1'])
+  await app.request('/spotify/plays/recent-albums?size=5000')
+  assert.deepEqual(recentSizes, [20, 200])
+})

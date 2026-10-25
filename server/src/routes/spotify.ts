@@ -2,17 +2,21 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import {
-  getSpotifyAlbumTracks, findSpotifyArtistByName, getSpotifyArtistAlbums, isSpotifyConfigured,
+  getSpotifyAlbumTracks, findSpotifyArtistByName, getSpotifyArtist, getSpotifyArtistAlbums, isSpotifyConfigured,
   SpotifyApiError, SpotifyRateLimitError,
 } from '../services/spotify.js'
+import type { SpotifyArtistAlbum } from '../services/spotify.js'
 import {
   createSpotifyArtistAlbumsCache, SPOTIFY_ARTIST_ALBUMS_TTL_MS, SPOTIFY_ARTIST_ALBUMS_MAX_ENTRIES,
 } from '../services/spotifyArtistAlbumsCache.js'
 import { spotifyLibraryMatcher } from '../services/spotifyLibraryMatch.js'
 import { db } from '../db/database.js'
 import { parseIntParam } from '../utils/http.js'
+import { extractIpAddress } from '../utils/requestIp.js'
+import { parseSpotifyPlay, spotifyPlays } from '../services/spotifyPlays.js'
+import type { Variables } from '../types.js'
 
-const spotify = new Hono()
+const spotify = new Hono<{ Variables: Variables }>()
 
 const SPOTIFY_ID = /^[A-Za-z0-9]{1,64}$/
 
@@ -82,15 +86,71 @@ spotify.get('/artists/:localArtistId/albums', async (c) => {
     }
   }
 
-  let albums = entry.albums.map((a) => ({ ...a, localId: null as number | null }))
+  const albums = (await withLocalIds(entry.albums)).filter((a) => a.localId === null)
+  return c.json({ configured: true, spotifyArtist: entry.spotifyArtist, albums })
+})
+
+// Library matching re-runs on every request (never cached) so a fresh upload
+// shows as owned at once; a failed lookup degrades to "nothing owned".
+async function withLocalIds(albums: SpotifyArtistAlbum[]) {
   try {
-    const annotated = await spotifyLibraryMatcher.annotate({ tracks: [], artists: [], albums: entry.albums })
-    const owned = new Set(annotated.albums.filter((a) => a.localId !== null).map((a) => a.id))
-    albums = albums.filter((a) => !owned.has(a.id))
+    const annotated = await spotifyLibraryMatcher.annotate({ tracks: [], artists: [], albums })
+    const localIds = new Map(annotated.albums.map((a) => [a.id, a.localId]))
+    return albums.map((a) => ({ ...a, localId: localIds.get(a.id) ?? null }))
   } catch (err) {
     console.error('Spotify artist albums library match failed:', err)
+    return albums.map((a) => ({ ...a, localId: null as number | null }))
   }
-  return c.json({ configured: true, spotifyArtist: entry.spotifyArtist, albums })
+}
+
+// GET /spotify/catalog/artists/:spotifyId/albums — a Spotify artist's albums
+// for the in-app Spotify artist view (search result tap). Unlike the local
+// artist route, owned albums stay in, carrying their localId, so the view
+// shows library and Spotify albums together.
+spotify.get('/catalog/artists/:spotifyId/albums', async (c) => {
+  const spotifyId = c.req.param('spotifyId')
+  if (!SPOTIFY_ID.test(spotifyId)) return c.json({ error: 'Invalid artist id' }, 400)
+  if (!isSpotifyConfigured()) return c.json({ configured: false, spotifyArtist: null, albums: [] })
+
+  let entry = artistAlbumsCache.get(spotifyId)
+  if (!entry) {
+    try {
+      const artist = await getSpotifyArtist(spotifyId)
+      if (!artist) return c.json({ error: 'Spotify artist not found' }, 404)
+      const albums = await getSpotifyArtistAlbums(artist.id)
+      entry = {
+        spotifyArtist: { id: artist.id, name: artist.name, imageUrl: artist.imageUrl, externalUrl: artist.externalUrl },
+        albums,
+      }
+      artistAlbumsCache.set(spotifyId, entry)
+    } catch (err) {
+      return upstreamFailure(c, err, 'Spotify artist albums failed')
+    }
+  }
+
+  return c.json({ configured: true, spotifyArtist: entry.spotifyArtist, albums: await withLocalIds(entry.albums) })
+})
+
+// POST /spotify/plays — a Spotify track played past the 5-second mark (the
+// local equivalent is GET /log/:id). Fire-and-forget from the player: a bad
+// body is a 400, a failed insert a 500, neither ever retried.
+spotify.post('/plays', async (c) => {
+  const play = parseSpotifyPlay(await c.req.json().catch(() => null))
+  if (!play) return c.json({ error: 'Invalid play' }, 400)
+  try {
+    await spotifyPlays.record(play, { userId: c.get('user')?.id ?? null, ipAddress: extractIpAddress(c) })
+  } catch (err) {
+    console.error('Spotify play log failed:', err)
+    return c.json({ error: 'Spotify play log failed' }, 500)
+  }
+  return c.body(null, 204)
+})
+
+// GET /spotify/plays/recent-albums?size=N — recently played Spotify albums,
+// newest first, for Jukebox Mode's Recent drawer (mixed in with /albums/recent).
+spotify.get('/plays/recent-albums', async (c) => {
+  const size = Math.min(parseIntParam(c.req.query('size')) ?? 20, 200)
+  return c.json(await spotifyPlays.recentAlbums(size))
 })
 
 export default spotify

@@ -11,6 +11,7 @@ vi.mock('./SearchTab', () => ({
       {/* Uncontrolled on purpose: its value lives in the DOM node, so it's lost if the tab remounts. */}
       <input data-testid="search-input" placeholder="mock search" />
       <button onClick={() => onSelectArtist({ id: 2, name: 'Search Artist' })}>select-search-artist</button>
+      <button onClick={() => onSelectArtist({ id: 'sza1', name: 'SZA', source: 'spotify' })}>select-spotify-artist</button>
       <button onClick={() => onSelectAlbum({ id: 3, title: 'Search Album' })}>select-search-album</button>
       <button onClick={() => onSelectPlaylist({ id: 5, name: 'Search Playlist' })}>select-search-playlist</button>
       <button onClick={() => onSelectCollection({ id: 6, name: 'Search Collection' })}>select-search-collection</button>
@@ -27,6 +28,14 @@ vi.mock('./JukeboxArtistView', () => ({
       <button onClick={() => onSelectAlbum({ id: 'lov', title: 'Spotify Album', source: 'spotify' })}>select-spotify-album-from-artist</button>
       <button onClick={onBack}>back-from-artist</button>
       <button onClick={onEnqueue}>artist-view-enqueue</button>
+    </div>
+  ),
+}));
+vi.mock('./JukeboxSpotifyArtistView', () => ({
+  default: ({ artist, onBack }) => (
+    <div data-testid="jukebox-spotify-artist-view">
+      <span>spotify-artist-view: {artist.name}</span>
+      <button onClick={onBack}>back-from-spotify-artist</button>
     </div>
   ),
 }));
@@ -163,6 +172,15 @@ test('#72: a Spotify album from the artist view opens the Spotify tracks panel, 
   fireEvent.click(screen.getByText('select-spotify-album-from-artist'));
   expect(screen.getByText('spotify-panel: Spotify Album')).toBeInTheDocument();
   expect(screen.queryByTestId('jukebox-tracks-panel')).not.toBeInTheDocument();
+});
+
+test('#72: a Spotify artist from search opens the Spotify artist view, not the library one', () => {
+  renderPanel('browse');
+  fireEvent.click(screen.getByText('select-spotify-artist'));
+  expect(screen.getByText('spotify-artist-view: SZA')).toBeInTheDocument();
+  expect(screen.queryByTestId('jukebox-artist-view')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByText('back-from-spotify-artist'));
+  expect(screen.queryByTestId('jukebox-spotify-artist-view')).not.toBeInTheDocument();
 });
 
 test('Back from the artist view returns to search results', () => {

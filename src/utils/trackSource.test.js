@@ -13,7 +13,7 @@ describe('toSpotifyQueueTrack', () => {
     const t = toSpotifyQueueTrack(item);
     expect(t).toEqual({
       source: 'spotify', uri: 'spotify:track:abc', spotifyId: 'abc', title: 'Song',
-      artist: { name: 'One, Two' }, album: { title: 'Album' },
+      artist: { name: 'One, Two' }, album: { title: 'Album', spotifyId: 'al' },
       imageUrl: 'http://img/a.jpg', duration: 215.5,
     });
     expect(t).not.toHaveProperty('id');
@@ -26,13 +26,14 @@ describe('toSpotifyQueueTrack', () => {
   it('tolerates null artists, album and duration', () => {
     const t = toSpotifyQueueTrack({ uri: 'u', id: 'i', name: 'N', artists: null, album: null, durationMs: null });
     expect(t.artist).toEqual({ name: '' });
-    expect(t.album).toEqual({ title: '' });
+    expect(t.album).toEqual({ title: '', spotifyId: null });
     expect(t.imageUrl).toBeNull();
     expect(t.duration).toBe(0);
   });
   it('falls back to the album argument for name and artwork', () => {
     const t = toSpotifyQueueTrack({ ...item, album: null }, { name: 'Parent', imageUrl: 'http://p.jpg', id: 'p' });
     expect(t.album.title).toBe('Parent');
+    expect(t.album.spotifyId).toBe('p');
     expect(t.imageUrl).toBe('http://p.jpg');
   });
 });

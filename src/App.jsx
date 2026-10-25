@@ -14,6 +14,7 @@ import Search from './pages/Search';
 import Artist from './pages/Artist';
 import Album from './pages/Album';
 import SpotifyAlbum from './pages/SpotifyAlbum';
+import SpotifyArtist from './pages/SpotifyArtist';
 import TrackPage from './pages/TrackPage';
 import Library from './pages/Library';
 import Account from './pages/Account';
@@ -283,6 +284,8 @@ function App() {
                 <Route path="/album/:id" element={<Album />} />
                 {/* #72: a Spotify album the library doesn't own (from the artist page grid) */}
                 <Route path="/spotify/album/:spotifyId" element={<SpotifyAlbum />} />
+                {/* #72: a Spotify artist (from a Spotify search result) */}
+                <Route path="/spotify/artist/:spotifyId" element={<SpotifyArtist />} />
                 <Route path="/playlist/:id" element={<Playlist />} />
                 <Route path="/track/:id" element={<TrackPage />} />
                 <Route path="/*" element={
