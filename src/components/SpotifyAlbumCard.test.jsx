@@ -2,7 +2,7 @@ import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 
-vi.mock('../services/api', () => ({ apiService: { getSpotifyAlbumTracks: vi.fn() } }));
+vi.mock('../services/api', () => ({ apiService: { getSpotifyAlbumTracks: vi.fn(), getAlbum: vi.fn() } }));
 
 import { apiService } from '../services/api';
 import { usePlayerStore } from '../stores/playerStore';
@@ -19,6 +19,7 @@ const renderCard = (a = album) => render(
     <Routes>
       <Route path="/artist/5" element={<SpotifyAlbumCard album={a} localArtistId={5} />} />
       <Route path="/spotify/album/:id" element={<Where />} />
+      <Route path="/album/:id" element={<Where />} />
     </Routes>
   </MemoryRouter>,
 );
@@ -57,5 +58,22 @@ describe('SpotifyAlbumCard', () => {
   test('a null imageUrl and missing year render without throwing', () => {
     renderCard({ id: 'x', name: 'Bare', releaseYear: null, imageUrl: null, artists: null });
     expect(screen.getByText('Bare')).toBeInTheDocument();
+  });
+
+  test('an owned album (localId) opens and plays the library copy, without the marker', async () => {
+    const addTracks = vi.fn();
+    const prev = usePlayerStore.getState().addTracks;
+    usePlayerStore.setState({ addTracks });
+    apiService.getAlbum.mockResolvedValue({ data: { tracks: [{ id: 11, title: 'Local' }] } });
+    const { container } = renderCard({ ...album, localId: 42 });
+    expect(container.querySelector('.spotify-album-marker')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Play Lover' }));
+    await waitFor(() => expect(addTracks).toHaveBeenCalled());
+    expect(apiService.getAlbum).toHaveBeenCalledWith(42);
+    expect(apiService.getSpotifyAlbumTracks).not.toHaveBeenCalled();
+    expect(addTracks.mock.calls[0][0]).toEqual([{ id: 11, title: 'Local' }]);
+    usePlayerStore.setState({ addTracks: prev });
+    fireEvent.click(screen.getByText('Lover'));
+    expect(screen.getByTestId('where')).toHaveTextContent('/album/42|');
   });
 });

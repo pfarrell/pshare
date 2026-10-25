@@ -151,6 +151,9 @@ export const apiService = {
   searchSpotify: (query) => api.get(`/search/spotify${qs({ q: query })}`), // Returns { configured, tracks, albums, artists }
   getSpotifyAlbumTracks: (id) => api.get(`/spotify/albums/${id}/tracks`), // Returns { configured, album, tracks }
   getSpotifyArtistAlbums: (localArtistId) => api.get(`/spotify/artists/${localArtistId}/albums`), // #72: { configured, spotifyArtist, albums } (unowned only)
+  getSpotifyCatalogArtistAlbums: (spotifyId) => api.get(`/spotify/catalog/artists/${spotifyId}/albums`), // #72: { configured, spotifyArtist, albums } (all, owned ones with localId)
+  logSpotifyPlay: (play) => api.post('/spotify/plays', play), // #72: the Spotify counterpart of log(id)
+  getRecentSpotifyAlbums: (size = 20) => api.get(`/spotify/plays/recent-albums${qs({ size })}`), // #72: [{ id, name, imageUrl, artistName, last_played }]
 
   // Jukebox phone enqueue (see docs/superpowers/specs/2026-09-25-jukebox-server-queue-design.md)
   jukeboxSearch: (token, query) => api.get(`/jukebox/${token}/search${qs({ q: query })}`),

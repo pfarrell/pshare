@@ -9,9 +9,12 @@ import { toSpotifyQueueTrack } from '../utils/trackSource';
 import { SpotifyLogo } from '../components/OpenInSpotify';
 
 // Spotify results at the bottom of the kiosk's search tab (#72). Only when the
-// kiosk can play Spotify; hides albums/tracks the library already has. A tap
-// *adds* to the queue (like tapping a local track here) — never play-now, so a
-// guest's pick can't cut off the current song. Any failure renders nothing.
+// kiosk can play Spotify; hides artists/albums/tracks the library already has.
+// An artist tap opens the Spotify artist view (onSelectArtist, with
+// source: 'spotify'); an album/track tap *adds* to the queue (like tapping a
+// local track here) — never play-now, so a guest's pick can't cut off the
+// current song. Any failure renders nothing.
+const ARTIST_LIMIT = 3;
 const ALBUM_LIMIT = 4;
 const TRACK_LIMIT = 5;
 
@@ -39,7 +42,23 @@ const SpotifyRow = ({ source, title, subtitle, onEnqueue }) => {
   );
 };
 
-const JukeboxSpotifySection = ({ query, onEnqueue }) => {
+const SpotifyArtistRow = ({ artist, onSelect }) => (
+  <button
+    type="button"
+    className="jukebox-spotify-row"
+    aria-label={`Open ${artist.name}`}
+    onClick={() => onSelect?.({ id: artist.id, name: artist.name, source: 'spotify' })}
+  >
+    <SpotifyLogo className="jukebox-spotify-logo" />
+    <span className="jukebox-spotify-row-text">
+      <span className="jukebox-spotify-row-title">{artist.name}</span>
+      <span className="jukebox-spotify-row-subtitle">Artist</span>
+    </span>
+    <span className="jukebox-spotify-row-add" aria-hidden="true">›</span>
+  </button>
+);
+
+const JukeboxSpotifySection = ({ query, onEnqueue, onSelectArtist }) => {
   const canPlay = useCanPlaySpotify();
   const [result, setResult] = useState({ query: null, data: null });
 
@@ -57,17 +76,22 @@ const JukeboxSpotifySection = ({ query, onEnqueue }) => {
   }, [canPlay, query]);
 
   if (!canPlay || !result.data || result.query !== (query ?? '').trim()) return null;
-  const { albums, tracks } = visibleSpotifyResults(result.data);
+  const { artists, albums, tracks } = visibleSpotifyResults(result.data);
+  const shownArtists = artists.filter((a) => typeof a.id === 'string' && a.id && typeof a.name === 'string' && a.name)
+    .slice(0, ARTIST_LIMIT);
   const shownAlbums = albums.filter((a) => a.id).slice(0, ALBUM_LIMIT);
   const shownTracks = tracks.slice(0, TRACK_LIMIT)
     .map((t) => ({ raw: t, entry: toSpotifyQueueTrack(t) })).filter((x) => x.entry);
-  if (shownAlbums.length === 0 && shownTracks.length === 0) return null;
+  if (shownArtists.length === 0 && shownAlbums.length === 0 && shownTracks.length === 0) return null;
 
   return (
     <section className="jukebox-search-section jukebox-spotify-section">
       <div className="jukebox-search-section-header">
         <h3>More from Spotify</h3>
       </div>
+      {shownArtists.map((artist) => (
+        <SpotifyArtistRow key={`artist-${artist.id}`} artist={artist} onSelect={onSelectArtist} />
+      ))}
       {shownAlbums.map((album) => (
         <SpotifyRow
           key={`album-${album.id}`}

@@ -1,5 +1,6 @@
 // src/components/SpotifyResults.jsx
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import CardGrid from './CardGrid';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useViewModeStore } from '../stores/viewModeStore';
@@ -12,7 +13,9 @@ import { albumQueueTracks } from '../player/spotify/albumQueue';
 // "From Spotify" section at the bottom of the Search page. These items are
 // not in the library. By default they only link out to Spotify; with
 // `canPlay` tracks and albums also get play / add buttons that queue
-// Spotify entries through useQueueActions. Deliberately does not reuse EntityCard:
+// Spotify entries through useQueueActions, and artists open the in-app
+// Spotify artist page. An artist the library has (localId, shown in the
+// Spotify-only mode) always opens its library artist page. Deliberately does not reuse EntityCard:
 // that shell always renders an <img> (no null-image fallback) and carries a
 // play button / context menu that would wrongly imply local playback.
 
@@ -52,9 +55,10 @@ const SpotifyActions = ({ source, name }) => {
 // Card on desktop card mode, compact row on mobile / desktop list mode —
 // same split EntityCard uses, built on the same .artist-card / .result-row
 // classes so it sits naturally in a CardGrid next to local results.
-const SpotifyItem = ({ title, subtitle, imageUrl, imageShape = 'square', glyph, externalUrl, asRow, actionsSource }) => {
+const SpotifyItem = ({ title, subtitle, imageUrl, imageShape = 'square', glyph, externalUrl, asRow, actionsSource, to }) => {
   const isMobile = useIsMobile();
   const viewMode = useViewModeStore((s) => s.mode);
+  const titleNode = to ? <Link to={to} className="spotify-result-link">{title}</Link> : title;
 
   if (asRow || isMobile || viewMode === 'list') {
     return (
@@ -63,7 +67,7 @@ const SpotifyItem = ({ title, subtitle, imageUrl, imageShape = 'square', glyph, 
           <SpotifyImage imageUrl={imageUrl} alt={title} glyph={glyph} />
         </div>
         <div className="result-row-text">
-          <h3 className="result-row-title">{title}</h3>
+          <h3 className="result-row-title">{titleNode}</h3>
           {subtitle && <p className="result-row-subtitle">{subtitle}</p>}
         </div>
         {actionsSource && <SpotifyActions source={actionsSource} name={title} />}
@@ -79,13 +83,18 @@ const SpotifyItem = ({ title, subtitle, imageUrl, imageShape = 'square', glyph, 
         <SpotifyImage imageUrl={imageUrl} alt={title} glyph={glyph} />
       </div>
       <div className="artist-card-title">
-        <h3>{title}</h3>
+        <h3>{titleNode}</h3>
         {subtitle && <p className="spotify-card-subtitle">{subtitle}</p>}
         {actionsSource && <SpotifyActions source={actionsSource} name={title} />}
         <OpenInSpotify url={externalUrl} name={title} />
       </div>
     </div>
   );
+};
+
+const artistPath = (artist, canPlay) => {
+  if (Number.isInteger(artist.localId)) return `/artist/${artist.localId}`;
+  return canPlay && typeof artist.id === 'string' && artist.id ? `/spotify/artist/${artist.id}` : null;
 };
 
 const SpotifyResults = ({ loading, tracks = [], albums = [], artists = [], canPlay = false }) => {
@@ -118,6 +127,7 @@ const SpotifyResults = ({ loading, tracks = [], albums = [], artists = [], canPl
                 imageShape="circle"
                 glyph="♫"
                 externalUrl={artist.externalUrl}
+                to={artistPath(artist, canPlay)}
               />
             ))}
           </CardGrid>

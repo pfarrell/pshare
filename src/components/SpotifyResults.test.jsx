@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { apiService } from '../services/api';
+import { MemoryRouter } from 'react-router-dom';
 import SpotifyResults from './SpotifyResults';
 import { usePlayerStore } from '../stores/playerStore';
 import { useViewModeStore } from '../stores/viewModeStore';
@@ -125,5 +126,26 @@ describe('canPlay', () => {
     await waitFor(() => expect(warn).toHaveBeenCalled());
     expect(usePlayerStore.getState().addTracks).not.toHaveBeenCalled();
     warn.mockRestore();
+  });
+});
+
+describe('artist links', () => {
+  const artist = { id: 'sza1', name: 'SZA', imageUrl: null, externalUrl: 'https://open.spotify.com/artist/sza1', localId: null };
+  const routed = (ui) => render(<MemoryRouter>{ui}</MemoryRouter>);
+
+  test('canPlay=true: an unowned artist opens the in-app Spotify artist page', () => {
+    routed(<SpotifyResults canPlay artists={[artist]} />);
+    expect(screen.getByRole('link', { name: 'SZA' })).toHaveAttribute('href', '/spotify/artist/sza1');
+  });
+
+  test('canPlay=false: no in-app link, only the Spotify link-out', () => {
+    routed(<SpotifyResults artists={[artist]} />);
+    expect(screen.queryByRole('link', { name: 'SZA' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Open SZA in Spotify' })).toBeInTheDocument();
+  });
+
+  test('a library artist (localId) opens its library page either way', () => {
+    routed(<SpotifyResults artists={[{ ...artist, localId: 40 }]} />);
+    expect(screen.getByRole('link', { name: 'SZA' })).toHaveAttribute('href', '/artist/40');
   });
 });
