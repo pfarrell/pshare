@@ -41,7 +41,7 @@ describe('JukeboxSpotifyTracksPanel', () => {
     expect(apiService.getSpotifyAlbumTracks).toHaveBeenCalledWith('lov');
   });
 
-  test('Play album and Add to queue enqueue every track and call onEnqueue', async () => {
+  test('Add to queue enqueues every track and calls onEnqueue', async () => {
     const onEnqueue = vi.fn();
     apiService.getSpotifyAlbumTracks.mockResolvedValue({ data: payload });
     render(<JukeboxSpotifyTracksPanel album={album} onClose={vi.fn()} onEnqueue={onEnqueue} />);
@@ -50,19 +50,16 @@ describe('JukeboxSpotifyTracksPanel', () => {
     await waitFor(() => expect(addTracks).toHaveBeenCalledTimes(1));
     expect(addTracks.mock.calls[0][0].map((t) => t.uri)).toEqual(['spotify:track:1', 'spotify:track:2']);
     expect(addTracks.mock.calls[0][0][0]).toMatchObject({ source: 'spotify' });
-    fireEvent.click(screen.getByRole('button', { name: 'Play album' }));
-    await waitFor(() => expect(addTracks).toHaveBeenCalledTimes(2));
-    expect(onEnqueue).toHaveBeenCalledTimes(2);
+    expect(addTracks.mock.calls[0][2]?.playImmediately).toBeFalsy();
+    expect(onEnqueue).toHaveBeenCalledTimes(1);
   });
 
-  test("Play album adds to the queue instead of interrupting what's playing", async () => {
+  test('offers only Add to queue (no Play album), so nothing interrupts the current song', async () => {
     apiService.getSpotifyAlbumTracks.mockResolvedValue({ data: payload });
     render(<JukeboxSpotifyTracksPanel album={album} onClose={vi.fn()} />);
     await screen.findByText(/Cruel Summer/);
-    fireEvent.click(screen.getByRole('button', { name: 'Play album' }));
-    await waitFor(() => expect(addTracks).toHaveBeenCalledTimes(1));
-    expect(addTracks.mock.calls[0][1]).toBeFalsy(); // not play-next
-    expect(addTracks.mock.calls[0][2]?.playImmediately).toBeFalsy();
+    expect(screen.queryByRole('button', { name: 'Play album' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Add to queue' })).toBeInTheDocument();
   });
 
   test('tapping a track adds just that track', async () => {

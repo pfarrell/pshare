@@ -57,9 +57,8 @@ const JukeboxSpotifyTracksPanel = ({ album, onClose, onEnqueue }) => {
           <button type="button" className="jukebox-tracks-panel-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
         <div className="jukebox-tracks-panel-actions">
-          {/* Adds rather than plays now, so a Spotify album never cuts off the current song
+          {/* Add only (no Play album): a Spotify album never cuts off the current song
               (the store still auto-starts it when nothing is playing). */}
-          <button type="button" disabled={!ready} onClick={() => { queue.addToQueue(); onEnqueue?.(); }}>Play album</button>
           <button type="button" disabled={!ready} onClick={() => { queue.addToQueue(); onEnqueue?.(); }}>Add to queue</button>
         </div>
       </div>
