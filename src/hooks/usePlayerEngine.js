@@ -3,6 +3,7 @@ import { usePlayerStore, SCOPE_SHUFFLE_BATCH_SIZE, SCOPE_SHUFFLE_TOPUP_REMAINING
 import { useTabTitleStore } from '../stores/tabTitleStore';
 import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
+import { isSpotifyTrack, localTrackIds } from '../utils/trackSource';
 
 const FALLBACK_ARTWORK = `${import.meta.env.BASE_URL}icons/icon-512.png`;
 const PREFETCH_THRESHOLD_SECONDS = 15;
@@ -65,7 +66,7 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
       if (audio.currentTime >= 5 && !fiveSecondMarkFired) {
         fiveSecondMarkFired = true;
         const track = usePlayerStore.getState().currentTrack;
-        if (track && isAuthenticated) {
+        if (track && isAuthenticated && !isSpotifyTrack(track)) {
           const { queueSource } = usePlayerStore.getState();
           const playlistId = queueSource?.type === 'playlist' ? queueSource.id : null;
           const collectionId = queueSource?.type === 'collection' ? queueSource.id : null;
@@ -196,7 +197,7 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
       if (type === 'collection' || type === 'artist') {
         const response = await apiService.getRandomScopeTracks(type, id, {
           limit: SCOPE_SHUFFLE_BATCH_SIZE,
-          excludeTrackIds: usePlayerStore.getState().playlist.map((t) => t.id),
+          excludeTrackIds: localTrackIds(usePlayerStore.getState().playlist),
         });
         const tracks = response.data?.tracks || [];
         return tracks.length > 0 ? { tracks, nextSource: { type, id } } : null;
@@ -235,7 +236,7 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
     scopeShuffleFetchInFlight.current = true;
     apiService.getRandomScopeTracks(queueSource.type, queueSource.id, {
       limit: SCOPE_SHUFFLE_BATCH_SIZE,
-      excludeTrackIds: playlist.map((t) => t.id),
+      excludeTrackIds: localTrackIds(playlist),
     })
       .then((response) => {
         usePlayerStore.getState().appendScopeShuffleTracks(response.data?.tracks || []);
@@ -268,7 +269,7 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
     }
     const artworkUrl = currentTrack.image_path
       ? apiService.getImageUrl(currentTrack.image_path, 'album_small')
-      : FALLBACK_ARTWORK;
+      : (currentTrack.imageUrl || FALLBACK_ARTWORK);
     const artworkType = mimeTypeForArtworkUrl(artworkUrl);
     navigator.mediaSession.metadata = new MediaMetadata({
       title: currentTrack.title,

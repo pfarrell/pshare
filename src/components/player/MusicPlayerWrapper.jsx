@@ -7,6 +7,7 @@ import { useContextMenu } from '../../hooks/useContextMenu';
 import { formatPlaybackTime } from '../../utils/formatters';
 import ContextMenu from '../ContextMenu';
 import SavePlaylistModal from './SavePlaylistModal';
+import { localTrackIds } from '../../utils/trackSource';
 
 const HAMBURGER = '☰';
 const PREV = '⏪';
@@ -167,7 +168,7 @@ const MusicPlayerWrapper = ({ className = '' }) => {
 
       {saveModalOpen && (
         <SavePlaylistModal
-          trackIds={playlist.map((t) => t.id)}
+          trackIds={localTrackIds(playlist)}
           onClose={() => setSaveModalOpen(false)}
         />
       )}

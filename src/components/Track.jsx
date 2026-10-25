@@ -16,6 +16,7 @@ import PlayButton from './PlayButton';
 import { shareLink } from '../utils/shareLink';
 import { getStoredJukeboxToken } from '../utils/jukeboxEnqueueToken';
 import toast from 'react-hot-toast';
+import { isSpotifyTrack } from '../utils/trackSource';
 
 // forwardRef lets Album.jsx grab the DOM node of the track that arrived
 // playing (via the mobile now-playing tap) and scroll it into view.
@@ -29,6 +30,7 @@ const Track = forwardRef(({ track, index, trackCount, includeMeta = false, showA
   const setPlaylist = usePlayerStore((s) => s.setPlaylist);
   const playTrackAtIndex = usePlayerStore((s) => s.playTrackAtIndex);
   const { isAuthenticated } = useAuthStore();
+  const spotify = isSpotifyTrack(track);
   const favorite = useFavoriteToggle('track', track);
   const downloadsEnabled = import.meta.env.VITE_ENABLE_DOWNLOADS !== 'false';
   const isMobile = useIsMobile();
@@ -40,14 +42,14 @@ const Track = forwardRef(({ track, index, trackCount, includeMeta = false, showA
   // ctxMenu (everything else). shouldIgnore keeps the row's menu from also
   // firing for a touch that started on the play button — mirrors ResultRow.jsx's
   // hand-rolled version of this same split, reusing the shared hook instead.
-  const ctxMenu = useContextMenu({ shouldIgnore: (e) => e.target.tagName === 'A' || !!e.target.closest('.play-button') });
+  const ctxMenu = useContextMenu({ shouldIgnore: (e) => spotify || e.target.tagName === 'A' || !!e.target.closest('.play-button') });
   const playCtxMenu = useContextMenu();
 
   const onThisAlbum = useIsCurrentPage(track.album?.id ? `/album/${track.album.id}` : null);
   const onThisArtist = useIsCurrentPage(track.artist?.id ? `/artist/${track.artist.id}` : null);
 
   const handleTrackClick = () => {
-    const existingIndex = playlist.findIndex((t) => t.id === track.id);
+    const existingIndex = playlist.findIndex((t) => (spotify ? t.uri === track.uri : t.id === track.id));
     if (existingIndex !== -1) {
       playTrackAtIndex(existingIndex);
     } else {
@@ -200,7 +202,8 @@ const Track = forwardRef(({ track, index, trackCount, includeMeta = false, showA
     { key: 'add-queue', icon: '➕', label: 'Add to Queue', onClick: handleAddToQueue, className: pressedButton === 'queue' ? 'menu-btn-pressed' : '' },
   ];
 
-  const rowMenuActions = [
+  // Spotify queue entries have no library id, so every id-backed action is hidden.
+  const rowMenuActions = spotify ? [] : [
     track.album?.id && !onThisAlbum && { key: 'album', icon: '💿', label: 'Go to Album', onClick: handleGoToAlbum },
     track.artist?.id && !onThisArtist && { key: 'artist', icon: '🎤', label: 'Go to Artist', onClick: handleGoToArtist },
     showMakeSingle && track.album?.id && track.album.title !== '_Singles' && { key: 'single', icon: '🎵', label: 'Make Single', onClick: handleMakeSingle },

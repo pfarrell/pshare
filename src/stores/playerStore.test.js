@@ -136,6 +136,17 @@ describe('addTrack', () => {
     expect(() => usePlayerStore.getState().addTrack({ id: 1 })).toThrow(/Invalid track/);
   });
 
+  test('addTrack accepts a Spotify entry without url', () => {
+    setActiveAudio(mockAudioElement(), { playlist: [track(1)], currentTrackIndex: 0, isPlaying: true });
+    usePlayerStore.getState().addTrack({ source: 'spotify', title: 'S', uri: 'spotify:track:x' });
+    expect(usePlayerStore.getState().playlist).toHaveLength(2);
+  });
+
+  test('addTrack still rejects a local track without url', () => {
+    expect(() => usePlayerStore.getState().addTrack({ id: 1, title: 'No url' })).toThrow(/Invalid track/);
+    expect(() => usePlayerStore.getState().addTrack({ source: 'spotify', title: 'No uri' })).toThrow(/Invalid track/);
+  });
+
   test('flashActivity bumps activityPulseToken', () => {
     setActiveAudio(mockAudioElement());
     usePlayerStore.getState().addTrack(track(1), { flashActivity: true });

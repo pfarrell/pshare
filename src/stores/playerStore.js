@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { apiService } from '../services/api';
+import { isSpotifyTrack } from '../utils/trackSource';
 
 // "Shuffle scope" (collection, artist, ...) fetches tracks from the scope in batches rather
 // than all at once (a scope can be large) — an initial batch on entry, then another whenever
@@ -14,6 +15,12 @@ export const SCOPE_SHUFFLE_TOPUP_REMAINING = 5;
 export const MAX_QUEUE_HISTORY = 100;
 
 const validateTrack = (track) => {
+  if (isSpotifyTrack(track)) {
+    if (!track.title || !track.uri) {
+      throw new Error('Invalid track object. Spotify tracks must contain title and uri properties');
+    }
+    return;
+  }
   if (!track || !track.title || !track.url) {
     throw new Error('Invalid track object. Must contain at least title and url properties');
   }

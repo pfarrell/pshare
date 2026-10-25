@@ -195,6 +195,17 @@ test('anonymous playback does not call apiService.log at the 5-second mark', () 
   expect(apiService.log).not.toHaveBeenCalled();
 });
 
+test('does not call apiService.log at the 5s mark for a Spotify track', () => {
+  const audioRefA = makeAudioRef();
+  const audioRefB = makeAudioRef();
+  usePlayerStore.setState({ currentTrack: { source: 'spotify', uri: 'spotify:track:x', title: 'S' } });
+  renderHook(() => usePlayerEngine(audioRefA, audioRefB));
+
+  audioRefA.current.currentTime = 6;
+  audioRefA.current.dispatchEvent(new Event('timeupdate'));
+  expect(apiService.log).not.toHaveBeenCalled();
+});
+
 test('a fresh play resets the 5-second mark so it fires again on the next track', () => {
   const audioRefA = makeAudioRef();
   const audioRefB = makeAudioRef();
