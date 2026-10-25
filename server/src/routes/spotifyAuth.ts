@@ -51,9 +51,13 @@ async function resolveTarget(
   return { owner: { deviceId } }
 }
 
+// Jukebox kiosk sessions carry the owner as `user`, but must not manage the
+// owner's (or other devices') Spotify connections; they may only use /token and /status.
+const isKiosk = (c: Ctx) => c.get('jukeboxDeviceId') != null
+
 spotifyAuth.get('/start', async (c) => {
   const user = c.get('user')
-  if (!user || !isSpotifyAllowedUser(user.id)) return c.json({ error: 'Forbidden' }, 403)
+  if (!user || isKiosk(c) || !isSpotifyAllowedUser(user.id)) return c.json({ error: 'Forbidden' }, 403)
 
   const target = c.req.query('target')
   const resolved = await resolveTarget(c, user.id, target, c.req.query('deviceId'))
@@ -87,7 +91,7 @@ spotifyAuth.get('/callback', async (c) => {
   const codeVerifier = getCookie(c, 'spotify_oauth_verifier')
   const targetCookie = getCookie(c, 'spotify_oauth_target')
 
-  if (!user || !isSpotifyAllowedUser(user.id) || !code || !state || !storedState || !codeVerifier || state !== storedState) {
+  if (!user || isKiosk(c) || !isSpotifyAllowedUser(user.id) || !code || !state || !storedState || !codeVerifier || state !== storedState) {
     return done('failed')
   }
 
@@ -161,7 +165,7 @@ spotifyAuth.get('/status', async (c) => {
 
 spotifyAuth.delete('/connection', async (c) => {
   const user = c.get('user')
-  if (!user || !isSpotifyAllowedUser(user.id)) return c.json({ error: 'Forbidden' }, 403)
+  if (!user || isKiosk(c) || !isSpotifyAllowedUser(user.id)) return c.json({ error: 'Forbidden' }, 403)
 
   const resolved = await resolveTarget(c, user.id, c.req.query('target'), c.req.query('deviceId'))
   if ('status' in resolved) return c.json({ error: resolved.status === 400 ? 'Bad target' : 'Not found' }, resolved.status)

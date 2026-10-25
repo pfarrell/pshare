@@ -234,3 +234,74 @@ test('delete: removes only the targeted connection', async () => {
   assert.equal(await rowCount('jukebox_device_id', device.id), 0)
   assert.equal(await rowCount('user_id', user.id), 1)
 })
+
+test('start target=device: sets the device:<id> target cookie for an owned device', async () => {
+  const user = await createUser('sp-start-dev')
+  const device = await createJukeboxDevice('sp-start-dev', user.id)
+  allow(user)
+  const res = await app().request(`/auth/spotify/start?target=device&deviceId=${device.id}`, { headers: { cookie: authCookie(user) } })
+  assert.equal(res.status, 302)
+  assert.match(res.headers.getSetCookie().join('\n'), new RegExp(`spotify_oauth_target=device(:|%3A)${device.id}`))
+})
+
+test('start and delete: invalid target is 400', async () => {
+  const user = await createUser('sp-bad-target')
+  allow(user)
+  const headers = { cookie: authCookie(user) }
+  assert.equal((await app().request('/auth/spotify/start?target=bogus', { headers })).status, 400)
+  assert.equal((await app().request('/auth/spotify/start', { headers })).status, 400)
+  assert.equal((await app().request('/auth/spotify/connection?target=bogus', { method: 'DELETE', headers })).status, 400)
+})
+
+test('delete: 404 for a device the user does not own, and nothing is removed', async () => {
+  const owner = await createUser('sp-del-owner')
+  const other = await createUser('sp-del-other')
+  const device = await createJukeboxDevice('sp-del-foreign', owner.id)
+  allow(other)
+  await spotifyConnectionService.upsert({ deviceId: device.id }, connData())
+  const res = await app().request(`/auth/spotify/connection?target=device&deviceId=${device.id}`, {
+    method: 'DELETE',
+    headers: { cookie: authCookie(other) },
+  })
+  assert.equal(res.status, 404)
+  assert.equal(await rowCount('jukebox_device_id', device.id), 1)
+})
+
+test('callback: device target cookie for a device the user does not own fails and stores nothing', async () => {
+  const owner = await createUser('sp-cb-owner')
+  const other = await createUser('sp-cb-other')
+  const device = await createJukeboxDevice('sp-cb-foreign', owner.id)
+  allow(other)
+  stubSpotify('premium')
+  const res = await app().request('/auth/spotify/callback?code=c&state=st', {
+    headers: { cookie: callbackCookie(other, `device:${device.id}`) },
+  })
+  assert.equal(res.headers.get('location'), 'http://spa.test/account?spotify=failed')
+  assert.equal(await rowCount('jukebox_device_id', device.id), 0)
+  assert.equal(await rowCount('user_id', other.id), 0)
+})
+
+test('kiosk session: start, callback and delete are 403; token and status still work', async () => {
+  const user = await createUser('sp-kiosk')
+  const device = await createJukeboxDevice('sp-kiosk', user.id)
+  allow(user)
+  await spotifyConnectionService.upsert({ userId: user.id }, connData())
+  await spotifyConnectionService.upsert({ deviceId: device.id }, connData({ accessToken: 'dev-tok' }))
+  const kiosk = authCookie(user, device.id)
+  assert.equal((await app().request('/auth/spotify/start?target=user', { headers: { cookie: kiosk } })).status, 403)
+  assert.equal((await app().request(`/auth/spotify/start?target=device&deviceId=${device.id}`, { headers: { cookie: kiosk } })).status, 403)
+  stubSpotify('premium')
+  const cb = await app().request('/auth/spotify/callback?code=c&state=st', {
+    headers: { cookie: `${kiosk}; spotify_oauth_state=st; spotify_oauth_verifier=ver; spotify_oauth_target=user` },
+  })
+  assert.equal(cb.headers.get('location'), 'http://spa.test/account?spotify=failed')
+  for (const q of ['target=user', `target=device&deviceId=${device.id}`]) {
+    const del = await app().request(`/auth/spotify/connection?${q}`, { method: 'DELETE', headers: { cookie: kiosk } })
+    assert.equal(del.status, 403)
+  }
+  assert.equal(await rowCount('user_id', user.id), 1)
+  assert.equal(await rowCount('jukebox_device_id', device.id), 1)
+  const tok = await app().request('/auth/spotify/token', { headers: { cookie: kiosk } })
+  assert.equal((await tok.json()).accessToken, 'dev-tok')
+  assert.equal((await app().request('/auth/spotify/status', { headers: { cookie: kiosk } })).status, 200)
+})
