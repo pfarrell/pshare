@@ -2,7 +2,8 @@
 import { test, after, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  searchSpotify, getSpotifyAlbumTracks, mapSearchResponse, pickImageUrl, isSpotifyConfigured, resetSpotifyTokenCache,
+  searchSpotify, getSpotifyAlbumTracks, findSpotifyArtistByName, getSpotifyArtistAlbums, dedupeAlbumsByTitle,
+  releaseYearFrom, MAX_ARTIST_ALBUM_PAGES, type SpotifyArtistAlbum, mapSearchResponse, pickImageUrl, isSpotifyConfigured, resetSpotifyTokenCache,
   SpotifyNotConfiguredError, SpotifyRateLimitError, SpotifyApiError,
 } from './spotify.js'
 
@@ -284,4 +285,92 @@ test('getSpotifyAlbumTracks maps 429 and upstream errors', async () => {
   await assert.rejects(getSpotifyAlbumTracks('alb1'), (e: any) => e instanceof SpotifyRateLimitError && e.retryAfter === 7)
   stubFetch(() => new Response('', { status: 500 }))
   await assert.rejects(getSpotifyAlbumTracks('alb1'), (e: any) => e instanceof SpotifyApiError && e.status === 500)
+})
+
+// --- Artist albums (artist page "fill in the blanks") ---
+
+const rawArtist = (id: string, name: string) => ({ id, name, uri: `spotify:artist:${id}` })
+const rawAlbum = (id: string, name: string, release_date: string | null = '2020-01-01', total_tracks = 10) => ({
+  id, name, uri: `spotify:album:${id}`, release_date, total_tracks, images: [], artists: [{ id: 'ar', name: 'A' }],
+})
+
+test('releaseYearFrom handles YYYY, YYYY-MM, YYYY-MM-DD, empty, null and 0000', () => {
+  assert.equal(releaseYearFrom('2019'), '2019')
+  assert.equal(releaseYearFrom('2019-05'), '2019')
+  assert.equal(releaseYearFrom('2019-05-17'), '2019')
+  assert.equal(releaseYearFrom(''), null)
+  assert.equal(releaseYearFrom(null), null)
+  assert.equal(releaseYearFrom('0000'), null)
+})
+
+test('findSpotifyArtistByName picks the first exact normalized match, skipping a fuzzy higher-ranked one', async () => {
+  stubFetch(() => json({ artists: { items: [rawArtist('x', 'Taylor Swift Piano Covers'), rawArtist('ts', 'Taylor Swift')] } }))
+  assert.deepEqual(await findSpotifyArtistByName('taylor swift'), { id: 'ts', name: 'Taylor Swift' })
+  const url = new URL(searchCalls()[0].url)
+  assert.equal(url.searchParams.get('type'), 'artist')
+})
+
+test('findSpotifyArtistByName matches across punctuation and keeps accents distinct', async () => {
+  stubFetch(() => json({ artists: { items: [rawArtist('acdc', 'AC/DC')] } }))
+  assert.equal((await findSpotifyArtistByName('AC/DC'))?.id, 'acdc')
+  stubFetch(() => json({ artists: { items: [rawArtist('b', 'Beyoncé')] } }))
+  assert.equal((await findSpotifyArtistByName('Beyoncé'))?.id, 'b')
+  assert.equal(await findSpotifyArtistByName('Beyonce'), null)
+})
+
+test('findSpotifyArtistByName returns null when nothing matches exactly', async () => {
+  stubFetch(() => json({ artists: { items: [rawArtist('x', 'Somebody Else')] } }))
+  assert.equal(await findSpotifyArtistByName('Nobody'), null)
+})
+
+test('getSpotifyArtistAlbums requests albums only, limit 10, and follows next across 4 pages', async () => {
+  const page = (n: number, count: number, more: boolean) => json({
+    items: Array.from({ length: count }, (_, i) => rawAlbum(`a${n}-${i}`, `Album ${n}-${i}`)),
+    next: more ? `https://api.spotify.com/v1/artists/ts/albums?offset=${n * 10}&limit=10` : null,
+  })
+  stubFetch((_c, n) => page(n, n < 4 ? 10 : 4, n < 4))
+  const albums = await getSpotifyArtistAlbums('ts')
+  assert.equal(albums.length, 34)
+  assert.equal(albums[0].name, 'Album 1-0')
+  assert.equal(albums[33].name, 'Album 4-3')
+  assert.equal(searchCalls().length, 4)
+  const first = new URL(searchCalls()[0].url)
+  assert.equal(first.pathname, '/v1/artists/ts/albums')
+  assert.equal(first.searchParams.get('include_groups'), 'album')
+  assert.equal(first.searchParams.get('limit'), '10')
+})
+
+test('getSpotifyArtistAlbums stops at MAX_ARTIST_ALBUM_PAGES even if next keeps coming', async () => {
+  stubFetch((_c, n) => json({ items: [rawAlbum(`a${n}`, `Album ${n}`)], next: `https://api.spotify.com/v1/artists/ts/albums?offset=${n}` }))
+  const albums = await getSpotifyArtistAlbums('ts')
+  assert.equal(searchCalls().length, MAX_ARTIST_ALBUM_PAGES)
+  assert.equal(albums.length, MAX_ARTIST_ALBUM_PAGES)
+})
+
+test('getSpotifyArtistAlbums ignores a next URL on another host', async () => {
+  stubFetch(() => json({ items: [rawAlbum('a1', 'One')], next: 'https://evil.example/steal' }))
+  await assert.rejects(getSpotifyArtistAlbums('ts'), SpotifyApiError)
+  assert.ok(calls.every((c) => !c.url.startsWith('https://evil.example')))
+})
+
+test('dedupeAlbumsByTitle keeps the earliest release, then the higher track count', () => {
+  const mk = (id: string, name: string, releaseDate: string | null, totalTracks: number): SpotifyArtistAlbum => ({
+    uri: `spotify:album:${id}`, id, name, artists: [], releaseYear: releaseYearFrom(releaseDate), releaseDate,
+    totalTracks, imageUrl: null, externalUrl: null,
+  })
+  const out = dedupeAlbumsByTitle([
+    mk('late', '1989', '2015-01-01', 13), mk('early', '1989!', '2014-10-27', 13),
+    mk('few', 'Red', '2012-10-22', 16), mk('many', 'red', '2012-10-22', 22),
+    mk('tv', "1989 (Taylor's Version)", '2023-10-27', 21),
+  ])
+  assert.deepEqual(out.map((a) => a.id).sort(), ['early', 'many', 'tv'])
+})
+
+test('artist albums map null images, null artists and a missing release_date without throwing', async () => {
+  stubFetch(() => json({ items: [{ id: 'n', name: 'Bare', images: null, artists: null, release_date: null }], next: null }))
+  const [album] = await getSpotifyArtistAlbums('ts')
+  assert.equal(album.imageUrl, null)
+  assert.deepEqual(album.artists, [])
+  assert.equal(album.releaseYear, null)
+  assert.equal(album.releaseDate, null)
 })

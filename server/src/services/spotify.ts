@@ -4,6 +4,8 @@
 // Backs GET /search/spotify (phase 1 of #72). Spotify no longer returns
 // preview_url / recommendations for new apps, so nothing here relies on them.
 
+import { normalizeForMatch } from './spotifyLibraryMatch.js'
+
 const TOKEN_URL = 'https://accounts.spotify.com/api/token'
 const API = 'https://api.spotify.com/v1'
 // Refresh this long before Spotify's stated expiry so a token never expires mid-request.
@@ -260,4 +262,67 @@ export async function getSpotifyAlbumTracks(albumId: string): Promise<SpotifyAlb
   }
   const tracks = rawTracks.map((t) => mapTrack({ ...t, album: { id: album.id, name: album.name, images: raw.images } }))
   return { album, tracks }
+}
+
+// --- Artist albums (artist page "fill in the blanks", #72) ---
+
+export interface SpotifyArtistAlbum extends SpotifyAlbum {
+  releaseDate: string | null
+}
+
+// Spotify caps this endpoint at limit=10 for Development Mode apps (50 is a 400).
+const ARTIST_ALBUMS_PAGE_SIZE = 10
+export const MAX_ARTIST_ALBUM_PAGES = 10
+
+// release_date comes as YYYY, YYYY-MM or YYYY-MM-DD depending on its precision.
+export function releaseYearFrom(releaseDate: unknown): string | null {
+  const year = typeof releaseDate === 'string' ? releaseDate.slice(0, 4) : ''
+  return /^\d{4}$/.test(year) && year !== '0000' ? year : null
+}
+
+// The first artist result whose normalized name equals the query's, in Spotify's relevance order.
+export async function findSpotifyArtistByName(name: string): Promise<{ id: string; name: string } | null> {
+  if (!isSpotifyConfigured()) throw new SpotifyNotConfiguredError()
+  const target = normalizeForMatch(name)
+  if (!target) return null
+  const qs = new URLSearchParams({ q: name, type: 'artist', limit: '10' })
+  const data = await spotifyGet<RawSearchResponse>(`${API}/search?${qs}`, 'artist search')
+  const match = items(data?.artists).find((a) => normalizeForMatch(a.name) === target)
+  return match ? { id: str(match.id), name: str(match.name) } : null
+}
+
+interface RawArtistAlbumsPage { items?: (RawAlbum | null)[] | null; next?: string | null }
+
+// Albums only (no singles/compilations/appears-on), all pages up to the cap, one per title.
+export async function getSpotifyArtistAlbums(spotifyArtistId: string): Promise<SpotifyArtistAlbum[]> {
+  if (!isSpotifyConfigured()) throw new SpotifyNotConfiguredError()
+  const qs = new URLSearchParams({ include_groups: 'album', limit: String(ARTIST_ALBUMS_PAGE_SIZE) })
+  let url: string | null = `${API}/artists/${encodeURIComponent(spotifyArtistId)}/albums?${qs}`
+  const albums: SpotifyArtistAlbum[] = []
+  for (let n = 0; url && n < MAX_ARTIST_ALBUM_PAGES; n++) {
+    // Only follow Spotify API URLs: the bearer token must not be sent anywhere else.
+    if (!url.startsWith(`${API}/`)) throw new SpotifyApiError(502, 'Spotify returned an unexpected pagination URL')
+    const page: RawArtistAlbumsPage = await spotifyGet<RawArtistAlbumsPage>(url, 'artist albums')
+    for (const raw of items(page as RawPage<RawAlbum>)) {
+      const releaseDate = typeof raw.release_date === 'string' && raw.release_date ? raw.release_date : null
+      albums.push({ ...mapAlbum(raw), releaseYear: releaseYearFrom(releaseDate), releaseDate })
+    }
+    url = page.next ?? null
+  }
+  return dedupeAlbumsByTitle(albums)
+}
+
+// Spotify lists some titles more than once (markets, reissues): keep the earliest
+// release, then the one with more tracks. Order of first appearance is preserved.
+export function dedupeAlbumsByTitle(albums: SpotifyArtistAlbum[]): SpotifyArtistAlbum[] {
+  const byTitle = new Map<string, SpotifyArtistAlbum>()
+  for (const album of albums) {
+    const key = normalizeForMatch(album.name)
+    const kept = byTitle.get(key)
+    if (!kept) { byTitle.set(key, album); continue }
+    const a = album.releaseDate ?? '9999'
+    const b = kept.releaseDate ?? '9999'
+    if (a < b || (a === b && (album.totalTracks ?? 0) > (kept.totalTracks ?? 0))) byTitle.set(key, album)
+  }
+  return [...byTitle.values()]
 }
