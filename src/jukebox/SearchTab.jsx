@@ -5,6 +5,7 @@ import JukeboxArtistTile from './JukeboxArtistTile';
 import JukeboxPlaylistTile from './JukeboxPlaylistTile';
 import JukeboxCollectionTile from './JukeboxCollectionTile';
 import JukeboxLibraryGrid from './JukeboxLibraryGrid';
+import JukeboxSpotifySection from './JukeboxSpotifySection';
 import Track from '../components/Track';
 import { useProfileFilterStore } from '../stores/profileFilterStore';
 import { getProfilesCached, subscribeProfilesInvalidated } from '../utils/profilesCache';
@@ -96,6 +97,8 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
   // itself apart from the start of a brand new search, so only the latter
   // resets the type filter back to All.
   const hasStartedQueryRef = useRef(false);
+  // The query the shown results belong to, for the Spotify section (#72).
+  const [searchedQuery, setSearchedQuery] = useState('');
 
   const runSearch = async (q, { resetFilter } = { resetFilter: true }) => {
     if (!q.trim()) return;
@@ -105,6 +108,7 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
       const response = await apiService.search(q, undefined, activeProfileId);
       if (generation !== searchGenerationRef.current) return; // superseded by a newer search
       setResults(response.data);
+      setSearchedQuery(q.trim());
       if (resetFilter) setFilter('all');
     } catch {
       if (generation !== searchGenerationRef.current) return;
@@ -366,6 +370,10 @@ const SearchTab = ({ onSelectArtist, onSelectAlbum, onSelectPlaylist, onSelectCo
       {!isEmpty && !error && results !== null && !noResults && effectiveFilter === 'playlists' && renderPlaylists(playlistResults)}
       {!isEmpty && !error && results !== null && !noResults && effectiveFilter === 'collections' && renderCollections(collectionResults)}
       {!isEmpty && !error && results !== null && !noResults && effectiveFilter === 'tracks' && renderTracks(trackResults)}
+      {/* #72: Spotify albums/tracks the library doesn't have, under All (or when nothing local matched). */}
+      {!isEmpty && !error && results !== null && (effectiveFilter === 'all' || noResults) && (
+        <JukeboxSpotifySection query={searchedQuery} onEnqueue={onEnqueue} />
+      )}
       </div>
     </div>
   );

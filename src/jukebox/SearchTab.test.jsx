@@ -17,6 +17,11 @@ vi.mock('../services/api', () => ({
   },
 }));
 
+// #72: the Spotify section is unit-tested on its own; here only its wiring.
+vi.mock('./JukeboxSpotifySection', () => ({
+  default: ({ query }) => <div data-testid="spotify-section">{query}</div>,
+}));
+
 import { apiService } from '../services/api';
 
 const renderTab = (props = {}) =>
@@ -680,3 +685,26 @@ test('"See all" for a type still under 100 shows its exact count', async () => {
   expect(within(section('Albums')).getByRole('button', { name: 'See all (6)' })).toBeInTheDocument();
 });
 
+
+describe('Spotify section (#72)', () => {
+  test('renders under All with the searched query, and when nothing local matched', async () => {
+    apiService.search.mockResolvedValue({ data: smallResponse });
+    renderTab();
+    await runSearch('taylor');
+    expect(await screen.findByTestId('spotify-section')).toHaveTextContent('taylor');
+
+    apiService.search.mockResolvedValue({ data: { results: [], tracks: [] } });
+    await runSearch('nothing local');
+    await screen.findByText('No results');
+    expect(screen.getByTestId('spotify-section')).toHaveTextContent('nothing local');
+  });
+
+  test('is hidden while a single type is filtered', async () => {
+    apiService.search.mockResolvedValue({ data: smallResponse });
+    renderTab();
+    await runSearch('taylor');
+    await screen.findByTestId('spotify-section');
+    fireEvent.click(screen.getByRole('button', { name: /^Albums/ }));
+    expect(screen.queryByTestId('spotify-section')).toBeNull();
+  });
+});
