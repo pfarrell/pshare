@@ -5,6 +5,7 @@ import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
 import { isSpotifyTrack, localTrackIds } from '../utils/trackSource';
 import { LOCAL_TO_SPOTIFY_LEAD_SECONDS } from '../player/spotify/constants';
+import { markIncomingAudible } from '../player/spotify/transitionTimer';
 
 const FALLBACK_ARTWORK = `${import.meta.env.BASE_URL}icons/icon-512.png`;
 const PREFETCH_THRESHOLD_SECONDS = 15;
@@ -110,6 +111,8 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
     };
     const handleBufferingEnd = (event) => {
       if (!isActive(event.target)) return;
+      // 'playing' = audio is actually audible (canplay/error are not).
+      if (event.type === 'playing') markIncomingAudible('local');
       usePlayerStore.getState().setBuffering(false);
     };
     const handlePlay = (event) => {
