@@ -265,7 +265,7 @@ const Track = forwardRef(({ track, index, trackCount, includeMeta = false, showA
           color: isPlaying ? '#1d4ed8' : 'var(--color-text-primary)'
         }}>
           {String(index + 1).padStart(2, '0')}. {track.title}
-          {(showArtist || track.artist.id !== track.album?.artist?.id) && track.artist.name && (' - ' + track.artist.name)}
+          {(showArtist || spotify || track.artist.id !== track.album?.artist?.id) && track.artist.name && (' - ' + track.artist.name)}
 
           {track.duration && (
             <span style={{

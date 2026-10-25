@@ -931,6 +931,18 @@ describe('enterScopeShuffle', () => {
     expect(apiService.getRandomScopeTracks).toHaveBeenCalledWith('artist', 3, { limit: 25, excludeTrackIds: [1] });
   });
 
+  test('excludes only numeric ids when the queue holds a Spotify entry', async () => {
+    apiService.getRandomScopeTracks.mockResolvedValue({ data: { tracks: [] } });
+    usePlayerStore.setState({
+      playlist: [track(1), { source: 'spotify', title: 'S', uri: 'spotify:track:x' }, track(3)],
+      currentTrackIndex: 1,
+      playbackMode: 'shuffle-scope',
+      queueSource: { type: 'artist', id: 3 },
+    });
+    await usePlayerStore.getState().enterScopeShuffle();
+    expect(apiService.getRandomScopeTracks).toHaveBeenCalledWith('artist', 3, { limit: 25, excludeTrackIds: [1] });
+  });
+
   test('discards the fetched batch if playbackMode changed away from shuffle-scope while the fetch was in flight', async () => {
     let resolveFetch;
     apiService.getRandomScopeTracks.mockReturnValue(new Promise((resolve) => { resolveFetch = resolve; }));

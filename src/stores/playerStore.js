@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { apiService } from '../services/api';
-import { isSpotifyTrack } from '../utils/trackSource';
+import { isSpotifyTrack, localTrackIds } from '../utils/trackSource';
 
 // "Shuffle scope" (collection, artist, ...) fetches tracks from the scope in batches rather
 // than all at once (a scope can be large) — an initial batch on entry, then another whenever
@@ -339,7 +339,7 @@ export const usePlayerStore = create((set, get) => ({
     try {
       const response = await apiService.getRandomScopeTracks(scope.type, scope.id, {
         limit: SCOPE_SHUFFLE_BATCH_SIZE,
-        excludeTrackIds: truncated.map((t) => t.id),
+        excludeTrackIds: localTrackIds(truncated),
       });
       if (get().playbackMode !== 'shuffle-scope') return;
       get().appendScopeShuffleTracks(response.data?.tracks || []);

@@ -755,3 +755,16 @@ describe('Track row — Send to Jukebox menu item', () => {
     expect(screen.queryByTestId('track-menu-backdrop')).not.toBeInTheDocument();
   });
 });
+
+test('renders a Spotify queue entry (as JukeboxQueueRow does) with title and artist, without throwing', () => {
+  const spotifyTrack = {
+    source: 'spotify', uri: 'spotify:track:x', title: 'Spotify Title',
+    artist: { name: 'Spotify Artist' }, album: { title: 'Spotify Album' }, duration: 200,
+  };
+  render(
+    <MemoryRouter>
+      <Track track={spotifyTrack} index={0} trackCount={1} isPlaying={false} />
+    </MemoryRouter>
+  );
+  expect(screen.getByText(/Spotify Title/)).toHaveTextContent('Spotify Artist');
+});
