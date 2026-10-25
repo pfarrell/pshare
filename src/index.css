@@ -4709,3 +4709,69 @@ body:has(.jukebox-app) {
   text-align: center;
   color: var(--color-text-muted);
 }
+
+/* Kiosk search: "More from Spotify" rows (#72). Whole row is the touch target;
+   a tap adds to the queue. Kiosk is always dark, so colors are fixed. */
+.jukebox-app .jukebox-spotify-section {
+  gap: 0.25rem;
+}
+
+.jukebox-app .jukebox-spotify-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 3.5rem;
+  box-sizing: border-box;
+  padding: 0.5rem 0.75rem;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.jukebox-app .jukebox-spotify-row:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.jukebox-app .jukebox-spotify-row:disabled {
+  opacity: 0.6;
+}
+
+.jukebox-app .jukebox-spotify-logo {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+}
+
+.jukebox-app .jukebox-spotify-row-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.jukebox-app .jukebox-spotify-row-title,
+.jukebox-app .jukebox-spotify-row-subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jukebox-app .jukebox-spotify-row-title {
+  font-size: 1.05rem;
+}
+
+.jukebox-app .jukebox-spotify-row-subtitle {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.jukebox-app .jukebox-spotify-row-add {
+  flex-shrink: 0;
+  font-size: 1.5rem;
+  color: #93c5fd;
+}
