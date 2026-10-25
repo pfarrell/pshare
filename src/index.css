@@ -4628,4 +4628,5 @@ body:has(.jukebox-app) {
 }
 .spotify-card-button.danger { background-color: #ef4444; }
 .spotify-card-button:disabled { opacity: 0.6; cursor: default; }
-.spotify-card-message { color: #fca5a5; font-size: 0.875rem; margin-bottom: 0.75rem; }
+.spotify-card-message { color: #dc2626; font-size: 0.875rem; margin-bottom: 0.75rem; }
+[data-theme="dark"] .spotify-card-message { color: #fca5a5; }

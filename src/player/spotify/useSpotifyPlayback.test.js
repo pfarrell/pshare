@@ -162,7 +162,7 @@ test('getOAuthToken shares one in-flight fetch between concurrent calls', async 
   await expect(Promise.all([a, b])).resolves.toEqual(['tok', 'tok']);
 });
 
-test('a failed token fetch warns and makes the source unavailable until a fetch succeeds', async () => {
+test('a failed token fetch warns but leaves the source available', async () => {
   const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
   apiService.getSpotifyToken
     .mockRejectedValueOnce(new Error('not_connected'))
@@ -172,7 +172,7 @@ test('a failed token fetch warns and makes the source unavailable until a fetch 
   const source = usePlayerStore.getState().spotifySource;
   await expect(getOAuthToken()).rejects.toThrow();
   expect(warn).toHaveBeenCalled();
-  expect(source.isAvailable()).toBe(false);
+  expect(source.isAvailable()).toBe(true);
   await getOAuthToken();
   expect(source.isAvailable()).toBe(true);
   warn.mockRestore();

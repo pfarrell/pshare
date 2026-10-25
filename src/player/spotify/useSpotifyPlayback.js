@@ -53,12 +53,10 @@ export const useSpotifyPlayback = () => {
           .then((response) => {
             const token = response?.data?.accessToken;
             if (!token) throw new Error('No Spotify access token');
-            source?.setTokenFailed(false);
             return token;
           })
           .catch((error) => {
             console.warn('Spotify token unavailable:', error);
-            source?.setTokenFailed(true);
             throw error;
           })
           .finally(() => { tokenRequest = null; });

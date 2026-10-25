@@ -120,19 +120,25 @@ export const createSpotifySdkAdapter = ({ name, getOAuthToken }) => {
     playUri: (uri, deviceId) => {
       // Subscribed before the request goes out, so an early state change can't be missed.
       const waiter = waitForPlaying(uri);
+      // Aborted on timeout, so a hung PUT can't land late and start this track over a newer one.
+      const controller = new AbortController();
       const request = (async () => {
         const token = await getOAuthToken();
         const response = await fetch(`${PLAY_URL}?device_id=${encodeURIComponent(deviceId)}`, {
           method: 'PUT',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ uris: [uri] }),
+          signal: controller.signal,
         });
         if (!response.ok) throw new Error(`Spotify play request failed: ${response.status}`);
         await waiter.promise;
       })();
       let timer;
       const timeout = new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`Spotify did not start ${uri} in time`)), PLAY_TIMEOUT_MS);
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error(`Spotify did not start ${uri} in time`));
+        }, PLAY_TIMEOUT_MS);
       });
       return Promise.race([request, timeout]).finally(() => {
         clearTimeout(timer);

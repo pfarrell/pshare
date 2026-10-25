@@ -4,6 +4,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
 import { useProfileFilterStore } from '../stores/profileFilterStore';
+import { usePlayerStore } from '../stores/playerStore';
 import Loading from '../components/Loading';
 import Track from '../components/Track';
 import SearchResultCard from '../components/SearchResultCard';
@@ -55,14 +56,17 @@ const Search = () => {
   const [spotifyOnly, setSpotifyOnly] = useState(false);
 
   // Whether Spotify results can be played in-page. Computed once per mount.
-  const [canPlay, setCanPlay] = useState(false);
+  const [eligible, setEligible] = useState(false);
+  // Also needs a registered SDK source (reactive: buttons appear once the SDK is ready).
+  const hasSpotifySource = usePlayerStore((s) => s.spotifySource) != null;
+  const canPlay = eligible && hasSpotifySource;
   useEffect(() => {
     let cancelled = false;
     Promise.resolve()
       .then(() => getSpotifyStatusCached())
       .then((status) => {
         if (cancelled) return;
-        setCanPlay(canPlaySpotify({ status, isSecureContext: window.isSecureContext, isIOS: isIOSDevice() }));
+        setEligible(canPlaySpotify({ status, isSecureContext: window.isSecureContext, isIOS: isIOSDevice() }));
       })
       .catch(() => {});
     return () => { cancelled = true; };

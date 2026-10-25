@@ -44,12 +44,13 @@ test('is unavailable until it has a device id', () => {
   expect(source.isAvailable()).toBe(false);
 });
 
-test('is unavailable while the token is failing', () => {
-  const source = readySource(fakeAdapter());
-  source.setTokenFailed(true);
-  expect(source.isAvailable()).toBe(false);
-  source.setTokenFailed(false);
+test('a failed token fetch does not disable Spotify: a later start is still attempted', async () => {
+  const adapter = fakeAdapter();
+  const source = readySource(adapter);
+  // The hook only warns on a token failure; it no longer tells the source about it.
   expect(source.isAvailable()).toBe(true);
+  await source.start(spotifyTrack(1));
+  expect(adapter.playUri).toHaveBeenCalled();
 });
 
 test('start calls playUri with the track uri and the device id', async () => {

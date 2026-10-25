@@ -3,11 +3,11 @@
 //
 // Contract used by the store: start(track) / pause() / resume() / seek(seconds) return
 // Promises; isAvailable(), isDisplaced(), clearDisplaced() and activate() are synchronous.
-// The hook (useSpotifyPlayback) additionally uses setDeviceId, setTokenFailed, getState and
-// isSettled.
+// The hook (useSpotifyPlayback) additionally uses setDeviceId, getState and isSettled.
+// Availability depends on the device only: a failed token fetch isn't sticky, since start()
+// fetches its own fresh token and a failure there just skips the track.
 export const createSpotifySource = (adapter, { onDisplaced } = {}) => {
   let deviceId = null;
-  let tokenFailed = false;
   let displaced = false;
   // True once a start() has landed (and until paused): only then does a null SDK state mean
   // another device took the playback away, rather than "nothing has started yet".
@@ -50,9 +50,8 @@ export const createSpotifySource = (adapter, { onDisplaced } = {}) => {
 
   const source = {
     setDeviceId: (id) => { deviceId = id ?? null; },
-    setTokenFailed: (failed) => { tokenFailed = !!failed; },
 
-    isAvailable: () => !!deviceId && !tokenFailed,
+    isAvailable: () => !!deviceId,
     isDisplaced: () => displaced,
     clearDisplaced: () => { displaced = false; },
     // True when no start/pause/resume is in flight, i.e. SDK state can be trusted to reflect
