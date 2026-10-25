@@ -2,6 +2,8 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import Search from './Search';
 import { apiService } from '../services/api';
+import { getSpotifyStatusCached } from '../player/spotify/statusCache';
+import { usePlayerStore } from '../stores/playerStore';
 import { useProfileFilterStore } from '../stores/profileFilterStore';
 
 vi.mock('../services/api', () => ({
@@ -11,6 +13,8 @@ vi.mock('../services/api', () => ({
     getImageUrl: () => '/img/sm/x.jpg',
   },
 }));
+
+vi.mock('../player/spotify/statusCache', () => ({ getSpotifyStatusCached: vi.fn() }));
 
 vi.mock('../components/AddToCollectionModal', () => ({ default: () => null }));
 
@@ -38,6 +42,8 @@ beforeEach(() => {
   // see exactly the page they always did. Spotify tests override this.
   apiService.searchSpotify.mockReset();
   apiService.searchSpotify.mockResolvedValue({ data: { configured: false, tracks: [], albums: [], artists: [] } });
+  getSpotifyStatusCached.mockReset();
+  getSpotifyStatusCached.mockResolvedValue(null);
   useProfileFilterStore.setState({ activeProfileId: null });
 });
 
@@ -549,6 +555,29 @@ test('renders a From Spotify section below the local results when configured', a
   expect(link).toHaveAttribute('href', 'https://open.spotify.com/track/t1');
   expect(link).toHaveAttribute('target', '_blank');
   expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+});
+
+test('shows Spotify play buttons only when the session can play Spotify and a source is registered', async () => {
+  apiService.search.mockResolvedValue(LOCAL_WITH_TRACK);
+  apiService.searchSpotify.mockResolvedValue(spotifyResponse());
+  getSpotifyStatusCached.mockResolvedValue({ allowed: true, connected: true, devices: [] });
+  vi.stubGlobal('isSecureContext', true);
+  const prior = usePlayerStore.getState().spotifySource;
+  try {
+    usePlayerStore.setState({ spotifySource: null });
+    renderSearch('spot');
+
+    await screen.findByText('Spotify Track');
+    await waitFor(() => expect(getSpotifyStatusCached).toHaveBeenCalled());
+    await act(async () => {});
+    expect(screen.queryByRole('button', { name: 'Play Spotify Track' })).toBeNull();
+
+    act(() => { usePlayerStore.setState({ spotifySource: { isAvailable: () => true } }); });
+    expect(await screen.findByRole('button', { name: 'Play Spotify Track' })).toBeInTheDocument();
+  } finally {
+    usePlayerStore.setState({ spotifySource: prior });
+    vi.unstubAllGlobals();
+  }
 });
 
 test('renders local results while Spotify is still pending, with a loading indicator', async () => {

@@ -134,3 +134,16 @@ describe('has-now-playing body class', () => {
     expect(document.body.classList.contains('has-now-playing')).toBe(false);
   });
 });
+
+test('renders a Spotify current track without throwing', () => {
+  usePlayerStore.setState({
+    currentTrack: {
+      source: 'spotify', uri: 'spotify:track:x', title: 'Spot Title',
+      artist: { name: 'Spot Artist' }, album: { title: 'Spot Album' }, imageUrl: 'http://img/s.jpg',
+    },
+  });
+  renderNP();
+  expect(screen.getAllByText(/Spot Title/).length).toBeGreaterThan(0);
+  expect(screen.getAllByText('Spot Artist').length).toBeGreaterThan(0);
+  expect(screen.getByRole('img').src).toContain('s.jpg');
+});

@@ -7,6 +7,7 @@ import PlaylistTrackTooltip from './PlaylistTrackTooltip';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { useRowHoverTooltip } from '../../hooks/useRowHoverTooltip';
 import ContextMenu from '../ContextMenu';
+import { trackKey } from '../../utils/trackSource';
 
 const PlaylistDrawer = ({ onSaveQueue }) => {
   const playlist = usePlayerStore((s) => s.playlist);
@@ -122,11 +123,11 @@ const PlaylistDrawer = ({ onSaveQueue }) => {
       >
         <ul className="playlist">
           {playlist.map((track, index) => {
-            const imageUrl = track.image_path ? apiService.getImageUrl(track.image_path, 'album_small') : null;
+            const imageUrl = track.image_path ? apiService.getImageUrl(track.image_path, 'album_small') : (track.imageUrl || null);
             const artSize = mobile ? 32 : 40;
             return (
               <PlaylistDrawerRow
-                key={`${track.id}-${index}`}
+                key={`${trackKey(track, index)}-${index}`}
                 track={track}
                 index={index}
                 isActive={index === currentTrackIndex}

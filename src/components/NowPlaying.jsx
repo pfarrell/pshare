@@ -5,6 +5,7 @@ import { usePlayerStore } from '../stores/playerStore';
 import { apiService } from '../services/api';
 import ImageLightbox from './ImageLightbox';
 import VisualizerToggle from './visualizer/VisualizerToggle';
+import { isSpotifyTrack } from '../utils/trackSource';
 
 const NowPlaying = () => {
   const navigate = useNavigate();
@@ -23,11 +24,13 @@ const NowPlaying = () => {
   }, [currentTrack]);
 
   const handleArtistClick = (track) => {
+    if (isSpotifyTrack(track)) return; // no library page to go to
     navigate(`/artist/${track.artist.id}`);
     closeDrawer();
   };
 
   const handleTrackClick = (track) => {
+    if (isSpotifyTrack(track)) return;
     if (track.source_playlist?.id) {
       navigate(`/playlist/${track.source_playlist.id}`);
     } else {
@@ -48,7 +51,7 @@ const NowPlaying = () => {
   // object only ever carries id/title/artist for navigation.
   const albumArtUrl = currentTrack.image_path
     ? apiService.getImageUrl(currentTrack.image_path, 'album_small')
-    : null;
+    : (currentTrack.imageUrl || null);
   const artistName = currentTrack.artist?.name || 'Unknown Artist';
 
   return (
@@ -71,13 +74,13 @@ const NowPlaying = () => {
         </svg>
       )}
       <div className="track-info show">
-        <div className="track-artist" onClick={() => handleArtistClick(currentTrack)} title="go to artist">
+        <div className="track-artist" onClick={() => handleArtistClick(currentTrack)} title={isSpotifyTrack(currentTrack) ? undefined : 'go to artist'}>
           {artistName}
         </div>
         <div
           className="track-title"
           onClick={() => handleTrackClick(currentTrack)}
-          title={currentTrack.source_playlist?.id ? 'go to playlist' : 'go to album'}
+          title={isSpotifyTrack(currentTrack) ? undefined : (currentTrack.source_playlist?.id ? 'go to playlist' : 'go to album')}
         >
           {currentTrack.title}
           {/* Desktop already shows the artist on its own line above (.track-artist);
@@ -89,7 +92,7 @@ const NowPlaying = () => {
       <VisualizerToggle />
       {showArtModal && (
         <ImageLightbox
-          imageUrl={apiService.getImageUrl(currentTrack.image_path, 'album_page')}
+          imageUrl={currentTrack.image_path ? apiService.getImageUrl(currentTrack.image_path, 'album_page') : currentTrack.imageUrl}
           alt={currentTrack.album?.title}
           title={currentTrack.album?.title}
           subtitle={currentTrack.artist?.name}

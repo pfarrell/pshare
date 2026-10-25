@@ -10,7 +10,7 @@ const MAX_QUEUE_ENTRIES = 300;
 
 const toEntry = (track, index) => ({
   index,
-  id: track?.id,
+  id: track?.id ?? null,
   title: typeof track?.title === 'string' ? track.title : '',
   artist: typeof track?.artist?.name === 'string' && track.artist.name ? track.artist.name : null,
 });

@@ -4,6 +4,7 @@ import JukeboxQueueRow from './JukeboxQueueRow';
 import { formatPlaybackTime } from '../utils/formatters';
 import { getPlaybackModeDisplay } from './jukeboxPlayerGlyphs';
 import JukeboxSavePlaylistModal from './JukeboxSavePlaylistModal';
+import { localTrackIds, trackKey } from '../utils/trackSource';
 
 // A slim action header is pinned at the top (save as playlist, AI Mix,
 // playback mode, and Clear with its two-step confirm), with the queue below.
@@ -64,7 +65,7 @@ const JukeboxNextUpTab = ({ onSaved, onOpenAiMix }) => {
   const revealFrom = Math.max(0, currentTrackIndex - backOffset);
   const visible = playlist.slice(revealFrom);
   const hasEarlierTracks = revealFrom > 0;
-  const savableTrackIds = currentTrackIndex >= 0 ? playlist.slice(currentTrackIndex).map((t) => t.id) : [];
+  const savableTrackIds = currentTrackIndex >= 0 ? localTrackIds(playlist.slice(currentTrackIndex)) : [];
 
   const hasQueue = playlist.length > 0;
   const clearArmed = confirmingClear && hasQueue;
@@ -173,7 +174,7 @@ const JukeboxNextUpTab = ({ onSaved, onOpenAiMix }) => {
           )}
           {visible.map((track, i) => {
             const absoluteIndex = revealFrom + i;
-            const rowKey = `${track.id}-${absoluteIndex}`;
+            const rowKey = `${trackKey(track, absoluteIndex)}-${absoluteIndex}`;
             return (
               <JukeboxQueueRow
                 key={rowKey}

@@ -13,7 +13,7 @@ const CURSOR_OFFSET = 16; // keeps the tooltip from appearing directly under the
 // that this component clamps to stay on-screen, the same pattern
 // ContextMenu.jsx uses for its own fixed-position menu.
 const PlaylistTrackTooltip = ({ track, x, y }) => {
-  const imageUrl = track.image_path ? apiService.getImageUrl(track.image_path, 'album_page') : null;
+  const imageUrl = track.image_path ? apiService.getImageUrl(track.image_path, 'album_page') : (track.imageUrl || null);
   const year = getAlbumYear(track.album?.release_year);
 
   let left = x + CURSOR_OFFSET;

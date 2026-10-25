@@ -1,8 +1,11 @@
 import { useEffect, useRef } from 'react';
-import { usePlayerStore, SCOPE_SHUFFLE_BATCH_SIZE, SCOPE_SHUFFLE_TOPUP_REMAINING } from '../stores/playerStore';
+import { usePlayerStore, SCOPE_SHUFFLE_BATCH_SIZE, SCOPE_SHUFFLE_TOPUP_REMAINING, spotifyCanStart } from '../stores/playerStore';
 import { useTabTitleStore } from '../stores/tabTitleStore';
 import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
+import { isSpotifyTrack, localTrackIds } from '../utils/trackSource';
+import { LOCAL_TO_SPOTIFY_LEAD_SECONDS } from '../player/spotify/constants';
+import { markIncomingAudible } from '../player/spotify/transitionTimer';
 
 const FALLBACK_ARTWORK = `${import.meta.env.BASE_URL}icons/icon-512.png`;
 const PREFETCH_THRESHOLD_SECONDS = 15;
@@ -56,7 +59,11 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
     usePlayerStore.getState().setAudioElement('b', audioB);
 
     let fiveSecondMarkFired = false;
-    const isActive = (audio) => usePlayerStore.getState().getActiveAudio() === audio;
+    let spotifyLeadFired = false;
+    const isActive = (audio) => {
+      const state = usePlayerStore.getState();
+      return state.activeSource === 'local' && state.getActiveAudio() === audio;
+    };
 
     const handleTimeUpdate = (event) => {
       const audio = event.target;
@@ -65,7 +72,7 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
       if (audio.currentTime >= 5 && !fiveSecondMarkFired) {
         fiveSecondMarkFired = true;
         const track = usePlayerStore.getState().currentTrack;
-        if (track && isAuthenticated) {
+        if (track && isAuthenticated && !isSpotifyTrack(track)) {
           const { queueSource } = usePlayerStore.getState();
           const playlistId = queueSource?.type === 'playlist' ? queueSource.id : null;
           const collectionId = queueSource?.type === 'collection' ? queueSource.id : null;
@@ -81,6 +88,18 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
       if (Number.isFinite(audio.duration) && audio.duration - audio.currentTime <= PREFETCH_THRESHOLD_SECONDS) {
         usePlayerStore.getState().ensureStandbyLoaded();
       }
+      // local → Spotify: start the Spotify track slightly early so its start latency overlaps
+      // this track's tail (the store keeps this element playing until Spotify has started).
+      // Only while actually playing (a seek near the end while paused must not start Spotify),
+      // and only when Spotify can actually start; otherwise let the track end and skip as usual.
+      if (!spotifyLeadFired && !audio.paused && Number.isFinite(audio.duration)
+        && audio.duration - audio.currentTime <= LOCAL_TO_SPOTIFY_LEAD_SECONDS) {
+        const { playlist, nextTrackIndex, spotifySource } = usePlayerStore.getState();
+        if (isSpotifyTrack(playlist[nextTrackIndex]) && spotifyCanStart(spotifySource, true)) {
+          spotifyLeadFired = true;
+          usePlayerStore.getState().playNext();
+        }
+      }
     };
     const handleLoadedMetadata = (event) => {
       if (!isActive(event.target)) return;
@@ -92,6 +111,8 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
     };
     const handleBufferingEnd = (event) => {
       if (!isActive(event.target)) return;
+      // 'playing' = audio is actually audible (canplay/error are not).
+      if (event.type === 'playing') markIncomingAudible('local');
       usePlayerStore.getState().setBuffering(false);
     };
     const handlePlay = (event) => {
@@ -104,6 +125,7 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
         return;
       }
       fiveSecondMarkFired = false;
+      spotifyLeadFired = false;
       usePlayerStore.getState().setIsPlaying(true);
     };
     const handlePause = (event) => {
@@ -196,7 +218,7 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
       if (type === 'collection' || type === 'artist') {
         const response = await apiService.getRandomScopeTracks(type, id, {
           limit: SCOPE_SHUFFLE_BATCH_SIZE,
-          excludeTrackIds: usePlayerStore.getState().playlist.map((t) => t.id),
+          excludeTrackIds: localTrackIds(usePlayerStore.getState().playlist),
         });
         const tracks = response.data?.tracks || [];
         return tracks.length > 0 ? { tracks, nextSource: { type, id } } : null;
@@ -235,7 +257,7 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
     scopeShuffleFetchInFlight.current = true;
     apiService.getRandomScopeTracks(queueSource.type, queueSource.id, {
       limit: SCOPE_SHUFFLE_BATCH_SIZE,
-      excludeTrackIds: playlist.map((t) => t.id),
+      excludeTrackIds: localTrackIds(playlist),
     })
       .then((response) => {
         usePlayerStore.getState().appendScopeShuffleTracks(response.data?.tracks || []);
@@ -268,7 +290,7 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
     }
     const artworkUrl = currentTrack.image_path
       ? apiService.getImageUrl(currentTrack.image_path, 'album_small')
-      : FALLBACK_ARTWORK;
+      : (currentTrack.imageUrl || FALLBACK_ARTWORK);
     const artworkType = mimeTypeForArtworkUrl(artworkUrl);
     navigator.mediaSession.metadata = new MediaMetadata({
       title: currentTrack.title,

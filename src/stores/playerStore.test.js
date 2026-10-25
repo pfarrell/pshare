@@ -1,6 +1,7 @@
 import { usePlayerStore, MAX_QUEUE_HISTORY } from './playerStore';
-import { describe, test, expect, beforeEach, vi } from 'vitest';
+import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
 import { apiService } from '../services/api';
+import { markIncomingAudible } from '../player/spotify/transitionTimer';
 
 vi.mock('../services/api', () => ({
   apiService: {
@@ -134,6 +135,17 @@ describe('addTrack', () => {
 
   test('throws on a track missing title or url', () => {
     expect(() => usePlayerStore.getState().addTrack({ id: 1 })).toThrow(/Invalid track/);
+  });
+
+  test('addTrack accepts a Spotify entry without url', () => {
+    setActiveAudio(mockAudioElement(), { playlist: [track(1)], currentTrackIndex: 0, isPlaying: true });
+    usePlayerStore.getState().addTrack({ source: 'spotify', title: 'S', uri: 'spotify:track:x' });
+    expect(usePlayerStore.getState().playlist).toHaveLength(2);
+  });
+
+  test('addTrack still rejects a local track without url', () => {
+    expect(() => usePlayerStore.getState().addTrack({ id: 1, title: 'No url' })).toThrow(/Invalid track/);
+    expect(() => usePlayerStore.getState().addTrack({ source: 'spotify', title: 'No uri' })).toThrow(/Invalid track/);
   });
 
   test('flashActivity bumps activityPulseToken', () => {
@@ -920,6 +932,18 @@ describe('enterScopeShuffle', () => {
     expect(apiService.getRandomScopeTracks).toHaveBeenCalledWith('artist', 3, { limit: 25, excludeTrackIds: [1] });
   });
 
+  test('excludes only numeric ids when the queue holds a Spotify entry', async () => {
+    apiService.getRandomScopeTracks.mockResolvedValue({ data: { tracks: [] } });
+    usePlayerStore.setState({
+      playlist: [track(1), { source: 'spotify', title: 'S', uri: 'spotify:track:x' }, track(3)],
+      currentTrackIndex: 1,
+      playbackMode: 'shuffle-scope',
+      queueSource: { type: 'artist', id: 3 },
+    });
+    await usePlayerStore.getState().enterScopeShuffle();
+    expect(apiService.getRandomScopeTracks).toHaveBeenCalledWith('artist', 3, { limit: 25, excludeTrackIds: [1] });
+  });
+
   test('discards the fetched batch if playbackMode changed away from shuffle-scope while the fetch was in flight', async () => {
     let resolveFetch;
     apiService.getRandomScopeTracks.mockReturnValue(new Promise((resolve) => { resolveFetch = resolve; }));
@@ -1078,5 +1102,497 @@ describe('unlockForGesture', () => {
     await Promise.resolve();
 
     expect(active.pause).not.toHaveBeenCalled();
+  });
+});
+
+describe('spotify source routing', () => {
+  const spotifyTrack = (n, overrides = {}) => ({
+    source: 'spotify',
+    uri: `spotify:track:${n}`,
+    spotifyId: `${n}`,
+    title: `Spotify ${n}`,
+    artist: { name: 'S' },
+    album: { title: 'SA' },
+    imageUrl: null,
+    duration: 200,
+    ...overrides,
+  });
+
+  const fakeSource = (overrides = {}) => ({
+    start: vi.fn(() => Promise.resolve()),
+    pause: vi.fn(() => Promise.resolve()),
+    resume: vi.fn(() => Promise.resolve()),
+    seek: vi.fn(() => Promise.resolve()),
+    isAvailable: () => true,
+    isDisplaced: () => false,
+    clearDisplaced: vi.fn(),
+    activate: vi.fn(),
+    ...overrides,
+  });
+
+  const flush = async () => {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  };
+
+  const setup = (state = {}) => {
+    const active = mockAudioElement();
+    const standby = mockAudioElement();
+    usePlayerStore.setState({
+      audioElementA: active, audioElementB: standby, activeSlot: 'a', standbyUnlocked: true, ...state,
+    });
+    return { active, standby };
+  };
+
+  beforeEach(() => {
+    usePlayerStore.setState({ activeSource: 'local', spotifySource: null, consecutiveSkips: 0 });
+  });
+
+  afterEach(() => {
+    usePlayerStore.setState({ activeSource: 'local', spotifySource: null, consecutiveSkips: 0 });
+  });
+
+  test('starts with the local source active and no Spotify source registered', () => {
+    usePlayerStore.getState().setSpotifySource(null);
+    expect(usePlayerStore.getState().activeSource).toBe('local');
+    expect(usePlayerStore.getState().spotifySource).toBeNull();
+    const source = fakeSource();
+    usePlayerStore.getState().setSpotifySource(source);
+    expect(usePlayerStore.getState().spotifySource).toBe(source);
+  });
+
+  describe('transition timing (debug flag on)', () => {
+    let log;
+    beforeEach(() => {
+      localStorage.setItem('pshare-debug-transitions', '1');
+      log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    });
+    afterEach(() => {
+      localStorage.removeItem('pshare-debug-transitions');
+      vi.restoreAllMocks();
+    });
+
+    test('a rejected Spotify start followed by a skip to local leaves no misleading mark', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const source = fakeSource({ start: vi.fn(() => Promise.reject(new Error('timeout'))) });
+      const { active } = setup({ playlist: [track(1), spotifyTrack(2), track(3)], spotifySource: source, currentTrackIndex: 0 });
+      active.paused = false;
+      usePlayerStore.getState().playTrackAtIndex(1, { auto: true });
+      await flush();
+      expect(usePlayerStore.getState().activeSource).toBe('local');
+      markIncomingAudible('local');
+      expect(log).not.toHaveBeenCalled();
+    });
+
+    test('a plain local to local advance logs nothing', () => {
+      const { active } = setup({ playlist: [track(1), track(2)], currentTrackIndex: 0 });
+      active.paused = false;
+      usePlayerStore.getState().playTrackAtIndex(1, { auto: true });
+      markIncomingAudible('local');
+      expect(log).not.toHaveBeenCalled();
+    });
+  });
+
+  test('playing a Spotify track pauses both audio elements and calls start with that track', () => {
+    const source = fakeSource();
+    const sp = spotifyTrack(1);
+    const { active, standby } = setup({ playlist: [track(1), sp], spotifySource: source });
+    usePlayerStore.getState().playTrackAtIndex(1);
+    const state = usePlayerStore.getState();
+    expect(active.pause).toHaveBeenCalled();
+    expect(standby.pause).toHaveBeenCalled();
+    expect(active.load).not.toHaveBeenCalled();
+    expect(source.start).toHaveBeenCalledWith(sp);
+    expect(state.activeSource).toBe('spotify');
+    expect(state.currentTrackIndex).toBe(1);
+    expect(state.currentTrack).toBe(sp);
+    expect(state.isPlaying).toBe(true);
+    expect(state.currentTime).toBe(0);
+    expect(state.duration).toBe(200);
+  });
+
+  test('start resolving resets consecutiveSkips', async () => {
+    const source = fakeSource();
+    setup({ playlist: [spotifyTrack(1)], spotifySource: source, consecutiveSkips: 2 });
+    usePlayerStore.getState().playTrackAtIndex(0, { auto: true });
+    await flush();
+    expect(usePlayerStore.getState().consecutiveSkips).toBe(0);
+    expect(source.pause).not.toHaveBeenCalled();
+  });
+
+  test('a local play event (setIsPlaying(true)) resets consecutiveSkips', () => {
+    usePlayerStore.setState({ consecutiveSkips: 3 });
+    usePlayerStore.getState().setIsPlaying(true);
+    expect(usePlayerStore.getState().consecutiveSkips).toBe(0);
+  });
+
+  test('playing a local track while Spotify is active pauses the Spotify source and switches back to local', () => {
+    const source = fakeSource();
+    const { active } = setup({ playlist: [spotifyTrack(1), track(2)], spotifySource: source });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    usePlayerStore.getState().playTrackAtIndex(1);
+    expect(source.pause).toHaveBeenCalled();
+    expect(usePlayerStore.getState().activeSource).toBe('local');
+    expect(active.src).toBe('/stream/2');
+    expect(active.play).toHaveBeenCalled();
+  });
+
+  test('togglePlayPause while Spotify is active pauses the Spotify source, not audio', () => {
+    const source = fakeSource();
+    const { active } = setup({ playlist: [spotifyTrack(1)], spotifySource: source });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    active.pause.mockClear();
+    active.paused = true; // the idle <audio> element is paused — must not be mistaken for "nothing playing"
+
+    usePlayerStore.getState().togglePlayPause();
+    expect(source.pause).toHaveBeenCalled();
+    expect(active.play).not.toHaveBeenCalled();
+    expect(usePlayerStore.getState().isPlaying).toBe(false);
+
+    usePlayerStore.getState().togglePlayPause();
+    expect(source.resume).toHaveBeenCalled();
+    expect(active.play).not.toHaveBeenCalled();
+    expect(usePlayerStore.getState().isPlaying).toBe(true);
+  });
+
+  test('seek while Spotify is active seeks the Spotify source', () => {
+    const source = fakeSource();
+    const { active } = setup({ playlist: [spotifyTrack(1)], spotifySource: source });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    usePlayerStore.getState().seek(42);
+    expect(source.seek).toHaveBeenCalledWith(42);
+    expect(active.currentTime).toBe(0);
+  });
+
+  test('Spotify → local with a ready standby pauses Spotify and plays the standby element', () => {
+    const source = fakeSource();
+    const { active, standby } = setup({ playlist: [spotifyTrack(1), track(2)], spotifySource: source });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    standby.src = '/stream/2';
+    standby.readyState = 3;
+
+    usePlayerStore.getState().playNext();
+    const state = usePlayerStore.getState();
+    expect(source.pause).toHaveBeenCalled();
+    expect(state.activeSource).toBe('local');
+    expect(state.activeSlot).toBe('b');
+    expect(state.currentTrackIndex).toBe(1);
+    expect(standby.play).toHaveBeenCalled();
+    expect(standby.load).not.toHaveBeenCalled();
+    expect(active.load).not.toHaveBeenCalled();
+  });
+
+  test('Spotify → local without a ready standby loads the track on the active element', () => {
+    const source = fakeSource();
+    const { active } = setup({ playlist: [spotifyTrack(1), track(2)], spotifySource: source });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    usePlayerStore.getState().playNext();
+    expect(source.pause).toHaveBeenCalled();
+    expect(usePlayerStore.getState().activeSource).toBe('local');
+    expect(usePlayerStore.getState().activeSlot).toBe('a');
+    expect(active.src).toBe('/stream/2');
+  });
+
+  test('local → Spotify via playNext starts the Spotify track, even with something loaded in standby', () => {
+    const source = fakeSource();
+    const { active, standby } = setup({ playlist: [track(1), spotifyTrack(2)], spotifySource: source });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    standby.readyState = 4;
+    usePlayerStore.getState().playNext();
+    expect(source.start).toHaveBeenCalledWith(usePlayerStore.getState().playlist[1]);
+    expect(usePlayerStore.getState().activeSlot).toBe('a');
+    expect(usePlayerStore.getState().activeSource).toBe('spotify');
+    expect(active.pause).toHaveBeenCalled();
+  });
+
+  test('with no spotifySource registered, an auto-advance onto a Spotify track skips to the next local track', () => {
+    const { active } = setup({ playlist: [track(1), spotifyTrack(2), track(3)] });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    usePlayerStore.getState().playNext();
+    const state = usePlayerStore.getState();
+    expect(state.currentTrackIndex).toBe(2);
+    expect(state.activeSource).toBe('local');
+    expect(state.playlistFinished).toBe(false);
+    expect(active.src).toBe('/stream/3');
+  });
+
+  test('with no spotifySource registered, a queue of only Spotify tracks terminates with playlistFinished', () => {
+    setup({ playlist: [spotifyTrack(1), spotifyTrack(2), spotifyTrack(3)], playbackMode: 'repeat-all' });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    const state = usePlayerStore.getState();
+    expect(state.playlistFinished).toBe(true);
+    expect(state.isPlaying).toBe(false);
+  });
+
+  test('repeat-all queue of only Spotify tracks with the source unavailable stops with playlistFinished and does not loop', async () => {
+    // Available enough to try start(), but every start() rejects (e.g. device gone) —
+    // exercises the async skip path as well as the synchronous one.
+    const rejecting = fakeSource({ start: vi.fn(() => Promise.reject(new Error('no device'))) });
+    setup({ playlist: [spotifyTrack(1), spotifyTrack(2), spotifyTrack(3)], playbackMode: 'repeat-all', spotifySource: rejecting });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    for (let i = 0; i < 10; i++) await flush();
+    expect(rejecting.start.mock.calls.length).toBeLessThanOrEqual(3);
+    expect(usePlayerStore.getState().playlistFinished).toBe(true);
+    expect(usePlayerStore.getState().isPlaying).toBe(false);
+
+    // isAvailable() false: start must never be called at all.
+    const unavailable = fakeSource({ isAvailable: () => false });
+    usePlayerStore.setState({ spotifySource: unavailable, consecutiveSkips: 0, playlistFinished: false });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    expect(unavailable.start).not.toHaveBeenCalled();
+    expect(usePlayerStore.getState().playlistFinished).toBe(true);
+    expect(usePlayerStore.getState().isPlaying).toBe(false);
+  });
+
+  test('shuffle queue of only Spotify tracks with the source unavailable stops', () => {
+    const source = fakeSource({ isAvailable: () => false });
+    setup({ playlist: [spotifyTrack(1), spotifyTrack(2), spotifyTrack(3), spotifyTrack(4)], playbackMode: 'shuffle', spotifySource: source });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    expect(usePlayerStore.getState().playlistFinished).toBe(true);
+    expect(usePlayerStore.getState().isPlaying).toBe(false);
+    expect(source.start).not.toHaveBeenCalled();
+  });
+
+  test('repeat-one: an unplayable Spotify track is tried once, then the following local track plays', async () => {
+    const source = fakeSource({ start: vi.fn(() => Promise.reject(new Error('no device'))) });
+    const { active } = setup({ playlist: [spotifyTrack(1), track(2), track(3)], playbackMode: 'repeat-one', spotifySource: source });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    for (let i = 0; i < 10; i++) await flush();
+    const state = usePlayerStore.getState();
+    expect(source.start).toHaveBeenCalledTimes(1);
+    expect(state.currentTrackIndex).toBe(1);
+    expect(state.activeSource).toBe('local');
+    expect(active.src).toBe('/stream/2');
+    // repeat-one applies to the newly playing track as normal.
+    expect(state.nextTrackIndex).toBe(1);
+  });
+
+  test('repeat-one: a queue where every track is unplayable terminates with playlistFinished', async () => {
+    const source = fakeSource({ start: vi.fn(() => Promise.reject(new Error('no device'))) });
+    setup({ playlist: [spotifyTrack(1), spotifyTrack(2), spotifyTrack(3)], playbackMode: 'repeat-one', spotifySource: source });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    for (let i = 0; i < 10; i++) await flush();
+    expect(source.start.mock.calls.length).toBeLessThanOrEqual(3);
+    expect(usePlayerStore.getState().playlistFinished).toBe(true);
+    expect(usePlayerStore.getState().isPlaying).toBe(false);
+
+    const unavailable = fakeSource({ isAvailable: () => false });
+    usePlayerStore.setState({ spotifySource: unavailable, consecutiveSkips: 0, playlistFinished: false });
+    usePlayerStore.getState().playTrackAtIndex(1);
+    expect(unavailable.start).not.toHaveBeenCalled();
+    expect(usePlayerStore.getState().playlistFinished).toBe(true);
+    expect(usePlayerStore.getState().isPlaying).toBe(false);
+  });
+
+  test('displaced: auto-advance skips Spotify tracks; a manual playTrackAtIndex onto one clears displaced and starts it', () => {
+    let displaced = true;
+    const source = fakeSource({
+      isDisplaced: () => displaced,
+      clearDisplaced: vi.fn(() => { displaced = false; }),
+    });
+    const { active } = setup({ playlist: [track(1), spotifyTrack(2), track(3)], spotifySource: source });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    usePlayerStore.getState().playNext();
+    expect(source.start).not.toHaveBeenCalled();
+    expect(source.clearDisplaced).not.toHaveBeenCalled();
+    expect(usePlayerStore.getState().currentTrackIndex).toBe(2);
+    expect(active.src).toBe('/stream/3');
+
+    usePlayerStore.getState().playTrackAtIndex(1);
+    expect(source.clearDisplaced).toHaveBeenCalled();
+    expect(source.start).toHaveBeenCalledTimes(1);
+    expect(usePlayerStore.getState().currentTrackIndex).toBe(1);
+    expect(usePlayerStore.getState().activeSource).toBe('spotify');
+  });
+
+  test('start rejecting advances to the next track', async () => {
+    const source = fakeSource({ start: vi.fn(() => Promise.reject(new Error('nope'))) });
+    const { active } = setup({ playlist: [spotifyTrack(1), track(2)], spotifySource: source });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    usePlayerStore.getState().playTrackAtIndex(0);
+    await flush();
+    warn.mockRestore();
+    expect(usePlayerStore.getState().currentTrackIndex).toBe(1);
+    expect(usePlayerStore.getState().activeSource).toBe('local');
+    expect(active.src).toBe('/stream/2');
+  });
+
+  test('stale start: selecting a local track while start is pending pauses Spotify when start resolves', async () => {
+    let resolveStart;
+    const source = fakeSource({ start: vi.fn(() => new Promise((resolve) => { resolveStart = resolve; })) });
+    const { active } = setup({ playlist: [spotifyTrack(1), track(2)], spotifySource: source });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    usePlayerStore.getState().playTrackAtIndex(1);
+    source.pause.mockClear();
+    expect(active.src).toBe('/stream/2');
+
+    resolveStart();
+    await flush();
+    expect(source.pause).toHaveBeenCalledTimes(1);
+    expect(usePlayerStore.getState().activeSource).toBe('local');
+    expect(usePlayerStore.getState().currentTrackIndex).toBe(1);
+  });
+
+  test('stale start rejecting after the user moved on does not skip anything', async () => {
+    let rejectStart;
+    const source = fakeSource({ start: vi.fn(() => new Promise((_, reject) => { rejectStart = reject; })) });
+    setup({ playlist: [spotifyTrack(1), track(2), track(3)], spotifySource: source });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    usePlayerStore.getState().playTrackAtIndex(0);
+    usePlayerStore.getState().playTrackAtIndex(1);
+    rejectStart(new Error('late'));
+    await flush();
+    warn.mockRestore();
+    expect(usePlayerStore.getState().currentTrackIndex).toBe(1);
+  });
+
+  test('ensureStandbyLoaded does not touch the standby element when next is Spotify', () => {
+    const { standby } = setup({ playlist: [track(1), spotifyTrack(2)], nextTrackIndex: 1 });
+    usePlayerStore.getState().ensureStandbyLoaded();
+    expect(standby.load).not.toHaveBeenCalled();
+    expect(standby.src).toBe('');
+  });
+
+  test('first playTrackAtIndex calls spotifySource.activate', () => {
+    const source = fakeSource();
+    setup({ playlist: [track(1), track(2)], spotifySource: source, standbyUnlocked: false });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    expect(source.activate).toHaveBeenCalledTimes(1);
+    usePlayerStore.getState().playTrackAtIndex(1);
+    expect(source.activate).toHaveBeenCalledTimes(1);
+  });
+
+  test('unlockForGesture calls spotifySource.activate', () => {
+    const source = fakeSource();
+    setup({ spotifySource: source, standbyUnlocked: true });
+    usePlayerStore.getState().unlockForGesture();
+    expect(source.activate).toHaveBeenCalled();
+  });
+
+  test('a source registered after the first local play is activated on the next manual play', () => {
+    setup({ playlist: [track(1), track(2), track(3)], standbyUnlocked: false });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    const source = fakeSource();
+    usePlayerStore.getState().setSpotifySource(source);
+    usePlayerStore.getState().playNext();
+    expect(source.activate).not.toHaveBeenCalled();
+    usePlayerStore.getState().playTrackAtIndex(2);
+    expect(source.activate).toHaveBeenCalledTimes(1);
+  });
+
+  test('clearPlaylist while Spotify is active pauses the Spotify source', () => {
+    const source = fakeSource();
+    setup({ playlist: [spotifyTrack(1)], spotifySource: source });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    usePlayerStore.getState().clearPlaylist();
+    expect(source.pause).toHaveBeenCalled();
+    expect(usePlayerStore.getState().activeSource).toBe('local');
+  });
+
+  test('a rejected start followed by a skip to local pauses the Spotify source', async () => {
+    const source = fakeSource({ start: vi.fn(() => Promise.reject(new Error('timed out'))) });
+    const { active } = setup({ playlist: [spotifyTrack(1), track(2)], spotifySource: source });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    usePlayerStore.getState().playTrackAtIndex(0);
+    await flush();
+    warn.mockRestore();
+    expect(active.src).toBe('/stream/2');
+    expect(source.pause).toHaveBeenCalled();
+  });
+
+  test('a stale start rejecting after the user moved to a local track pauses the Spotify source', async () => {
+    let rejectStart;
+    const source = fakeSource({ start: vi.fn(() => new Promise((_, reject) => { rejectStart = reject; })) });
+    setup({ playlist: [spotifyTrack(1), track(2)], spotifySource: source });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    usePlayerStore.getState().playTrackAtIndex(0);
+    usePlayerStore.getState().playTrackAtIndex(1);
+    source.pause.mockClear();
+    rejectStart(new Error('timed out'));
+    await flush();
+    warn.mockRestore();
+    expect(source.pause).toHaveBeenCalledTimes(1);
+    expect(usePlayerStore.getState().currentTrackIndex).toBe(1);
+  });
+
+  test('auto local→Spotify keeps the local element playing until start resolves', async () => {
+    let resolveStart;
+    const source = fakeSource({ start: vi.fn(() => new Promise((resolve) => { resolveStart = resolve; })) });
+    const { active } = setup({ playlist: [track(1), spotifyTrack(2)], spotifySource: source });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    active.paused = false; // still playing its last few hundred ms
+
+    usePlayerStore.getState().playNext();
+    expect(source.start).toHaveBeenCalled();
+    expect(usePlayerStore.getState().activeSource).toBe('spotify');
+    expect(active.pause).not.toHaveBeenCalled();
+
+    resolveStart();
+    await flush();
+    expect(active.pause).toHaveBeenCalled();
+  });
+
+  test('auto local→Spotify whose start is superseded never pauses the element the newer track is using', async () => {
+    let resolveStart;
+    const source = fakeSource({ start: vi.fn(() => new Promise((resolve) => { resolveStart = resolve; })) });
+    const { active } = setup({ playlist: [track(1), spotifyTrack(2), track(3)], spotifySource: source });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    active.paused = false;
+    usePlayerStore.getState().playNext();
+    usePlayerStore.getState().playTrackAtIndex(2); // user picks a local track while start is pending
+    expect(active.src).toBe('/stream/3');
+
+    resolveStart();
+    await flush();
+    expect(active.pause).not.toHaveBeenCalled();
+  });
+
+  test('manual local→Spotify pauses the local element immediately', () => {
+    const source = fakeSource({ start: vi.fn(() => new Promise(() => {})) });
+    const { active } = setup({ playlist: [track(1), spotifyTrack(2)], spotifySource: source });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    active.paused = false;
+    usePlayerStore.getState().playNext({ manual: true });
+    expect(active.pause).toHaveBeenCalled();
+  });
+
+  test('unregistering the source while Spotify is active pauses it, ignores its pending start and advances to the next local track', async () => {
+    let resolveStart;
+    const source = fakeSource({ start: vi.fn(() => new Promise((resolve) => { resolveStart = resolve; })) });
+    const { active } = setup({ playlist: [spotifyTrack(1), spotifyTrack(2), track(3)], spotifySource: source });
+    usePlayerStore.getState().playTrackAtIndex(0);
+
+    usePlayerStore.getState().setSpotifySource(null);
+    const state = usePlayerStore.getState();
+    expect(source.pause).toHaveBeenCalled();
+    expect(state.spotifySource).toBeNull();
+    expect(state.activeSource).toBe('local');
+    expect(state.currentTrackIndex).toBe(2);
+    expect(active.src).toBe('/stream/3');
+
+    source.pause.mockClear();
+    resolveStart();
+    await flush();
+    expect(usePlayerStore.getState().currentTrackIndex).toBe(2);
+    expect(usePlayerStore.getState().activeSource).toBe('local');
+  });
+
+  test('unregistering the source while Spotify is active with nothing playable left stops', () => {
+    const source = fakeSource();
+    setup({ playlist: [track(1), spotifyTrack(2)], spotifySource: source });
+    usePlayerStore.getState().playTrackAtIndex(1);
+    usePlayerStore.getState().setSpotifySource(null);
+    const state = usePlayerStore.getState();
+    expect(state.isPlaying).toBe(false);
+    expect(state.playlistFinished).toBe(true);
+  });
+
+  test('unregistering the source while local is active changes nothing else', () => {
+    const source = fakeSource();
+    const { active } = setup({ playlist: [track(1), spotifyTrack(2)], spotifySource: source });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    usePlayerStore.getState().setSpotifySource(null);
+    expect(source.pause).not.toHaveBeenCalled();
+    expect(usePlayerStore.getState().currentTrackIndex).toBe(0);
+    expect(active.src).toBe('/stream/1');
   });
 });

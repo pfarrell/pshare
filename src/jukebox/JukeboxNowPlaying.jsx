@@ -21,7 +21,7 @@ const JukeboxNowPlaying = ({ onTap }) => {
   // the desktop footer's NowPlaying uses (src/components/NowPlaying.jsx).
   const albumArtUrl = currentTrack.image_path
     ? apiService.getImageUrl(currentTrack.image_path, 'album_page')
-    : null;
+    : (currentTrack.imageUrl || null);
 
   return (
     <div className="jukebox-now-playing" onClick={onTap}>

@@ -75,6 +75,10 @@ export const apiService = {
     return `${getBaseURL()}/auth/recall/connect${qs ? `?${qs}` : ''}`;
   },
   disconnectRecall: () => api.delete('/auth/recall/connect'),
+  getSpotifyStatus: () => api.get('/auth/spotify/status'),
+  getSpotifyToken: () => api.get('/auth/spotify/token'),
+  disconnectSpotify: (target, deviceId) => api.delete('/auth/spotify/connection', { params: { target, deviceId } }),
+  spotifyConnectUrl: (target, deviceId) => `${getBaseURL()}/auth/spotify/start${qs({ target, deviceId })}`,
   setPassword: (password) => api.put('/auth/set-password', { password }),
   changePassword: (currentPassword, newPassword) => api.put('/auth/change-password', { currentPassword, newPassword }),
   forgotPassword: (username) => api.post('/auth/forgot-password', { username }),
@@ -145,6 +149,7 @@ export const apiService = {
   // Search
   search: (query, offset, profileId = null) => api.get(`/search${qs({ q: query, offset: offset || undefined, profileId })}`),
   searchSpotify: (query) => api.get(`/search/spotify${qs({ q: query })}`), // Returns { configured, tracks, albums, artists }
+  getSpotifyAlbumTracks: (id) => api.get(`/spotify/albums/${id}/tracks`), // Returns { configured, album, tracks }
 
   // Jukebox phone enqueue (see docs/superpowers/specs/2026-09-25-jukebox-server-queue-design.md)
   jukeboxSearch: (token, query) => api.get(`/jukebox/${token}/search${qs({ q: query })}`),

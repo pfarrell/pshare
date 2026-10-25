@@ -165,6 +165,19 @@ interface JukeboxDeviceTable {
   created_at: ColumnType<Date, string | undefined, never>
 }
 
+interface SpotifyConnectionTable {
+  id: Generated<number>
+  user_id: number | null
+  jukebox_device_id: number | null
+  spotify_user_id: string
+  refresh_token: string
+  access_token: string
+  access_token_expires_at: Date
+  scopes: string
+  created_at: ColumnType<Date, string | undefined, never>
+  updated_at: ColumnType<Date, string | undefined, string>
+}
+
 interface DesktopDeviceTable {
   id: Generated<number>
   user_id: number
@@ -473,6 +486,7 @@ export interface Database {
   password_reset_tokens: PasswordResetTokenTable
   jukebox_devices: JukeboxDeviceTable
   desktop_devices: DesktopDeviceTable
+  spotify_connections: SpotifyConnectionTable
   jukebox_queue_submissions: JukeboxQueueSubmissionTable
   user_playlists: UserPlaylistTable
   artist_albums: ArtistAlbumTable

@@ -626,6 +626,41 @@
   cursor: default;
 }
 
+.spotify-actions {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+  margin-right: 0.4rem;
+}
+
+.result-row .spotify-actions {
+  margin: 0;
+}
+
+.spotify-action-btn {
+  box-sizing: border-box;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.spotify-action-btn:hover:not(:disabled) {
+  background: var(--color-border);
+}
+
+.spotify-action-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .spotify-image-fallback {
   display: flex;
   align-items: center;
@@ -4552,3 +4587,46 @@ body:has(.jukebox-app) {
   font-size: 1.25rem;
   font-weight: 400;
 }
+
+/* Account page Spotify connections card */
+.spotify-card {
+  background-color: var(--color-bg-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  box-sizing: border-box;
+}
+.spotify-card-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-faint);
+  margin-bottom: 0.75rem;
+}
+.spotify-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.spotify-card-row + .spotify-card-row { margin-top: 0.75rem; }
+.spotify-card-label { color: var(--color-text-primary); font-size: 0.875rem; }
+.spotify-card-button {
+  display: inline-block;
+  padding: 0.625rem 1rem;
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  text-align: center;
+  box-sizing: border-box;
+}
+.spotify-card-button.danger { background-color: #ef4444; }
+.spotify-card-button:disabled { opacity: 0.6; cursor: default; }
+.spotify-card-message { color: #dc2626; font-size: 0.875rem; margin-bottom: 0.75rem; }
+[data-theme="dark"] .spotify-card-message { color: #fca5a5; }

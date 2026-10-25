@@ -1,7 +1,10 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { apiService } from '../services/api';
 import SpotifyResults from './SpotifyResults';
 import { usePlayerStore } from '../stores/playerStore';
 import { useViewModeStore } from '../stores/viewModeStore';
+
+vi.mock('../services/api', () => ({ apiService: { getSpotifyAlbumTracks: vi.fn() } }));
 
 beforeEach(() => {
   useViewModeStore.setState({ mode: 'card' });
@@ -56,4 +59,60 @@ test('clicking a Spotify item does not touch the player queue', () => {
   render(<SpotifyResults tracks={[{ id: 't', name: 'Ext Track', artists: [{ name: 'A' }], album: { name: 'B', imageUrl: null }, durationMs: 1000, externalUrl: 'https://open.spotify.com/track/t' }]} />);
   fireEvent.click(screen.getByText('Ext Track'));
   expect(usePlayerStore.getState().playlist).toBe(before);
+});
+
+describe('canPlay', () => {
+  const track = { id: 't1', uri: 'spotify:track:t1', name: 'Ext Track', artists: [{ name: 'A' }], album: { name: 'B', imageUrl: null }, durationMs: 0, externalUrl: 'https://open.spotify.com/track/t1' };
+  const album = { id: 'al1', name: 'Some Album', artists: [], imageUrl: null, externalUrl: 'https://open.spotify.com/album/al1' };
+
+  beforeEach(() => {
+    apiService.getSpotifyAlbumTracks.mockReset();
+    usePlayerStore.setState({ addTracks: vi.fn() });
+  });
+
+  test('canPlay=false renders no play buttons', () => {
+    render(<SpotifyResults tracks={[track]} albums={[album]} />);
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  test('canPlay=true: playing a track calls addTracks with one Spotify queue entry and playImmediately', () => {
+    render(<SpotifyResults canPlay tracks={[track]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Play Ext Track' }));
+    const [entries, next, opts] = usePlayerStore.getState().addTracks.mock.calls[0];
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ source: 'spotify', uri: 'spotify:track:t1', duration: 0 });
+    expect(entries[0].id).toBeUndefined();
+    expect(next).toBe(false);
+    expect(opts).toMatchObject({ playImmediately: true });
+    expect(screen.getByRole('link', { name: 'Open Ext Track in Spotify' })).toBeInTheDocument();
+  });
+
+  test('canPlay=true: adding an album fetches its tracks and enqueues all of them in order', async () => {
+    apiService.getSpotifyAlbumTracks.mockResolvedValue({ data: { configured: true, album: { id: 'al1', name: 'Some Album', imageUrl: null, artists: [] }, tracks: [
+      { id: 'a', uri: 'spotify:track:a', name: 'One', artists: [], durationMs: 0 },
+      { id: 'b', uri: 'spotify:track:b', name: 'Two', artists: [], durationMs: 1000 },
+    ] } });
+    render(<SpotifyResults canPlay albums={[album]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add Some Album to queue' }));
+    await waitFor(() => expect(usePlayerStore.getState().addTracks).toHaveBeenCalled());
+    const [entries, next, opts] = usePlayerStore.getState().addTracks.mock.calls[0];
+    expect(apiService.getSpotifyAlbumTracks).toHaveBeenCalledWith('al1');
+    expect(entries.map((e) => e.uri)).toEqual(['spotify:track:a', 'spotify:track:b']);
+    expect(entries[0].album.title).toBe('Some Album');
+    expect(next).toBe(false);
+    expect(opts.playImmediately).toBeUndefined();
+  });
+
+  test.each([
+    ['a 404', () => Promise.reject({ response: { status: 404 } })],
+    ['configured:false', () => Promise.resolve({ data: { configured: false, album: null, tracks: [] } })],
+  ])('album fetch failure (%s) enqueues nothing and does not throw', async (_n, impl) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    apiService.getSpotifyAlbumTracks.mockImplementation(impl);
+    render(<SpotifyResults canPlay albums={[album]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Play Some Album' }));
+    await waitFor(() => expect(warn).toHaveBeenCalled());
+    expect(usePlayerStore.getState().addTracks).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
 });

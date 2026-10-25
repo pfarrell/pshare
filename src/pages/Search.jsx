@@ -4,12 +4,16 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
 import { useProfileFilterStore } from '../stores/profileFilterStore';
+import { usePlayerStore } from '../stores/playerStore';
 import Loading from '../components/Loading';
 import Track from '../components/Track';
 import SearchResultCard from '../components/SearchResultCard';
 import SearchTypeFilterPills from '../components/SearchTypeFilterPills';
 import CardGrid from '../components/CardGrid';
 import SpotifyResults from '../components/SpotifyResults';
+import { getSpotifyStatusCached } from '../player/spotify/statusCache';
+import { canPlaySpotify } from '../player/spotify/eligibility';
+import { isIOSDevice } from '../utils/device';
 import { visibleSpotifyResults, spotifyItemCount } from '../utils/spotifyResults';
 
 const EMPTY_COUNTS = { album: 0, artist: 0, playlist: 0, collection: 0 };
@@ -50,6 +54,23 @@ const Search = () => {
   // "Spotify" pill: show only Spotify results, including ones the library
   // already has (see toggleSpotifyOnly). Per-search, never persisted.
   const [spotifyOnly, setSpotifyOnly] = useState(false);
+
+  // Whether Spotify results can be played in-page. Computed once per mount.
+  const [eligible, setEligible] = useState(false);
+  // Also needs a registered SDK source (reactive: buttons appear once the SDK is ready).
+  const hasSpotifySource = usePlayerStore((s) => s.spotifySource) != null;
+  const canPlay = eligible && hasSpotifySource;
+  useEffect(() => {
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => getSpotifyStatusCached())
+      .then((status) => {
+        if (cancelled) return;
+        setEligible(canPlaySpotify({ status, isSecureContext: window.isSecureContext, isIOS: isIOSDevice() }));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   // Fired alongside (not after) the local search and never awaited, so local
   // results render as soon as they arrive. First page only — loadMore never
@@ -304,7 +325,7 @@ const Search = () => {
       {spotify.loading ? (
         <SpotifyResults loading />
       ) : spotify.data && (
-        <SpotifyResults {...visibleSpotifyResults(spotify.data, { includeLibraryMatches: spotifyOnly })} />
+        <SpotifyResults {...visibleSpotifyResults(spotify.data, { includeLibraryMatches: spotifyOnly })} canPlay={canPlay} />
       )}
     </div>
   );

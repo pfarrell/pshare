@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import HomeViewToggle from '../components/HomeViewToggle';
 import ProfilePickerControl from '../components/ProfilePickerControl';
 import ThemeToggle from '../components/ThemeToggle';
+import SpotifyConnectionCard from '../components/SpotifyConnectionCard';
 
 const cardStyle = {
   backgroundColor: 'var(--color-bg-surface)',
@@ -223,6 +224,8 @@ const Account = () => {
           ) : null}
         </div>
       </div>
+
+      <SpotifyConnectionCard />
 
       {!user?.has_password && (
         <div style={cardStyle}>

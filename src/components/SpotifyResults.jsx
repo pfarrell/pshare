@@ -4,10 +4,14 @@ import CardGrid from './CardGrid';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useViewModeStore } from '../stores/viewModeStore';
 import { formatDuration } from '../utils/formatters';
+import { useQueueActions } from '../hooks/useQueueActions';
+import { toSpotifyQueueTrack } from '../utils/trackSource';
+import { apiService } from '../services/api';
 
 // "From Spotify" section at the bottom of the Search page. These items are
-// not in the library and not playable — they only link out to Spotify, so
-// nothing here touches playerStore. Deliberately does not reuse EntityCard:
+// not in the library. By default they only link out to Spotify; with
+// `canPlay` tracks and albums also get play / add buttons that queue
+// Spotify entries through useQueueActions. Deliberately does not reuse EntityCard:
 // that shell always renders an <img> (no null-image fallback) and carries a
 // play button / context menu that would wrongly imply local playback.
 
@@ -16,6 +20,11 @@ const joinArtistNames = (artists) =>
     .map((a) => (typeof a?.name === 'string' ? a.name : ''))
     .filter(Boolean)
     .join(', ');
+
+const queueTracks = (track) => {
+  const entry = toSpotifyQueueTrack(track);
+  return entry ? [entry] : null;
+};
 
 const text = (value) => (typeof value === 'string' || typeof value === 'number' ? String(value) : '');
 
@@ -42,10 +51,40 @@ const OpenInSpotify = ({ url, name }) => {
   );
 };
 
+// Play / add buttons. Spotify adds deliberately pass no queueSource, so the
+// end-of-queue continuation in usePlayerEngine never fires for these queues.
+const SpotifyActions = ({ source, name }) => {
+  const { loading, play, addToQueue } = useQueueActions(source, { errorLabel: 'Failed to load Spotify tracks' });
+  return (
+    <span className="spotify-actions">
+      <button type="button" className="spotify-action-btn" disabled={loading} aria-label={`Play ${name}`} onClick={play}>▶</button>
+      <button type="button" className="spotify-action-btn" disabled={loading} aria-label={`Add ${name} to queue`} onClick={addToQueue}>+</button>
+    </span>
+  );
+};
+
+// Fetches an album's full track list (the endpoint pages past 50 tracks) as
+// queue entries. Every failure or odd shape yields [] so nothing is enqueued.
+const albumTracksSource = (album) => async () => {
+  try {
+    const response = await apiService.getSpotifyAlbumTracks(album.id);
+    const data = response?.data;
+    if (!data?.configured || !Array.isArray(data.tracks)) {
+      console.warn('Spotify album tracks unavailable:', album.id);
+      return [];
+    }
+    const parent = data.album ?? album;
+    return data.tracks.map((t) => toSpotifyQueueTrack(t, parent)).filter(Boolean);
+  } catch (err) {
+    console.warn('Spotify album tracks failed:', album.id, err);
+    return [];
+  }
+};
+
 // Card on desktop card mode, compact row on mobile / desktop list mode —
 // same split EntityCard uses, built on the same .artist-card / .result-row
 // classes so it sits naturally in a CardGrid next to local results.
-const SpotifyItem = ({ title, subtitle, imageUrl, imageShape = 'square', glyph, externalUrl, asRow }) => {
+const SpotifyItem = ({ title, subtitle, imageUrl, imageShape = 'square', glyph, externalUrl, asRow, actionsSource }) => {
   const isMobile = useIsMobile();
   const viewMode = useViewModeStore((s) => s.mode);
 
@@ -59,6 +98,7 @@ const SpotifyItem = ({ title, subtitle, imageUrl, imageShape = 'square', glyph, 
           <h3 className="result-row-title">{title}</h3>
           {subtitle && <p className="result-row-subtitle">{subtitle}</p>}
         </div>
+        {actionsSource && <SpotifyActions source={actionsSource} name={title} />}
         <OpenInSpotify url={externalUrl} name={title} />
       </div>
     );
@@ -73,13 +113,14 @@ const SpotifyItem = ({ title, subtitle, imageUrl, imageShape = 'square', glyph, 
       <div className="artist-card-title">
         <h3>{title}</h3>
         {subtitle && <p className="spotify-card-subtitle">{subtitle}</p>}
+        {actionsSource && <SpotifyActions source={actionsSource} name={title} />}
         <OpenInSpotify url={externalUrl} name={title} />
       </div>
     </div>
   );
 };
 
-const SpotifyResults = ({ loading, tracks = [], albums = [], artists = [] }) => {
+const SpotifyResults = ({ loading, tracks = [], albums = [], artists = [], canPlay = false }) => {
   if (loading) {
     return (
       <div className="search-section spotify-section" data-testid="spotify-loading">
@@ -127,6 +168,7 @@ const SpotifyResults = ({ loading, tracks = [], albums = [], artists = [] }) => 
                 imageUrl={album.imageUrl}
                 glyph="♪"
                 externalUrl={album.externalUrl}
+                actionsSource={canPlay && album.id ? albumTracksSource(album) : null}
               />
             ))}
           </CardGrid>
@@ -150,6 +192,7 @@ const SpotifyResults = ({ loading, tracks = [], albums = [], artists = [] }) => 
                 imageUrl={track.album?.imageUrl}
                 glyph="♪"
                 externalUrl={track.externalUrl}
+                actionsSource={canPlay ? (queueTracks(track)) : null}
               />
             ))}
           </div>

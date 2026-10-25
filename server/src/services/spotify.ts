@@ -197,6 +197,23 @@ export function mapSearchResponse(data: RawSearchResponse | null | undefined): S
   }
 }
 
+// Authenticated GET against the Spotify API with the shared token cache, a
+// single 401 retry (a 401 usually means the cached token was revoked/expired
+// early: drop it and retry once) and 429 -> SpotifyRateLimitError.
+async function spotifyGet<T>(url: string, what: string): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    const token = await getToken()
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    if (res.status === 401 && attempt === 0) {
+      cachedToken = null
+      continue
+    }
+    if (res.status === 429) throw new SpotifyRateLimitError(parseRetryAfter(res))
+    if (!res.ok) throw new SpotifyApiError(res.status, `Spotify ${what} error ${res.status}`)
+    return (await res.json()) as T
+  }
+}
+
 export async function searchSpotify(
   query: string,
   opts: { types?: SpotifySearchType[]; limit?: number } = {},
@@ -207,18 +224,40 @@ export async function searchSpotify(
     type: (opts.types?.length ? opts.types : DEFAULT_TYPES).join(','),
     limit: String(opts.limit ?? DEFAULT_LIMIT),
   })
-  const url = `${API}/search?${qs}`
+  return mapSearchResponse(await spotifyGet<RawSearchResponse>(`${API}/search?${qs}`, 'search'))
+}
 
-  // A 401 usually means the cached token was revoked/expired early: drop it and retry once.
-  for (let attempt = 0; ; attempt++) {
-    const token = await getToken()
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-    if (res.status === 401 && attempt === 0) {
-      cachedToken = null
-      continue
-    }
-    if (res.status === 429) throw new SpotifyRateLimitError(parseRetryAfter(res))
-    if (!res.ok) throw new SpotifyApiError(res.status, `Spotify search error ${res.status}`)
-    return mapSearchResponse((await res.json()) as RawSearchResponse)
+export interface SpotifyAlbumTracks {
+  album: { id: string; name: string; imageUrl: string | null; artists: SpotifyArtistRef[] }
+  tracks: SpotifyTrack[]
+}
+
+interface RawAlbumTracksPage { items?: (RawTrack | null)[] | null; next?: string | null }
+interface RawAlbumWithTracks extends RawAlbum { tracks?: RawAlbumTracksPage | null }
+
+// Safety valve against a `next` loop; 50 tracks/page covers any real album many times over.
+const MAX_ALBUM_TRACK_PAGES = 50
+
+// Album-track items are "simplified" (no album field), so the album is stamped on each track.
+export async function getSpotifyAlbumTracks(albumId: string): Promise<SpotifyAlbumTracks> {
+  if (!isSpotifyConfigured()) throw new SpotifyNotConfiguredError()
+  const raw = await spotifyGet<RawAlbumWithTracks>(`${API}/albums/${encodeURIComponent(albumId)}`, 'album')
+  const album = {
+    id: str(raw.id) || albumId,
+    name: str(raw.name),
+    imageUrl: pickImageUrl(raw.images),
+    artists: mapArtistRefs(raw.artists),
   }
+  const rawTracks: RawTrack[] = []
+  let page: RawAlbumTracksPage | null | undefined = raw.tracks
+  for (let n = 0; page && n < MAX_ALBUM_TRACK_PAGES; n++) {
+    rawTracks.push(...items(page as RawPage<RawTrack>))
+    const next: string | null | undefined = page.next
+    if (!next) break
+    // Only follow Spotify API URLs: the bearer token must not be sent anywhere else.
+    if (!next.startsWith(`${API}/`)) throw new SpotifyApiError(502, 'Spotify returned an unexpected pagination URL')
+    page = await spotifyGet<RawAlbumTracksPage>(next, 'album tracks')
+  }
+  const tracks = rawTracks.map((t) => mapTrack({ ...t, album: { id: album.id, name: album.name, images: raw.images } }))
+  return { album, tracks }
 }

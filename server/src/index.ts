@@ -8,6 +8,7 @@ import artists from './routes/artists.js'
 import albums from './routes/albums.js'
 import tracks from './routes/tracks.js'
 import search from './routes/search.js'
+import spotify from './routes/spotify.js'
 import streams, { downloads } from './routes/streams.js'
 import logs from './routes/logs.js'
 import playlists from './routes/playlists.js'
@@ -22,6 +23,7 @@ import jukeboxDevices from './routes/jukeboxDevices.js'
 import admin from './routes/admin/index.js'
 import upload from './routes/upload.js'
 import auth from './routes/auth.js'
+import spotifyAuth from './routes/spotifyAuth.js'
 import errors from './routes/errors.js'
 import signups from './routes/signups.js'
 import photos from './routes/photos.js'
@@ -80,6 +82,8 @@ app.get('/health', (c) => c.json({ ok: true }))
 
 // Auth routes (public — /login, /signup(admin-gated), /me, /google/* need to be
 // reachable without a session; the rest of this router self-checks c.get('user'))
+// Spotify routes first so /auth/spotify/* isn't swallowed by the /auth router
+app.route('/auth/spotify', spotifyAuth)
 app.route('/auth', auth)
 
 // Public: unfurl-only HTML for social link previews, no protected data.
@@ -111,6 +115,7 @@ const protectedApp = new Hono()
 protectedApp.use('*', requireAuth)
 
 protectedApp.route('/search', search)
+protectedApp.route('/spotify', spotify)
 protectedApp.route('/jukebox/devices', jukeboxDevices)
 protectedApp.route('/download', downloads)
 protectedApp.route('/log', logs)

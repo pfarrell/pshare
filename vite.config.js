@@ -67,6 +67,13 @@ export default defineConfig({
             handler: 'NetworkOnly',
           },
           {
+            // Spotify access tokens expire hourly and connection status changes
+            // on the OAuth redirect — a cached answer is wrong. Must stay ahead
+            // of the generic /pshare/api/ rule below (first match wins).
+            urlPattern: /\/pshare\/api\/auth\/spotify\//,
+            handler: 'NetworkOnly',
+          },
+          {
             urlPattern: /\/pshare\/api\//,
             handler: 'StaleWhileRevalidate',
           },

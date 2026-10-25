@@ -2,11 +2,13 @@ import { useRef, useEffect, useState } from 'react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useAuthStore } from '../../stores/authStore';
 import { usePlayerEngine } from '../../hooks/usePlayerEngine';
+import { useSpotifyPlayback } from '../../player/spotify/useSpotifyPlayback';
 import PlaylistDrawer from './PlaylistDrawer';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { formatPlaybackTime } from '../../utils/formatters';
 import ContextMenu from '../ContextMenu';
 import SavePlaylistModal from './SavePlaylistModal';
+import { localTrackIds } from '../../utils/trackSource';
 
 const HAMBURGER = '☰';
 const PREV = '⏪';
@@ -38,6 +40,7 @@ const MusicPlayerWrapper = ({ className = '' }) => {
   const audioRefA = useRef(null);
   const audioRefB = useRef(null);
   usePlayerEngine(audioRefA, audioRefB);
+  useSpotifyPlayback();
 
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const isBuffering = usePlayerStore((s) => s.isBuffering);
@@ -167,7 +170,7 @@ const MusicPlayerWrapper = ({ className = '' }) => {
 
       {saveModalOpen && (
         <SavePlaylistModal
-          trackIds={playlist.map((t) => t.id)}
+          trackIds={localTrackIds(playlist)}
           onClose={() => setSaveModalOpen(false)}
         />
       )}

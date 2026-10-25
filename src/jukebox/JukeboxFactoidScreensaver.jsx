@@ -29,7 +29,7 @@ const hostOf = (url) => {
 // JukeboxApp's visualizerFailed fallback).
 const JukeboxFactoidScreensaver = ({ onDismiss, onView }) => {
   const currentTrack = usePlayerStore((s) => s.currentTrack);
-  const trackId = currentTrack?.id ?? null;
+  const trackId = currentTrack?.id ?? null; // Spotify entries have no id: falls back to random factoids
   const [factoids, setFactoids] = useState(null); // null = still loading
   const [index, setIndex] = useState(0);
   const timerRef = useRef(null);
