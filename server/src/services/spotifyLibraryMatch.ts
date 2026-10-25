@@ -134,6 +134,16 @@ export function withNullLocalIds(result: SpotifySearchResult): AnnotatedSpotifyR
 
 const ilikeAny = (column: string, patterns: string[]) => sql<boolean>`${sql.ref(column)} ILIKE ANY(${patterns}::text[])`
 
+// Only rows local search can show count as owned: an album with an approved
+// track, an artist with one via albums.artist_id or tracks.artist_id (the same
+// rules as searchService). Stub rows (e.g. from similar-artist imports) would
+// otherwise hide the Spotify result while never appearing locally.
+const albumHasApprovedTrack = sql<boolean>`EXISTS (SELECT 1 FROM tracks t WHERE t.album_id = albums.id AND t.approved = true)`
+const artistHasApprovedTrack = sql<boolean>`(
+  EXISTS (SELECT 1 FROM tracks t WHERE t.artist_id = artists.id AND t.approved = true)
+  OR EXISTS (SELECT 1 FROM albums al INNER JOIN tracks t ON t.album_id = al.id AND t.approved = true WHERE al.artist_id = artists.id)
+)`
+
 export function createSpotifyLibraryMatcher(db: Kysely<Database>) {
   // At most three queries (run in parallel), each prefiltered on both the
   // title and the artist name so the candidate set stays small.
@@ -150,6 +160,7 @@ export function createSpotifyLibraryMatcher(db: Kysely<Database>) {
         .selectFrom('artists')
         .select(['id', 'name'])
         .where(ilikeAny('artists.name', artistPatterns))
+        .where(artistHasApprovedTrack)
         .execute(),
 
       albumTitlePatterns.length === 0 || albumArtistPatterns.length === 0 ? [] : db
@@ -159,13 +170,15 @@ export function createSpotifyLibraryMatcher(db: Kysely<Database>) {
         .select(['albums.id as id', 'albums.title as title', 'artists.name as artist_name'])
         .where(ilikeAny('albums.title', albumTitlePatterns))
         .where(ilikeAny('artists.name', albumArtistPatterns))
+        .where(albumHasApprovedTrack)
         .union(
           db.selectFrom('albums')
             .innerJoin('artist_albums', 'artist_albums.album_id', 'albums.id')
             .innerJoin('artists', 'artists.id', 'artist_albums.artist_id')
             .select(['albums.id as id', 'albums.title as title', 'artists.name as artist_name'])
             .where(ilikeAny('albums.title', albumTitlePatterns))
-            .where(ilikeAny('artists.name', albumArtistPatterns)),
+            .where(ilikeAny('artists.name', albumArtistPatterns))
+            .where(albumHasApprovedTrack),
         )
         .execute(),
 
