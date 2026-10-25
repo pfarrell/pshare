@@ -5,7 +5,7 @@ import { apiService } from '../services/api';
 import Loading from '../components/Loading';
 import OpenInSpotify from '../components/OpenInSpotify';
 import { useQueueActions } from '../hooks/useQueueActions';
-import { useCanPlaySpotify } from '../player/spotify/useCanPlaySpotify';
+import { useSpotifyPlayability } from '../player/spotify/useCanPlaySpotify';
 import { toSpotifyQueueTrack } from '../utils/trackSource';
 import { formatDuration } from '../utils/formatters';
 
@@ -33,7 +33,8 @@ const SpotifyAlbum = () => {
   const location = useLocation();
   const localArtistId = location.state?.localArtistId ?? null;
   const year = text(location.state?.year);
-  const canPlay = useCanPlaySpotify();
+  const playability = useSpotifyPlayability();
+  const canPlay = playability === 'ready';
   const validId = SPOTIFY_ID.test(spotifyId ?? '');
   const [state, setState] = useState({ id: null, status: 'loading', data: null });
 
@@ -57,7 +58,8 @@ const SpotifyAlbum = () => {
   }, [spotifyId, validId, canPlay]);
 
   const empty = <p className="spotify-album-unavailable">{UNAVAILABLE}</p>;
-  if (!validId || !canPlay) return empty;
+  if (!validId || playability === 'unavailable') return empty;
+  if (!canPlay) return <Loading />;
   if (state.id !== spotifyId || state.status === 'loading') return <Loading />;
   if (state.status !== 'ready') return empty;
 

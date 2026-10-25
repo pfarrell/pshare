@@ -2,8 +2,11 @@ import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
-const canPlay = { value: true };
-vi.mock('../player/spotify/useCanPlaySpotify', () => ({ useCanPlaySpotify: () => canPlay.value }));
+const canPlay = { value: true, checking: false };
+vi.mock('../player/spotify/useCanPlaySpotify', () => ({
+  useCanPlaySpotify: () => canPlay.value,
+  useSpotifyPlayability: () => (canPlay.value ? 'ready' : canPlay.checking ? 'checking' : 'unavailable'),
+}));
 vi.mock('../services/api', () => ({ apiService: { getSpotifyAlbumTracks: vi.fn() } }));
 
 import { apiService } from '../services/api';
@@ -32,6 +35,7 @@ let addTracks;
 let prevAddTracks;
 beforeEach(() => {
   canPlay.value = true;
+  canPlay.checking = false;
   apiService.getSpotifyAlbumTracks.mockReset();
   addTracks = vi.fn();
   prevAddTracks = usePlayerStore.getState().addTracks;
@@ -80,6 +84,15 @@ describe('SpotifyAlbum page', () => {
   test('invalid id shows the empty state without calling the API', async () => {
     renderPage('/spotify/album/bad-id!');
     expect(await screen.findByText("This album isn't available right now.")).toBeInTheDocument();
+    expect(apiService.getSpotifyAlbumTracks).not.toHaveBeenCalled();
+  });
+
+  test('while eligibility is still being checked it shows loading, not the unavailable message', async () => {
+    canPlay.value = false;
+    canPlay.checking = true;
+    renderPage();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByText("This album isn't available right now.")).toBeNull();
     expect(apiService.getSpotifyAlbumTracks).not.toHaveBeenCalled();
   });
 
