@@ -14,6 +14,10 @@ vi.mock('../services/api', () => ({
 const queue = { loading: false, play: vi.fn(), playNext: vi.fn(), addToQueue: vi.fn() };
 vi.mock('../hooks/useQueueActions', () => ({ useQueueActions: vi.fn(() => queue) }));
 
+// #72: Spotify albums for this artist (default: none).
+const spotifyAlbums = { value: [] };
+vi.mock('../player/spotify/useSpotifyArtistAlbums', () => ({ useSpotifyArtistAlbums: () => spotifyAlbums.value }));
+
 import { apiService } from '../services/api';
 import { useQueueActions } from '../hooks/useQueueActions';
 
@@ -21,6 +25,7 @@ const artist = { id: 5, name: 'Test Artist' };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  spotifyAlbums.value = [];
   queue.loading = false;
 });
 
@@ -147,4 +152,25 @@ test('album tiles are plain buttons — no play buttons or menus', async () => {
 
   expect(container.querySelector('.jukebox-album-grid')).not.toBeNull();
   expect(screen.queryByRole('button', { name: /^Play / })).toBeNull();
+});
+
+test('#72: Spotify albums merge in by year with a logo, and tapping one selects it as a Spotify album', async () => {
+  spotifyAlbums.value = [{ id: 'lov', name: 'Lover', releaseYear: '2019', imageUrl: 'https://i.scdn.co/l.jpg', artists: [{ name: 'Test Artist' }] }];
+  apiService.getArtist.mockResolvedValue({ data: { artist, albums: [{ id: 1, title: 'Old One', release_year: '2008', image_path: 'a.jpg' }] } });
+  const onSelectAlbum = vi.fn();
+  const { container } = renderView({ onSelectAlbum });
+  await screen.findByText('Lover');
+  const titles = [...container.querySelectorAll('.jukebox-album-tile-title')].map((el) => el.textContent);
+  expect(titles).toEqual(['Lover', 'Old One']);
+  expect(container.querySelectorAll('.jukebox-album-tile .jukebox-spotify-logo')).toHaveLength(1);
+  fireEvent.click(screen.getByText('Lover'));
+  expect(onSelectAlbum).toHaveBeenCalledWith(expect.objectContaining({ id: 'lov', title: 'Lover', source: 'spotify', imageUrl: 'https://i.scdn.co/l.jpg' }));
+});
+
+test('#72: an artist with no local albums but Spotify ones shows the Spotify albums', async () => {
+  spotifyAlbums.value = [{ id: 'lov', name: 'Lover', releaseYear: '2019', imageUrl: null, artists: [] }];
+  apiService.getArtist.mockResolvedValue({ data: { artist, albums: [] } });
+  renderView();
+  expect(await screen.findByText('Lover')).toBeInTheDocument();
+  expect(screen.queryByText('No albums found')).toBeNull();
 });

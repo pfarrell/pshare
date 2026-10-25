@@ -6,6 +6,7 @@ import JukeboxAiMixTab from './JukeboxAiMixTab';
 import JukeboxArtistView from './JukeboxArtistView';
 import JukeboxCollectionView from './JukeboxCollectionView';
 import JukeboxTracksPanel from './JukeboxTracksPanel';
+import JukeboxSpotifyTracksPanel from './JukeboxSpotifyTracksPanel';
 import JukeboxPlaylistPanel from './JukeboxPlaylistPanel';
 import JukeboxRecentsPanel from './JukeboxRecentsPanel';
 import { useTouchScroll } from './useTouchScroll';
@@ -151,7 +152,11 @@ const JukeboxBrowsePanel = ({ activeDestination, onSelectDestination, onEnqueue,
           onSelectCollection={(collection) => pushView({ type: 'collection', data: collection })}
         />
       )}
-      {open && selectedAlbum && (
+      {/* #72: Spotify albums (from the artist view) get their own panel. */}
+      {open && selectedAlbum?.source === 'spotify' && (
+        <JukeboxSpotifyTracksPanel album={selectedAlbum} onClose={() => setSelectedAlbum(null)} onEnqueue={onEnqueue} />
+      )}
+      {open && selectedAlbum && selectedAlbum.source !== 'spotify' && (
         <JukeboxTracksPanel
           album={selectedAlbum}
           onClose={() => setSelectedAlbum(null)}

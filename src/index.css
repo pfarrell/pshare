@@ -4775,3 +4775,15 @@ body:has(.jukebox-app) {
   font-size: 1.5rem;
   color: #93c5fd;
 }
+
+/* Kiosk artist view: Spotify logo in the album tile's corner (#72). */
+.jukebox-app .jukebox-album-tile:has(> .jukebox-album-tile-badge) {
+  position: relative;
+}
+
+.jukebox-app .jukebox-album-tile-badge {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  pointer-events: none;
+}

@@ -4,7 +4,7 @@ import { useState } from 'react';
 // Deliberately not AlbumCard: that component is shared with the normal site and
 // carries a play button, ⋯ menu and favorite/collection actions, none of which
 // belong on a kiosk tile whose one job is "tap to open this album's tracks".
-const JukeboxAlbumTile = ({ album, imageUrl, onSelect }) => {
+const JukeboxAlbumTile = ({ album, imageUrl, onSelect, badge }) => {
   const [imageFailed, setImageFailed] = useState(false);
 
   return (
@@ -22,6 +22,7 @@ const JukeboxAlbumTile = ({ album, imageUrl, onSelect }) => {
       ) : (
         <div className="jukebox-album-tile-art-placeholder" aria-hidden="true">♪</div>
       )}
+      {badge}
       <span className="jukebox-album-tile-title">{album.title}</span>
       <span className="jukebox-album-tile-artist">{album.artist?.name ?? ''}</span>
     </button>
