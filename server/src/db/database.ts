@@ -178,6 +178,19 @@ interface SpotifyConnectionTable {
   updated_at: ColumnType<Date, string | undefined, string>
 }
 
+interface SpotifyPlayTable {
+  id: Generated<number>
+  track_uri: string
+  track_name: string
+  artist_name: string
+  album_spotify_id: string | null
+  album_name: string
+  album_image_url: string | null
+  user_id: number | null
+  ip_address: string | null
+  created_at: ColumnType<Date, Date | string | undefined, never>
+}
+
 interface DesktopDeviceTable {
   id: Generated<number>
   user_id: number
@@ -487,6 +500,7 @@ export interface Database {
   jukebox_devices: JukeboxDeviceTable
   desktop_devices: DesktopDeviceTable
   spotify_connections: SpotifyConnectionTable
+  spotify_plays: SpotifyPlayTable
   jukebox_queue_submissions: JukeboxQueueSubmissionTable
   user_playlists: UserPlaylistTable
   artist_albums: ArtistAlbumTable

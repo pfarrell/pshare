@@ -280,6 +280,18 @@ export function releaseYearFrom(releaseDate: unknown): string | null {
   return /^\d{4}$/.test(year) && year !== '0000' ? year : null
 }
 
+// A catalog artist by Spotify id (the in-app Spotify artist view). null on 404.
+export async function getSpotifyArtist(spotifyArtistId: string): Promise<SpotifyArtist | null> {
+  if (!isSpotifyConfigured()) throw new SpotifyNotConfiguredError()
+  try {
+    const raw = await spotifyGet<RawArtist>(`${API}/artists/${encodeURIComponent(spotifyArtistId)}`, 'artist')
+    return mapArtist(raw)
+  } catch (err) {
+    if (err instanceof SpotifyApiError && err.status === 404) return null
+    throw err
+  }
+}
+
 // The first artist result whose normalized name equals the query's, in Spotify's relevance order.
 export async function findSpotifyArtistByName(name: string): Promise<{ id: string; name: string } | null> {
   if (!isSpotifyConfigured()) throw new SpotifyNotConfiguredError()
