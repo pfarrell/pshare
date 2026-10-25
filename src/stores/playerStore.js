@@ -83,7 +83,7 @@ const callSpotify = (source, method, ...args) => {
   }
 };
 
-const spotifyCanStart = (source, auto) => {
+export const spotifyCanStart = (source, auto) => {
   try {
     return !!source && source.isAvailable() && !(auto && source.isDisplaced());
   } catch (error) {
@@ -105,18 +105,22 @@ const activateSpotify = (source) => {
 // shifts indices).
 let playAttempt = 0;
 
-// Silences the <audio> pair when a Spotify track takes over. Kept as its own step so a later
-// change can defer it for auto (non-manual) local→Spotify advances until start() resolves.
-const pauseLocalAudio = (get) => {
-  get().audioElementA?.pause();
-  get().audioElementB?.pause();
+// Silences the <audio> pair when a Spotify track takes over. For an auto advance, an element
+// still playing (the outgoing track's last few hundred ms, see usePlayerEngine's local→Spotify
+// lead) is left running so its tail covers Spotify's start latency; the returned function
+// pauses it once start() has resolved.
+const pauseLocalAudio = (get, { deferPlaying = false } = {}) => {
+  const elements = [get().audioElementA, get().audioElementB].filter(Boolean);
+  const deferred = deferPlaying ? elements.filter((audio) => !audio.paused) : [];
+  elements.filter((audio) => !deferred.includes(audio)).forEach((audio) => audio.pause());
+  return () => deferred.forEach((audio) => audio.pause());
 };
 
 const playSpotifyTrackAtIndex = (set, get, index, auto, attempt) => {
   const { playlist, playbackMode, shuffleHistory, standbyUnlocked, spotifySource } = get();
   const track = playlist[index];
   const nextShuffleHistory = playbackMode === 'shuffle' && !shuffleHistory.includes(index) ? [...shuffleHistory, index] : shuffleHistory;
-  pauseLocalAudio(get);
+  const pauseDeferredLocalAudio = pauseLocalAudio(get, { deferPlaying: auto });
   set({
     activeSource: 'spotify',
     currentTrackIndex: index,
@@ -145,6 +149,7 @@ const playSpotifyTrackAtIndex = (set, get, index, auto, attempt) => {
     }
   }
   if (!spotifyCanStart(spotifySource, auto)) {
+    pauseDeferredLocalAudio();
     get().skipUnplayable(get().currentTrackIndex);
     return;
   }
@@ -159,6 +164,7 @@ const playSpotifyTrackAtIndex = (set, get, index, auto, attempt) => {
   started.then(
     () => {
       if (isCurrentAttempt()) {
+        pauseDeferredLocalAudio();
         set({ consecutiveSkips: 0 });
         // Paused (togglePlayPause) while start() was still pending.
         if (!get().isPlaying) callSpotify(spotifySource, 'pause');
@@ -172,7 +178,10 @@ const playSpotifyTrackAtIndex = (set, get, index, auto, attempt) => {
     },
     (error) => {
       console.warn('Spotify start failed:', error);
-      if (isCurrentAttempt()) get().skipUnplayable(get().currentTrackIndex);
+      if (isCurrentAttempt()) {
+        pauseDeferredLocalAudio();
+        get().skipUnplayable(get().currentTrackIndex);
+      }
     },
   );
 };
@@ -207,7 +216,17 @@ export const usePlayerStore = create((set, get) => ({
   // SpotifySource ('spotify'). usePlayerEngine ignores <audio> events while this is 'spotify'.
   activeSource: 'local',
   spotifySource: null,
-  setSpotifySource: (spotifySource) => set({ spotifySource: spotifySource ?? null }),
+  setSpotifySource: (spotifySource) => {
+    const { activeSource, spotifySource: previous } = get();
+    set({ spotifySource: spotifySource ?? null });
+    if (spotifySource || activeSource !== 'spotify') return;
+    // The source playing the current track went away (hook unmount, SDK failure): silence it,
+    // invalidate its pending start, hand the transport back to <audio> and move on silently.
+    playAttempt += 1;
+    callSpotify(previous, 'pause');
+    set({ activeSource: 'local', isPlaying: false, isBuffering: false });
+    get().skipUnplayable(get().currentTrackIndex);
+  },
   // Unplayable (Spotify) tracks skipped in a row without anything actually starting. Caps the
   // skip chain at one pass over the queue so repeat-all/shuffle can't spin forever.
   consecutiveSkips: 0,

@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react';
-import { usePlayerStore, SCOPE_SHUFFLE_BATCH_SIZE, SCOPE_SHUFFLE_TOPUP_REMAINING } from '../stores/playerStore';
+import { usePlayerStore, SCOPE_SHUFFLE_BATCH_SIZE, SCOPE_SHUFFLE_TOPUP_REMAINING, spotifyCanStart } from '../stores/playerStore';
 import { useTabTitleStore } from '../stores/tabTitleStore';
 import { apiService } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
 import { isSpotifyTrack, localTrackIds } from '../utils/trackSource';
+import { LOCAL_TO_SPOTIFY_LEAD_SECONDS } from '../player/spotify/constants';
 
 const FALLBACK_ARTWORK = `${import.meta.env.BASE_URL}icons/icon-512.png`;
 const PREFETCH_THRESHOLD_SECONDS = 15;
@@ -57,6 +58,7 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
     usePlayerStore.getState().setAudioElement('b', audioB);
 
     let fiveSecondMarkFired = false;
+    let spotifyLeadFired = false;
     const isActive = (audio) => {
       const state = usePlayerStore.getState();
       return state.activeSource === 'local' && state.getActiveAudio() === audio;
@@ -85,6 +87,17 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
       if (Number.isFinite(audio.duration) && audio.duration - audio.currentTime <= PREFETCH_THRESHOLD_SECONDS) {
         usePlayerStore.getState().ensureStandbyLoaded();
       }
+      // local → Spotify: start the Spotify track slightly early so its start latency overlaps
+      // this track's tail (the store keeps this element playing until Spotify has started).
+      // Only when Spotify can actually start; otherwise let the track end and skip as usual.
+      if (!spotifyLeadFired && Number.isFinite(audio.duration)
+        && audio.duration - audio.currentTime <= LOCAL_TO_SPOTIFY_LEAD_SECONDS) {
+        const { playlist, nextTrackIndex, spotifySource } = usePlayerStore.getState();
+        if (isSpotifyTrack(playlist[nextTrackIndex]) && spotifyCanStart(spotifySource, true)) {
+          spotifyLeadFired = true;
+          usePlayerStore.getState().playNext();
+        }
+      }
     };
     const handleLoadedMetadata = (event) => {
       if (!isActive(event.target)) return;
@@ -108,6 +121,7 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
         return;
       }
       fiveSecondMarkFired = false;
+      spotifyLeadFired = false;
       usePlayerStore.getState().setIsPlaying(true);
     };
     const handlePause = (event) => {

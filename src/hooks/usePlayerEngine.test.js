@@ -599,3 +599,69 @@ describe('while Spotify is the active source', () => {
     expect(pauseSpy).toHaveBeenCalled();
   });
 });
+
+describe('local → Spotify lead-in', () => {
+  const spotifyEntry = { source: 'spotify', uri: 'spotify:track:1', title: 'S1', duration: 200 };
+  const localEntry = { id: 1, title: 'L1', url: '/stream/1' };
+  const source = (overrides = {}) => ({ isAvailable: () => true, isDisplaced: () => false, ...overrides });
+
+  afterEach(() => {
+    usePlayerStore.setState({ spotifySource: null });
+  });
+
+  const nearEnd = (audio, remaining) => {
+    audio.duration = 180;
+    audio.currentTime = 180 - remaining;
+    audio.dispatchEvent(new Event('timeupdate'));
+  };
+
+  test('calls playNext once when within 0.3s of the end and next is Spotify', () => {
+    const audioRefA = makeAudioRef();
+    const audioRefB = makeAudioRef();
+    const playNext = vi.fn();
+    usePlayerStore.setState({
+      playNext, ensureStandbyLoaded: vi.fn(), spotifySource: source(),
+      playlist: [localEntry, spotifyEntry], currentTrackIndex: 0, nextTrackIndex: 1,
+    });
+    renderHook(() => usePlayerEngine(audioRefA, audioRefB));
+
+    nearEnd(audioRefA.current, 1);
+    expect(playNext).not.toHaveBeenCalled();
+    nearEnd(audioRefA.current, 0.25);
+    nearEnd(audioRefA.current, 0.1);
+    expect(playNext).toHaveBeenCalledTimes(1);
+
+    // A fresh play on the active element arms it again for the next track.
+    audioRefA.current.dispatchEvent(new Event('play'));
+    nearEnd(audioRefA.current, 0.2);
+    expect(playNext).toHaveBeenCalledTimes(2);
+  });
+
+  test('does not cut the local track short when next is local', () => {
+    const audioRefA = makeAudioRef();
+    const audioRefB = makeAudioRef();
+    const playNext = vi.fn();
+    usePlayerStore.setState({
+      playNext, ensureStandbyLoaded: vi.fn(), spotifySource: source(),
+      playlist: [localEntry, { ...localEntry, id: 2, url: '/stream/2' }], currentTrackIndex: 0, nextTrackIndex: 1,
+    });
+    renderHook(() => usePlayerEngine(audioRefA, audioRefB));
+    nearEnd(audioRefA.current, 0.1);
+    expect(playNext).not.toHaveBeenCalled();
+  });
+
+  test('does not cut the local track short when Spotify cannot start (it would just be skipped)', () => {
+    const audioRefA = makeAudioRef();
+    const audioRefB = makeAudioRef();
+    const playNext = vi.fn();
+    usePlayerStore.setState({
+      playNext, ensureStandbyLoaded: vi.fn(), spotifySource: null,
+      playlist: [localEntry, spotifyEntry], currentTrackIndex: 0, nextTrackIndex: 1,
+    });
+    renderHook(() => usePlayerEngine(audioRefA, audioRefB));
+    nearEnd(audioRefA.current, 0.1);
+    usePlayerStore.setState({ spotifySource: source({ isAvailable: () => false }) });
+    nearEnd(audioRefA.current, 0.05);
+    expect(playNext).not.toHaveBeenCalled();
+  });
+});

@@ -14,3 +14,9 @@ export const isMobileDevice = () =>
   window.innerWidth <= 768 ||
   /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
   isJukeboxMode();
+
+// iPhone/iPad/iPod, including iPadOS, which reports a desktop Mac user agent and is only
+// distinguishable by having a touchscreen.
+export const isIOSDevice = () =>
+  /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+  (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
