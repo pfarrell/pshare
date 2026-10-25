@@ -178,10 +178,16 @@ const playSpotifyTrackAtIndex = (set, get, index, auto, attempt) => {
     },
     (error) => {
       console.warn('Spotify start failed:', error);
+      // A start that failed (e.g. timed out) may still land on the device later: best-effort
+      // pause, under the same rule as a stale success.
       if (isCurrentAttempt()) {
         pauseDeferredLocalAudio();
+        callSpotify(spotifySource, 'pause');
         get().skipUnplayable(get().currentTrackIndex);
+        return;
       }
+      const { activeSource, isPlaying } = get();
+      if (activeSource !== 'spotify' || !isPlaying) callSpotify(spotifySource, 'pause');
     },
   );
 };

@@ -89,8 +89,9 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
       }
       // local → Spotify: start the Spotify track slightly early so its start latency overlaps
       // this track's tail (the store keeps this element playing until Spotify has started).
-      // Only when Spotify can actually start; otherwise let the track end and skip as usual.
-      if (!spotifyLeadFired && Number.isFinite(audio.duration)
+      // Only while actually playing (a seek near the end while paused must not start Spotify),
+      // and only when Spotify can actually start; otherwise let the track end and skip as usual.
+      if (!spotifyLeadFired && !audio.paused && Number.isFinite(audio.duration)
         && audio.duration - audio.currentTime <= LOCAL_TO_SPOTIFY_LEAD_SECONDS) {
         const { playlist, nextTrackIndex, spotifySource } = usePlayerStore.getState();
         if (isSpotifyTrack(playlist[nextTrackIndex]) && spotifyCanStart(spotifySource, true)) {

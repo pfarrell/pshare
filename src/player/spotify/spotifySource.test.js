@@ -198,3 +198,28 @@ test('activate calls the adapter and swallows a rejection', async () => {
   expect(warn).toHaveBeenCalled();
   warn.mockRestore();
 });
+
+test('playback nobody asked for (a timed-out start landing late) is paused', async () => {
+  const adapter = fakeAdapter({ playUri: vi.fn(() => Promise.reject(new Error('timed out'))) });
+  const source = readySource(adapter);
+  await expect(source.start(spotifyTrack(1))).rejects.toThrow();
+  adapter.emitState({ uri: 'spotify:track:1', positionMs: 0, durationMs: 200000, paused: false, loading: false });
+  expect(adapter.pause).toHaveBeenCalledTimes(1);
+});
+
+test('playback that was asked for, or is still starting, is left alone', async () => {
+  const pending = deferred();
+  const adapter = fakeAdapter({ playUri: vi.fn(() => pending.promise) });
+  const source = readySource(adapter);
+  const playingState = { uri: 'spotify:track:1', positionMs: 0, durationMs: 200000, paused: false, loading: false };
+  const started = source.start(spotifyTrack(1));
+  await flush();
+  adapter.emitState(playingState); // start still in flight
+  pending.resolve();
+  await started;
+  adapter.emitState(playingState); // started
+  await source.pause();
+  await source.resume();
+  adapter.emitState(playingState); // resumed
+  expect(adapter.pause).toHaveBeenCalledTimes(1); // only the explicit pause()
+});

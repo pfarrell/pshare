@@ -1444,6 +1444,32 @@ describe('spotify source routing', () => {
     expect(usePlayerStore.getState().activeSource).toBe('local');
   });
 
+  test('a rejected start followed by a skip to local pauses the Spotify source', async () => {
+    const source = fakeSource({ start: vi.fn(() => Promise.reject(new Error('timed out'))) });
+    const { active } = setup({ playlist: [spotifyTrack(1), track(2)], spotifySource: source });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    usePlayerStore.getState().playTrackAtIndex(0);
+    await flush();
+    warn.mockRestore();
+    expect(active.src).toBe('/stream/2');
+    expect(source.pause).toHaveBeenCalled();
+  });
+
+  test('a stale start rejecting after the user moved to a local track pauses the Spotify source', async () => {
+    let rejectStart;
+    const source = fakeSource({ start: vi.fn(() => new Promise((_, reject) => { rejectStart = reject; })) });
+    setup({ playlist: [spotifyTrack(1), track(2)], spotifySource: source });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    usePlayerStore.getState().playTrackAtIndex(0);
+    usePlayerStore.getState().playTrackAtIndex(1);
+    source.pause.mockClear();
+    rejectStart(new Error('timed out'));
+    await flush();
+    warn.mockRestore();
+    expect(source.pause).toHaveBeenCalledTimes(1);
+    expect(usePlayerStore.getState().currentTrackIndex).toBe(1);
+  });
+
   test('auto local→Spotify keeps the local element playing until start resolves', async () => {
     let resolveStart;
     const source = fakeSource({ start: vi.fn(() => new Promise((resolve) => { resolveStart = resolve; })) });

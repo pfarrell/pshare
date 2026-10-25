@@ -209,6 +209,82 @@ describe('while a Spotify track is active', () => {
     expect(playNext).toHaveBeenCalledTimes(1);
   });
 
+  describe('end of track', () => {
+    let playNext;
+    const settle = async (polls = 4) => {
+      for (let i = 0; i < polls; i++) await tick();
+    };
+
+    beforeEach(async () => {
+      playNext = vi.fn();
+      usePlayerStore.setState({ playNext, ensureStandbyLoaded: vi.fn() });
+      await mount();
+    });
+
+    test('a poll just outside the lead window, then the track paused back at 0, advances exactly once', async () => {
+      adapter.getState.mockResolvedValue(state(199790));
+      await act(async () => { playSpotify(); });
+      await tick();
+      expect(playNext).not.toHaveBeenCalled();
+      adapter.getState.mockResolvedValue(state(0, { paused: true }));
+      await settle();
+      expect(playNext).toHaveBeenCalledTimes(1);
+    });
+
+    test('a poll just outside the lead window, then a different uri, advances exactly once', async () => {
+      adapter.getState.mockResolvedValue(state(199790));
+      await act(async () => { playSpotify(); });
+      await tick();
+      adapter.getState.mockResolvedValue(state(3000, { uri: 'spotify:track:autoplayed' }));
+      await settle();
+      expect(playNext).toHaveBeenCalledTimes(1);
+    });
+
+    test('the poll fallback alone advances when the timeout found the track not quite at the end', async () => {
+      adapter.getState
+        .mockResolvedValueOnce(state(199790)) // poll: arms the timeout
+        .mockResolvedValueOnce(state(199500)) // timeout's check: not near enough, no advance
+        .mockResolvedValue(state(0, { paused: true })); // next poll: it ended
+      await act(async () => { playSpotify(); });
+      await tick();
+      expect(playNext).not.toHaveBeenCalled();
+      await settle();
+      expect(playNext).toHaveBeenCalledTimes(1);
+    });
+
+    test('the timeout path advances exactly once and does not double-fire with the fallback', async () => {
+      adapter.getState.mockResolvedValue(state(199790));
+      await act(async () => { playSpotify(); });
+      await tick();
+      await tick(20);
+      expect(playNext).toHaveBeenCalledTimes(1);
+      await settle();
+      adapter.getState.mockResolvedValue(state(0, { paused: true }));
+      await settle();
+      expect(playNext).toHaveBeenCalledTimes(1);
+    });
+
+    test('a manual pause near the end does not advance', async () => {
+      adapter.getState.mockResolvedValue(state(199790));
+      await act(async () => { playSpotify(); });
+      await tick();
+      await act(async () => { usePlayerStore.setState({ isPlaying: false }); });
+      adapter.getState.mockResolvedValue(state(199790, { paused: true }));
+      await settle();
+      expect(playNext).not.toHaveBeenCalled();
+    });
+
+    test('a seek away from the end cancels the pending timeout', async () => {
+      adapter.getState.mockResolvedValue(state(199790));
+      await act(async () => { playSpotify(); });
+      await tick();
+      await act(async () => { usePlayerStore.setState({ currentTime: 50 }); });
+      adapter.getState.mockResolvedValue(state(50000));
+      await settle();
+      expect(playNext).not.toHaveBeenCalled();
+    });
+  });
+
   test('calls ensureStandbyLoaded within 15s of the end', async () => {
     const ensureStandbyLoaded = vi.fn();
     usePlayerStore.setState({ ensureStandbyLoaded });

@@ -31,6 +31,17 @@ export const createSpotifySource = (adapter, { onDisplaced } = {}) => {
   };
 
   adapter.onStateChange((state) => {
+    // Playing although nothing here asked for it, e.g. a start that timed out landing late:
+    // never leave it audible over whatever the player moved on to.
+    if (state && !state.paused && !playing && commandsInFlight === 0) {
+      const warn = (error) => console.warn('Spotify pause of unrequested playback failed:', error);
+      try {
+        Promise.resolve(adapter.pause()).catch(warn);
+      } catch (error) {
+        warn(error);
+      }
+      return;
+    }
     if (state !== null || !playing || displaced) return;
     displaced = true;
     playing = false;

@@ -609,6 +609,13 @@ describe('local → Spotify lead-in', () => {
     usePlayerStore.setState({ spotifySource: null });
   });
 
+  // jsdom's <audio> reports paused; the lead only applies while the element is really playing.
+  const playingAudioRef = () => {
+    const ref = makeAudioRef();
+    Object.defineProperty(ref.current, 'paused', { writable: true, value: false });
+    return ref;
+  };
+
   const nearEnd = (audio, remaining) => {
     audio.duration = 180;
     audio.currentTime = 180 - remaining;
@@ -616,7 +623,7 @@ describe('local → Spotify lead-in', () => {
   };
 
   test('calls playNext once when within 0.3s of the end and next is Spotify', () => {
-    const audioRefA = makeAudioRef();
+    const audioRefA = playingAudioRef();
     const audioRefB = makeAudioRef();
     const playNext = vi.fn();
     usePlayerStore.setState({
@@ -638,7 +645,7 @@ describe('local → Spotify lead-in', () => {
   });
 
   test('does not cut the local track short when next is local', () => {
-    const audioRefA = makeAudioRef();
+    const audioRefA = playingAudioRef();
     const audioRefB = makeAudioRef();
     const playNext = vi.fn();
     usePlayerStore.setState({
@@ -651,7 +658,7 @@ describe('local → Spotify lead-in', () => {
   });
 
   test('does not cut the local track short when Spotify cannot start (it would just be skipped)', () => {
-    const audioRefA = makeAudioRef();
+    const audioRefA = playingAudioRef();
     const audioRefB = makeAudioRef();
     const playNext = vi.fn();
     usePlayerStore.setState({
@@ -662,6 +669,19 @@ describe('local → Spotify lead-in', () => {
     nearEnd(audioRefA.current, 0.1);
     usePlayerStore.setState({ spotifySource: source({ isAvailable: () => false }) });
     nearEnd(audioRefA.current, 0.05);
+    expect(playNext).not.toHaveBeenCalled();
+  });
+
+  test('does not start Spotify when the local element is paused (e.g. a seek into the last 0.3s while paused)', () => {
+    const audioRefA = makeAudioRef(); // paused
+    const audioRefB = makeAudioRef();
+    const playNext = vi.fn();
+    usePlayerStore.setState({
+      playNext, ensureStandbyLoaded: vi.fn(), spotifySource: source(),
+      playlist: [localEntry, spotifyEntry], currentTrackIndex: 0, nextTrackIndex: 1,
+    });
+    renderHook(() => usePlayerEngine(audioRefA, audioRefB));
+    nearEnd(audioRefA.current, 0.1);
     expect(playNext).not.toHaveBeenCalled();
   });
 });
