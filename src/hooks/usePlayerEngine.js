@@ -57,7 +57,10 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
     usePlayerStore.getState().setAudioElement('b', audioB);
 
     let fiveSecondMarkFired = false;
-    const isActive = (audio) => usePlayerStore.getState().getActiveAudio() === audio;
+    const isActive = (audio) => {
+      const state = usePlayerStore.getState();
+      return state.activeSource === 'local' && state.getActiveAudio() === audio;
+    };
 
     const handleTimeUpdate = (event) => {
       const audio = event.target;

@@ -68,7 +68,114 @@ const unlockAudioElement = (audioElement) => {
     .catch(() => {});
 };
 
-const standbyMatchesTarget = (standby, target) => !!standby && !!target && standby.src.endsWith(target.url);
+const standbyMatchesTarget = (standby, target) => !!standby && !!target?.url && standby.src.endsWith(target.url);
+
+// --- Spotify source plumbing (experimental, #72) ---------------------------------------------
+// A SpotifySource (registered later via setSpotifySource) is a second playback engine beside the
+// <audio> pair. Every call into it is wrapped: Spotify failures only ever warn, never throw into
+// a transport action (and from there into a render).
+const callSpotify = (source, method, ...args) => {
+  if (!source) return;
+  try {
+    Promise.resolve(source[method](...args)).catch((error) => console.warn(`Spotify ${method} failed:`, error));
+  } catch (error) {
+    console.warn(`Spotify ${method} failed:`, error);
+  }
+};
+
+const spotifyCanStart = (source, auto) => {
+  try {
+    return !!source && source.isAvailable() && !(auto && source.isDisplaced());
+  } catch (error) {
+    console.warn('Spotify availability check failed:', error);
+    return false;
+  }
+};
+
+const activateSpotify = (source) => {
+  try {
+    source?.activate();
+  } catch (error) {
+    console.warn('Spotify activate failed:', error);
+  }
+};
+
+// Identifies the latest playTrackAtIndex/clearPlaylist call, so a Spotify start() that settles
+// after the user has moved on is recognized as stale (index alone isn't enough — trimQueueHistory
+// shifts indices).
+let playAttempt = 0;
+
+// Silences the <audio> pair when a Spotify track takes over. Kept as its own step so a later
+// change can defer it for auto (non-manual) local→Spotify advances until start() resolves.
+const pauseLocalAudio = (get) => {
+  get().audioElementA?.pause();
+  get().audioElementB?.pause();
+};
+
+const playSpotifyTrackAtIndex = (set, get, index, auto, attempt) => {
+  const { playlist, playbackMode, shuffleHistory, standbyUnlocked, spotifySource } = get();
+  const track = playlist[index];
+  const nextShuffleHistory = playbackMode === 'shuffle' && !shuffleHistory.includes(index) ? [...shuffleHistory, index] : shuffleHistory;
+  pauseLocalAudio(get);
+  set({
+    activeSource: 'spotify',
+    currentTrackIndex: index,
+    currentTrack: track,
+    playlistFinished: false,
+    shuffleHistory: nextShuffleHistory,
+    isPlaying: true,
+    // <audio> buffering events are ignored while Spotify is active, so don't leave a stale spinner.
+    isBuffering: false,
+    currentTime: 0,
+    duration: Number.isFinite(track.duration) ? track.duration : 0,
+  });
+  if (!standbyUnlocked) {
+    unlockAudioElement(get().getStandbyAudio());
+    activateSpotify(spotifySource);
+    set({ standbyUnlocked: true });
+  }
+  get().trimQueueHistory();
+  get().syncNextTrackIndex();
+
+  if (!auto) {
+    try {
+      spotifySource?.clearDisplaced();
+    } catch (error) {
+      console.warn('Spotify clearDisplaced failed:', error);
+    }
+  }
+  if (!spotifyCanStart(spotifySource, auto)) {
+    get().skipUnplayable(get().currentTrackIndex);
+    return;
+  }
+
+  const isCurrentAttempt = () => attempt === playAttempt && get().activeSource === 'spotify';
+  let started;
+  try {
+    started = Promise.resolve(spotifySource.start(track));
+  } catch (error) {
+    started = Promise.reject(error);
+  }
+  started.then(
+    () => {
+      if (isCurrentAttempt()) {
+        set({ consecutiveSkips: 0 });
+        // Paused (togglePlayPause) while start() was still pending.
+        if (!get().isPlaying) callSpotify(spotifySource, 'pause');
+        return;
+      }
+      // Stale: the user moved on while start() was pending. Silence it — unless a newer Spotify
+      // start is already underway on the same source, which replaces this one on its own (pausing
+      // here could stop that newer track instead).
+      const { activeSource, isPlaying } = get();
+      if (activeSource !== 'spotify' || !isPlaying) callSpotify(spotifySource, 'pause');
+    },
+    (error) => {
+      console.warn('Spotify start failed:', error);
+      if (isCurrentAttempt()) get().skipUnplayable(get().currentTrackIndex);
+    },
+  );
+};
 
 export const usePlayerStore = create((set, get) => ({
   // DOM bridge — two raw <audio> elements, set once by usePlayerEngine on mount. activeSlot
@@ -95,6 +202,15 @@ export const usePlayerStore = create((set, get) => ({
   nextTrackIndex: -1,
   // Whether the standby element has been unlocked for iOS. Set to true after the first playTrackAtIndex call.
   standbyUnlocked: false,
+
+  // Which engine is currently producing sound: the <audio> pair ('local') or the registered
+  // SpotifySource ('spotify'). usePlayerEngine ignores <audio> events while this is 'spotify'.
+  activeSource: 'local',
+  spotifySource: null,
+  setSpotifySource: (spotifySource) => set({ spotifySource: spotifySource ?? null }),
+  // Unplayable (Spotify) tracks skipped in a row without anything actually starting. Caps the
+  // skip chain at one pass over the queue so repeat-all/shuffle can't spin forever.
+  consecutiveSkips: 0,
 
   // Tracks belonging to whatever detail page (album, etc.) is currently mounted, kept in sync
   // by that page's own effect. Lets togglePlayPause start playing this page's tracks when the
@@ -128,7 +244,7 @@ export const usePlayerStore = create((set, get) => ({
   clearRecentlyAdded: () => set({ recentlyAddedIndices: [] }),
 
   // Internal setters — called only by usePlayerEngine in response to <audio> events
-  setIsPlaying: (isPlaying) => set({ isPlaying }),
+  setIsPlaying: (isPlaying) => set(isPlaying ? { isPlaying, consecutiveSkips: 0 } : { isPlaying }),
   setBuffering: (isBuffering) => set({ isBuffering }),
   setCurrentTime: (currentTime) => set({ currentTime }),
   setDuration: (duration) => set({ duration }),
@@ -155,17 +271,27 @@ export const usePlayerStore = create((set, get) => ({
     const { nextTrackIndex, playlist } = get();
     const standby = get().getStandbyAudio();
     const target = nextTrackIndex === -1 ? null : playlist[nextTrackIndex];
-    if (!standby || !target || standbyMatchesTarget(standby, target)) return;
+    if (!standby || !target || isSpotifyTrack(target) || standbyMatchesTarget(standby, target)) return;
     standby.src = target.url;
     standby.load();
   },
 
   // Transport
-  playTrackAtIndex: (index) => {
+  // `auto` is true only for advances nobody asked for (playNext without manual, skipUnplayable).
+  playTrackAtIndex: (index, { auto = false } = {}) => {
     const { playlist, playbackMode, shuffleHistory, standbyUnlocked } = get();
     const audioElement = get().getActiveAudio();
     if (index < 0 || index >= playlist.length || !audioElement) return;
     const track = playlist[index];
+    playAttempt += 1;
+    // A deliberate selection starts a fresh skip budget.
+    if (!auto) set({ consecutiveSkips: 0 });
+    if (isSpotifyTrack(track)) {
+      playSpotifyTrackAtIndex(set, get, index, auto, playAttempt);
+      return;
+    }
+    if (get().activeSource === 'spotify') callSpotify(get().spotifySource, 'pause');
+    set({ activeSource: 'local' });
     const nextShuffleHistory = playbackMode === 'shuffle' && !shuffleHistory.includes(index) ? [...shuffleHistory, index] : shuffleHistory;
     // isPlaying is set optimistically here rather than left for the <audio>
     // element's async 'play' event (usePlayerEngine's handlePlay) to set it.
@@ -188,10 +314,24 @@ export const usePlayerStore = create((set, get) => ({
     });
     if (!standbyUnlocked) {
       unlockAudioElement(get().getStandbyAudio());
+      activateSpotify(get().spotifySource);
       set({ standbyUnlocked: true });
     }
     get().trimQueueHistory();
     get().syncNextTrackIndex();
+  },
+
+  // A track that can't play in this session (Spotify unavailable/displaced/failed to start):
+  // move past it silently. Stops once a whole queue's worth of tracks has been skipped in a row.
+  skipUnplayable: (index) => {
+    const consecutiveSkips = get().consecutiveSkips + 1;
+    if (consecutiveSkips >= get().playlist.length) {
+      set({ consecutiveSkips, playlistFinished: true, isPlaying: false });
+      return;
+    }
+    set({ consecutiveSkips, currentTrackIndex: index });
+    get().syncNextTrackIndex();
+    get().playNext();
   },
 
   // For a gesture whose playback only starts after async work (a voice
@@ -200,6 +340,7 @@ export const usePlayerStore = create((set, get) => ({
   // anything has ever been loaded into it, so a real track is never replaced.
   unlockForGesture: () => {
     const { currentTrack, standbyUnlocked } = get();
+    activateSpotify(get().spotifySource);
     if (!currentTrack) unlockAudioElement(get().getActiveAudio());
     if (!standbyUnlocked) {
       unlockAudioElement(get().getStandbyAudio());
@@ -208,10 +349,12 @@ export const usePlayerStore = create((set, get) => ({
   },
 
   togglePlayPause: () => {
-    const { playlistFinished, playlist, pageTracks, playbackMode, currentTrackIndex } = get();
+    const { playlistFinished, playlist, pageTracks, playbackMode, currentTrackIndex, activeSource, isPlaying, spotifySource } = get();
     const audioElement = get().getActiveAudio();
     if (!audioElement) return;
-    if (audioElement.paused) {
+    // While Spotify is active the <audio> pair sits paused, so its `paused` flag says nothing.
+    const spotifyActive = activeSource === 'spotify';
+    if (spotifyActive ? !isPlaying : audioElement.paused) {
       if (playlist.length === 0) {
         if (pageTracks.length > 0) {
           get().addTracks(pageTracks);
@@ -229,29 +372,47 @@ export const usePlayerStore = create((set, get) => ({
         } else {
           get().playTrackAtIndex(0);
         }
+      } else if (spotifyActive) {
+        set({ isPlaying: true });
+        callSpotify(spotifySource, 'resume');
       } else {
         audioElement.play().catch((error) => console.error('Playback failed:', error));
       }
+    } else if (spotifyActive) {
+      set({ isPlaying: false });
+      callSpotify(spotifySource, 'pause');
     } else {
       audioElement.pause();
     }
   },
 
   seek: (time) => {
+    if (get().activeSource === 'spotify') {
+      if (!Number.isFinite(time)) return;
+      set({ currentTime: time });
+      callSpotify(get().spotifySource, 'seek', time);
+      return;
+    }
     const audioElement = get().getActiveAudio();
     if (!audioElement || !Number.isFinite(time)) return;
     audioElement.currentTime = time;
   },
 
   playNext: ({ manual = false } = {}) => {
-    const { playbackMode, shuffleHistory, nextTrackIndex, playlist, activeSlot, currentTrackIndex } = get();
+    const { playbackMode, shuffleHistory, nextTrackIndex, playlist, activeSlot, currentTrackIndex, activeSource } = get();
     const audioElement = get().getActiveAudio();
+    const spotifyActive = activeSource === 'spotify';
     const targetIndex = manual && playbackMode === 'repeat-one'
       ? computeNextIndex({ playbackMode: 'off', shuffleHistory, playlist, currentTrackIndex })
       : nextTrackIndex;
     if (targetIndex === -1) {
       set({ playlistFinished: true });
       audioElement?.pause();
+      if (spotifyActive) {
+        // No <audio> 'pause' event will report this while Spotify is the active source.
+        set({ isPlaying: false });
+        callSpotify(get().spotifySource, 'pause');
+      }
       return;
     }
     if (playbackMode === 'shuffle') {
@@ -262,9 +423,15 @@ export const usePlayerStore = create((set, get) => ({
     const target = playlist[targetIndex];
     const standbyReady = standbyMatchesTarget(standby, target) && standby.readyState >= 3; // HAVE_FUTURE_DATA
 
-    if (!standbyReady) {
-      get().playTrackAtIndex(targetIndex);
+    if (!standbyReady || isSpotifyTrack(target)) {
+      get().playTrackAtIndex(targetIndex, { auto: !manual });
       return;
+    }
+
+    if (spotifyActive) {
+      // Spotify → local gapless-ready: silence Spotify, then the usual slot flip below.
+      callSpotify(get().spotifySource, 'pause');
+      set({ activeSource: 'local' });
     }
 
     set({
@@ -420,6 +587,11 @@ export const usePlayerStore = create((set, get) => ({
 
   clearPlaylist: () => {
     const audioElement = get().getActiveAudio();
+    playAttempt += 1;
+    if (get().activeSource === 'spotify') {
+      callSpotify(get().spotifySource, 'pause');
+      set({ activeSource: 'local' });
+    }
     set({
       playlist: [],
       currentTrackIndex: -1,

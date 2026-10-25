@@ -576,3 +576,26 @@ describe('scope shuffle top-up', () => {
     });
   });
 });
+
+describe('while Spotify is the active source', () => {
+  afterEach(() => {
+    usePlayerStore.setState({ activeSource: 'local' });
+  });
+
+  test('<audio> events on the active element are ignored, and a stray play on it is paused', () => {
+    const audioRefA = makeAudioRef();
+    const audioRefB = makeAudioRef();
+    const playNext = vi.fn();
+    const pauseSpy = vi.spyOn(audioRefA.current, 'pause');
+    usePlayerStore.setState({ activeSource: 'spotify', isPlaying: true, playNext });
+    renderHook(() => usePlayerEngine(audioRefA, audioRefB));
+    audioRefA.current.dispatchEvent(new Event('pause'));
+    expect(usePlayerStore.getState().isPlaying).toBe(true);
+    audioRefA.current.dispatchEvent(new Event('waiting'));
+    expect(usePlayerStore.getState().isBuffering).toBe(false);
+    audioRefA.current.dispatchEvent(new Event('ended'));
+    expect(playNext).not.toHaveBeenCalled();
+    audioRefA.current.dispatchEvent(new Event('play'));
+    expect(pauseSpy).toHaveBeenCalled();
+  });
+});
