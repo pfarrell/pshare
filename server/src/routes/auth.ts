@@ -79,7 +79,7 @@ function generateDesktopToken(userId: number, username: string, admin: boolean, 
 // since it's plain HTTP; patf.com keeps the existing Secure, domain-scoped cookie.
 // The two are independent sessions by design — see
 // docs/superpowers/specs/2026-07-03-lan-access-design.md.
-function cookieOptionsForRequest(c: Context): { secure: boolean; domain: string | undefined } {
+export function cookieOptionsForRequest(c: Context): { secure: boolean; domain: string | undefined } {
   if (process.env.NODE_ENV !== 'production') {
     return { secure: false, domain: undefined }
   }

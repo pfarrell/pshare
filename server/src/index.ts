@@ -22,6 +22,7 @@ import jukeboxDevices from './routes/jukeboxDevices.js'
 import admin from './routes/admin/index.js'
 import upload from './routes/upload.js'
 import auth from './routes/auth.js'
+import spotifyAuth from './routes/spotifyAuth.js'
 import errors from './routes/errors.js'
 import signups from './routes/signups.js'
 import photos from './routes/photos.js'
@@ -80,6 +81,8 @@ app.get('/health', (c) => c.json({ ok: true }))
 
 // Auth routes (public — /login, /signup(admin-gated), /me, /google/* need to be
 // reachable without a session; the rest of this router self-checks c.get('user'))
+// Spotify routes first so /auth/spotify/* isn't swallowed by the /auth router
+app.route('/auth/spotify', spotifyAuth)
 app.route('/auth', auth)
 
 // Public: unfurl-only HTML for social link previews, no protected data.
