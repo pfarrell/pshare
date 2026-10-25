@@ -55,6 +55,16 @@ describe('JukeboxSpotifyTracksPanel', () => {
     expect(onEnqueue).toHaveBeenCalledTimes(2);
   });
 
+  test("Play album adds to the queue instead of interrupting what's playing", async () => {
+    apiService.getSpotifyAlbumTracks.mockResolvedValue({ data: payload });
+    render(<JukeboxSpotifyTracksPanel album={album} onClose={vi.fn()} />);
+    await screen.findByText(/Cruel Summer/);
+    fireEvent.click(screen.getByRole('button', { name: 'Play album' }));
+    await waitFor(() => expect(addTracks).toHaveBeenCalledTimes(1));
+    expect(addTracks.mock.calls[0][1]).toBeFalsy(); // not play-next
+    expect(addTracks.mock.calls[0][2]?.playImmediately).toBeFalsy();
+  });
+
   test('tapping a track adds just that track', async () => {
     const onEnqueue = vi.fn();
     apiService.getSpotifyAlbumTracks.mockResolvedValue({ data: payload });
