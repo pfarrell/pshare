@@ -24,6 +24,7 @@ vi.mock('./JukeboxArtistView', () => ({
     <div data-testid="jukebox-artist-view">
       <span>artist-view: {artist.name}</span>
       <button onClick={() => onSelectAlbum({ id: 4, title: 'Album From Artist' })}>select-album-from-artist</button>
+      <button onClick={() => onSelectAlbum({ id: 'lov', title: 'Spotify Album', source: 'spotify' })}>select-spotify-album-from-artist</button>
       <button onClick={onBack}>back-from-artist</button>
       <button onClick={onEnqueue}>artist-view-enqueue</button>
     </div>
@@ -58,6 +59,9 @@ vi.mock('./JukeboxTracksPanel', () => ({
       <button onClick={() => onSelectArtist({ id: 8, name: 'Album Artist' })}>select-artist-from-tracks-panel</button>
     </div>
   ),
+}));
+vi.mock('./JukeboxSpotifyTracksPanel', () => ({
+  default: ({ album }) => <div data-testid="jukebox-spotify-tracks-panel">spotify-panel: {album.title}</div>,
 }));
 vi.mock('./JukeboxPlaylistPanel', () => ({
   default: ({ playlist, onClose, onEnqueue }) => (
@@ -151,6 +155,14 @@ test('selecting an artist drills into the artist view; an album from there opens
 
   expect(screen.getByText('tracks-panel: Album From Artist')).toBeInTheDocument();
   expect(screen.getByTestId('jukebox-artist-view')).toBeInTheDocument();
+});
+
+test('#72: a Spotify album from the artist view opens the Spotify tracks panel, not the local one', () => {
+  renderPanel('browse');
+  fireEvent.click(screen.getByText('select-search-artist'));
+  fireEvent.click(screen.getByText('select-spotify-album-from-artist'));
+  expect(screen.getByText('spotify-panel: Spotify Album')).toBeInTheDocument();
+  expect(screen.queryByTestId('jukebox-tracks-panel')).not.toBeInTheDocument();
 });
 
 test('Back from the artist view returns to search results', () => {

@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { apiService } from '../services/api';
 import JukeboxAlbumTile from './JukeboxAlbumTile';
 import { useQueueActions } from '../hooks/useQueueActions';
+import { useSpotifyArtistAlbums } from '../player/spotify/useSpotifyArtistAlbums';
+import { mergeArtistAlbums } from '../utils/mergeArtistAlbums';
+import { SpotifyLogo } from '../components/OpenInSpotify';
 
 // Drill-down from a search-result artist: shows that artist's albums in the
 // same panel slot. Tapping an album opens the tracks panel (via onSelectAlbum,
@@ -24,6 +27,10 @@ const JukeboxArtistView = ({ artist, onSelectAlbum, onBack, onEnqueue }) => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-fetch only when the artist actually changes, not on every load() identity change
   }, [artist.id]);
+
+  // #72: unowned Spotify albums, merged in by year ([] unless the kiosk can play Spotify).
+  const spotifyAlbums = useSpotifyArtistAlbums(artist.id);
+  const merged = data ? mergeArtistAlbums(data.albums, spotifyAlbums) : [];
 
   const shuffle = useQueueActions(
     () => apiService.getRandomScopeTracks('artist', artist.id).then((response) => response.data.tracks),
@@ -52,19 +59,33 @@ const JukeboxArtistView = ({ artist, onSelectAlbum, onBack, onEnqueue }) => {
         </div>
       )}
       {!error && data === null && <div className="jukebox-panel-loading">Loading…</div>}
-      {!error && data !== null && data.albums.length === 0 && (
+      {!error && data !== null && merged.length === 0 && (
         <p className="jukebox-panel-empty">No albums found</p>
       )}
-      {!error && data !== null && data.albums.length > 0 && (
+      {!error && data !== null && merged.length > 0 && (
         <div className="jukebox-album-grid">
-          {data.albums.map((album) => (
+          {merged.map(({ kind, album }) => (kind === 'spotify' ? (
+            <JukeboxAlbumTile
+              key={`spotify-${album.id}`}
+              album={{
+                id: album.id,
+                title: typeof album.name === 'string' ? album.name : '',
+                source: 'spotify',
+                imageUrl: album.imageUrl ?? null,
+                artist: { name: data.artist?.name ?? artist.name },
+              }}
+              imageUrl={album.imageUrl ?? null}
+              badge={<SpotifyLogo className="jukebox-spotify-logo jukebox-album-tile-badge" />}
+              onSelect={onSelectAlbum}
+            />
+          ) : (
             <JukeboxAlbumTile
               key={album.id}
               album={{ ...album, artist: album.artist ?? data.artist }}
               imageUrl={apiService.getImageUrl(album.image_path, 'album_small')}
               onSelect={onSelectAlbum}
             />
-          ))}
+          )))}
         </div>
       )}
     </div>
