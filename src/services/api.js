@@ -75,6 +75,10 @@ export const apiService = {
     return `${getBaseURL()}/auth/recall/connect${qs ? `?${qs}` : ''}`;
   },
   disconnectRecall: () => api.delete('/auth/recall/connect'),
+  getSpotifyStatus: () => api.get('/auth/spotify/status'),
+  getSpotifyToken: () => api.get('/auth/spotify/token'),
+  disconnectSpotify: (target, deviceId) => api.delete('/auth/spotify/connection', { params: { target, deviceId } }),
+  spotifyConnectUrl: (target, deviceId) => `${getBaseURL()}/auth/spotify/start${qs({ target, deviceId })}`,
   setPassword: (password) => api.put('/auth/set-password', { password }),
   changePassword: (currentPassword, newPassword) => api.put('/auth/change-password', { currentPassword, newPassword }),
   forgotPassword: (username) => api.post('/auth/forgot-password', { username }),
