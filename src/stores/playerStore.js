@@ -330,7 +330,14 @@ export const usePlayerStore = create((set, get) => ({
       return;
     }
     set({ consecutiveSkips, currentTrackIndex: index });
-    get().syncNextTrackIndex();
+    if (get().playbackMode === 'repeat-one') {
+      // Repeat-one would re-target this same unplayable track; skip past it the way a manual
+      // Next does. playTrackAtIndex re-syncs nextTrackIndex, so repeat-one applies to whatever
+      // plays next.
+      set({ nextTrackIndex: computeNextIndex({ ...get(), playbackMode: 'off' }) });
+    } else {
+      get().syncNextTrackIndex();
+    }
     get().playNext();
   },
 

@@ -1319,6 +1319,37 @@ describe('spotify source routing', () => {
     expect(source.start).not.toHaveBeenCalled();
   });
 
+  test('repeat-one: an unplayable Spotify track is tried once, then the following local track plays', async () => {
+    const source = fakeSource({ start: vi.fn(() => Promise.reject(new Error('no device'))) });
+    const { active } = setup({ playlist: [spotifyTrack(1), track(2), track(3)], playbackMode: 'repeat-one', spotifySource: source });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    for (let i = 0; i < 10; i++) await flush();
+    const state = usePlayerStore.getState();
+    expect(source.start).toHaveBeenCalledTimes(1);
+    expect(state.currentTrackIndex).toBe(1);
+    expect(state.activeSource).toBe('local');
+    expect(active.src).toBe('/stream/2');
+    // repeat-one applies to the newly playing track as normal.
+    expect(state.nextTrackIndex).toBe(1);
+  });
+
+  test('repeat-one: a queue where every track is unplayable terminates with playlistFinished', async () => {
+    const source = fakeSource({ start: vi.fn(() => Promise.reject(new Error('no device'))) });
+    setup({ playlist: [spotifyTrack(1), spotifyTrack(2), spotifyTrack(3)], playbackMode: 'repeat-one', spotifySource: source });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    for (let i = 0; i < 10; i++) await flush();
+    expect(source.start.mock.calls.length).toBeLessThanOrEqual(3);
+    expect(usePlayerStore.getState().playlistFinished).toBe(true);
+    expect(usePlayerStore.getState().isPlaying).toBe(false);
+
+    const unavailable = fakeSource({ isAvailable: () => false });
+    usePlayerStore.setState({ spotifySource: unavailable, consecutiveSkips: 0, playlistFinished: false });
+    usePlayerStore.getState().playTrackAtIndex(1);
+    expect(unavailable.start).not.toHaveBeenCalled();
+    expect(usePlayerStore.getState().playlistFinished).toBe(true);
+    expect(usePlayerStore.getState().isPlaying).toBe(false);
+  });
+
   test('displaced: auto-advance skips Spotify tracks; a manual playTrackAtIndex onto one clears displaced and starts it', () => {
     let displaced = true;
     const source = fakeSource({
