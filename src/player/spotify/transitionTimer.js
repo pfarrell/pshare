@@ -6,7 +6,7 @@ const STALE_MS = 15000;
 
 let pending = null;
 
-const enabled = () => {
+export const isTransitionTimingEnabled = () => {
   try {
     return localStorage.getItem('pshare-debug-transitions') === '1';
   } catch {
@@ -16,14 +16,14 @@ const enabled = () => {
 
 // The outgoing source stopped (or will stop at `at`, an epoch-ms estimate) at a switch.
 export const markOutgoingEnd = (fromSource, at) => {
-  if (!enabled()) return;
+  if (!isTransitionTimingEnabled()) return;
   pending = { from: fromSource, at: Number.isFinite(at) ? at : Date.now() };
 };
 
 // The incoming source is audible. Logs only if a switch is pending and it's a cross-source or
 // spotify→spotify transition; a plain local→local 'playing' event never has a pending mark.
 export const markIncomingAudible = (toSource) => {
-  if (!pending || !enabled()) {
+  if (!pending || !isTransitionTimingEnabled()) {
     pending = null;
     return;
   }
@@ -37,4 +37,9 @@ export const markIncomingAudible = (toSource) => {
   } catch {
     // never throw from instrumentation
   }
+};
+
+// Drops a pending mark (a start that failed or was skipped must not time the next audible event).
+export const clearPendingTransition = () => {
+  pending = null;
 };

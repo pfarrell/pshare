@@ -1,6 +1,7 @@
 import { usePlayerStore, MAX_QUEUE_HISTORY } from './playerStore';
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
 import { apiService } from '../services/api';
+import { markIncomingAudible } from '../player/spotify/transitionTimer';
 
 vi.mock('../services/api', () => ({
   apiService: {
@@ -1157,6 +1158,38 @@ describe('spotify source routing', () => {
     const source = fakeSource();
     usePlayerStore.getState().setSpotifySource(source);
     expect(usePlayerStore.getState().spotifySource).toBe(source);
+  });
+
+  describe('transition timing (debug flag on)', () => {
+    let log;
+    beforeEach(() => {
+      localStorage.setItem('pshare-debug-transitions', '1');
+      log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    });
+    afterEach(() => {
+      localStorage.removeItem('pshare-debug-transitions');
+      vi.restoreAllMocks();
+    });
+
+    test('a rejected Spotify start followed by a skip to local leaves no misleading mark', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const source = fakeSource({ start: vi.fn(() => Promise.reject(new Error('timeout'))) });
+      const { active } = setup({ playlist: [track(1), spotifyTrack(2), track(3)], spotifySource: source, currentTrackIndex: 0 });
+      active.paused = false;
+      usePlayerStore.getState().playTrackAtIndex(1, { auto: true });
+      await flush();
+      expect(usePlayerStore.getState().activeSource).toBe('local');
+      markIncomingAudible('local');
+      expect(log).not.toHaveBeenCalled();
+    });
+
+    test('a plain local to local advance logs nothing', () => {
+      const { active } = setup({ playlist: [track(1), track(2)], currentTrackIndex: 0 });
+      active.paused = false;
+      usePlayerStore.getState().playTrackAtIndex(1, { auto: true });
+      markIncomingAudible('local');
+      expect(log).not.toHaveBeenCalled();
+    });
   });
 
   test('playing a Spotify track pauses both audio elements and calls start with that track', () => {

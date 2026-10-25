@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { markOutgoingEnd, markIncomingAudible } from './transitionTimer';
+import { markOutgoingEnd, markIncomingAudible, clearPendingTransition, isTransitionTimingEnabled } from './transitionTimer';
 
 describe('transitionTimer', () => {
   let log;
@@ -47,6 +47,20 @@ describe('transitionTimer', () => {
     vi.advanceTimersByTime(20000);
     markIncomingAudible('local');
     expect(log).not.toHaveBeenCalled();
+  });
+
+  it('clearing the pending mark prevents a later log', () => {
+    localStorage.setItem('pshare-debug-transitions', '1');
+    markOutgoingEnd('spotify');
+    clearPendingTransition();
+    markIncomingAudible('local');
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it('reports whether the flag is on', () => {
+    expect(isTransitionTimingEnabled()).toBe(false);
+    localStorage.setItem('pshare-debug-transitions', '1');
+    expect(isTransitionTimingEnabled()).toBe(true);
   });
 
   it('never throws when localStorage is unavailable', () => {

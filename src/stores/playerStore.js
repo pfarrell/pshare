@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { apiService } from '../services/api';
 import { isSpotifyTrack, localTrackIds } from '../utils/trackSource';
-import { markOutgoingEnd, markIncomingAudible } from '../player/spotify/transitionTimer';
+import { markOutgoingEnd, markIncomingAudible, isTransitionTimingEnabled, clearPendingTransition } from '../player/spotify/transitionTimer';
 import { SPOTIFY_END_LEAD_MS } from '../player/spotify/constants';
 
 // "Shuffle scope" (collection, artist, ...) fetches tracks from the scope in batches rather
@@ -120,20 +120,31 @@ const pauseLocalAudio = (get, { deferPlaying = false } = {}) => {
 
 // Transition timing (debug flag only): the outgoing source stops now, or — for an auto advance —
 // at its natural end, estimated from what's left of it.
+// True once a Spotify start() has resolved for the track currently attributed to Spotify; a
+// start that failed or is still pending never produced sound, so leaving it isn't a transition.
+let spotifyAudible = false;
+
 const markSwitchOut = (get, fromSource, auto) => {
-  let at = Date.now();
-  if (auto && fromSource === 'spotify') at += SPOTIFY_END_LEAD_MS;
-  if (auto && fromSource === 'local') {
-    const audio = get().getActiveAudio();
-    const remaining = audio && !audio.paused ? audio.duration - audio.currentTime : 0;
-    if (Number.isFinite(remaining) && remaining > 0) at += remaining * 1000;
+  if (!isTransitionTimingEnabled()) return;
+  if (fromSource === 'spotify' && !spotifyAudible) return;
+  try {
+    let at = Date.now();
+    if (auto && fromSource === 'spotify') at += SPOTIFY_END_LEAD_MS;
+    if (auto && fromSource === 'local') {
+      const audio = get().getActiveAudio();
+      const remaining = audio && !audio.paused ? audio.duration - audio.currentTime : 0;
+      if (Number.isFinite(remaining) && remaining > 0) at += remaining * 1000;
+    }
+    markOutgoingEnd(fromSource, at);
+  } catch {
+    // instrumentation must never break playback
   }
-  markOutgoingEnd(fromSource, at);
 };
 
 const playSpotifyTrackAtIndex = (set, get, index, auto, attempt) => {
   const { playlist, playbackMode, shuffleHistory, standbyUnlocked, spotifySource, activeSource: fromSource } = get();
   markSwitchOut(get, fromSource, auto);
+  spotifyAudible = false;
   const track = playlist[index];
   const nextShuffleHistory = playbackMode === 'shuffle' && !shuffleHistory.includes(index) ? [...shuffleHistory, index] : shuffleHistory;
   const pauseDeferredLocalAudio = pauseLocalAudio(get, { deferPlaying: auto });
@@ -181,6 +192,7 @@ const playSpotifyTrackAtIndex = (set, get, index, auto, attempt) => {
     () => {
       if (isCurrentAttempt()) {
         markIncomingAudible('spotify');
+        spotifyAudible = true;
         pauseDeferredLocalAudio();
         set({ consecutiveSkips: 0 });
         // Paused (togglePlayPause) while start() was still pending.
@@ -369,6 +381,7 @@ export const usePlayerStore = create((set, get) => ({
   // A track that can't play in this session (Spotify unavailable/displaced/failed to start):
   // move past it silently. Stops once a whole queue's worth of tracks has been skipped in a row.
   skipUnplayable: (index) => {
+    clearPendingTransition();
     const consecutiveSkips = get().consecutiveSkips + 1;
     if (consecutiveSkips >= get().playlist.length) {
       set({ consecutiveSkips, playlistFinished: true, isPlaying: false });
