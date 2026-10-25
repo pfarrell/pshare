@@ -27,7 +27,7 @@ const SpotifyAlbumCard = ({ album, localArtistId }) => {
       cardImageStyle={{ cursor: 'pointer' }}
       imageBadge={<SpotifyLogo className="spotify-album-marker" />}
       listSubtitle={['Album', year, 'Spotify'].filter(Boolean).join(' · ')}
-      onClick={() => navigate(`/spotify/album/${album.id}`, { state: { localArtistId } })}
+      onClick={() => navigate(`/spotify/album/${album.id}`, { state: { localArtistId, year } })}
       play={{
         loading: queue.loading,
         onPlay: queue.play,
