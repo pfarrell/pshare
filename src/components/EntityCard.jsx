@@ -15,6 +15,7 @@ const EntityCard = ({
   imageAlt,
   imageShape = 'square',
   cardImageStyle,
+  imageBadge,
   listSubtitle,
   listImageContent,
   cardTitleStyle,
@@ -53,6 +54,7 @@ const EntityCard = ({
         <div className="artist-card" onClick={handleClick} {...ctxMenu.triggerProps}>
           <div className="artist-card-image">
             <img src={imageUrl} alt={imageAlt ?? title} style={cardImageStyle} onError={handleSmallImageError} />
+            {imageBadge}
           </div>
           <div className="artist-card-title">
             <h3 style={cardTitleStyle}>{title}</h3>

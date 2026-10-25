@@ -14,8 +14,13 @@ vi.mock('../services/api', () => ({
     getArtist: vi.fn(),
     getImageUrl: () => 'http://example.com/image.jpg',
     getRandomScopeTracks: vi.fn(),
+    getSpotifyArtistAlbums: vi.fn(),
   },
 }));
+
+// Spotify artist albums (#72): eligibility is stubbed; ineligible by default.
+const spotifyEligible = { value: false };
+vi.mock('../player/spotify/useCanPlaySpotify', () => ({ useCanPlaySpotify: () => spotifyEligible.value }));
 
 const artistData = {
   artist: { id: 1, name: 'Test Artist', image_path: 'a.jpg' },
@@ -372,5 +377,44 @@ describe('Artist page — Shuffle All', () => {
     renderArtist();
     await screen.findByText('Test Artist');
     expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument();
+  });
+});
+
+describe('Artist page — Spotify albums (#72)', () => {
+  const local = (id, title, release_year) => ({ id, title, release_year, artist: { id: 1, name: 'Test Artist' } });
+
+  afterEach(() => { spotifyEligible.value = false; });
+
+  test('eligible: Spotify albums appear in year order among local albums, after local albums render', async () => {
+    spotifyEligible.value = true;
+    let resolveSpotify;
+    apiService.getSpotifyArtistAlbums.mockReturnValue(new Promise((r) => { resolveSpotify = r; }));
+    apiService.getArtist.mockResolvedValue({ data: { ...artistData, albums: [local(1, 'Fearless', '2008'), local(2, 'Undated', null)] } });
+
+    renderArtist();
+    await screen.findByText('Fearless');
+    expect(screen.queryByText('Lover')).toBeNull();
+
+    resolveSpotify({ data: { configured: true, albums: [
+      { id: 'lov', name: 'Lover', releaseYear: '2019', imageUrl: null },
+      { id: 'red', name: 'Red', releaseYear: '2012', imageUrl: null },
+    ] } });
+    await screen.findByText('Lover');
+
+    const titles = [...document.querySelectorAll('.artist-grid .artist-card h3, .artist-grid .result-row-title')]
+      .map((el) => el.textContent);
+    expect(titles.slice(0, 4)).toEqual(['Lover', 'Red', 'Fearless', 'Undated']);
+    expect(document.querySelectorAll('.spotify-album-marker')).toHaveLength(2);
+    expect(apiService.getSpotifyArtistAlbums).toHaveBeenCalledWith(1);
+  });
+
+  test('ineligible: no Spotify request and the grid is unchanged', async () => {
+    apiService.getSpotifyArtistAlbums.mockClear();
+    apiService.getArtist.mockResolvedValue({ data: { ...artistData, albums: [local(1, 'Fearless', '2008')] } });
+
+    renderArtist();
+    await screen.findByText('Fearless');
+    expect(apiService.getSpotifyArtistAlbums).not.toHaveBeenCalled();
+    expect(document.querySelectorAll('.spotify-album-marker')).toHaveLength(0);
   });
 });

@@ -13,6 +13,7 @@ import Home from './pages/Home';
 import Search from './pages/Search';
 import Artist from './pages/Artist';
 import Album from './pages/Album';
+import SpotifyAlbum from './pages/SpotifyAlbum';
 import TrackPage from './pages/TrackPage';
 import Library from './pages/Library';
 import Account from './pages/Account';
@@ -280,6 +281,8 @@ function App() {
                     isAuthenticated/isAdmin checks already in each component. */}
                 <Route path="/artist/:id" element={<Artist />} />
                 <Route path="/album/:id" element={<Album />} />
+                {/* #72: a Spotify album the library doesn't own (from the artist page grid) */}
+                <Route path="/spotify/album/:spotifyId" element={<SpotifyAlbum />} />
                 <Route path="/playlist/:id" element={<Playlist />} />
                 <Route path="/track/:id" element={<TrackPage />} />
                 <Route path="/*" element={

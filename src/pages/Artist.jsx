@@ -23,6 +23,9 @@ import { useFetch } from '../hooks/useFetch';
 import { useEntityHeaderActions } from '../hooks/useEntityHeaderActions';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useQueueActions } from '../hooks/useQueueActions';
+import SpotifyAlbumCard from '../components/SpotifyAlbumCard';
+import { useSpotifyArtistAlbums } from '../player/spotify/useSpotifyArtistAlbums';
+import { mergeArtistAlbums } from '../utils/mergeArtistAlbums';
 
 const Artist = () => {
   const { id } = useParams();
@@ -42,6 +45,8 @@ const Artist = () => {
   const isMobile = useIsMobile();
   const [showArtistModal, setShowArtistModal] = useState(false);
   const { overflowAction: overtoneAction, modal: overtoneModal } = useOvertoneAction(artistData?.artist?.musicbrainz_id);
+  // #72: the artist's Spotify albums the library doesn't own ([] unless this session can play Spotify).
+  const spotifyAlbums = useSpotifyArtistAlbums(artistData?.artist?.id ?? null);
   const { actions: headerActions, shouldIgnore } = useEntityHeaderActions({
     kind: 'artist',
     entity: artistData?.artist ?? null,
@@ -67,6 +72,7 @@ const Artist = () => {
   }
 
   const { artist, summary, albums, singles, appears_on, performances, related_artists, members, group_albums, similar_artists } = artistData;
+  const mergedAlbums = mergeArtistAlbums(albums, spotifyAlbums);
 
   const handlePlaySingles = () => {
     if (singles?.length) {
@@ -217,22 +223,28 @@ const Artist = () => {
       />
 
       {/* Albums Grid */}
-      {albums && albums.length > 0 && (
+      {/* #72: Spotify albums are merged in by year; local-only sessions see exactly the local list. */}
+      {mergedAlbums.length > 0 && (
         <div className="artist-grid" style={{ minHeight: 'auto' }}>
           <CardGrid>
-            {albums.map((album, i) => {
-              const imageUrl = apiService.getImageUrl(album.image_path, 'album_small')
-              const showDivider = i > 0 && !!getAlbumYear(albums[i - 1].release_year) && !getAlbumYear(album.release_year)
+            {mergedAlbums.map((entry, i) => {
+              const year = (e) => (e.kind === 'local' ? getAlbumYear(e.album.release_year) : e.album.releaseYear)
+              const showDivider = i > 0 && !!year(mergedAlbums[i - 1]) && !year(entry)
+              const { album } = entry
               return (
-                <Fragment key={album.id}>
+                <Fragment key={`${entry.kind}-${album.id}`}>
                   {showDivider && <div className="album-year-divider" />}
-                  <AlbumCard
-                    album={album}
-                    artist={album.artist}
-                    imageUrl={imageUrl}
-                    onClick={handleAlbumClick}
-                    hideArtist={album.artist?.id === artist.id}
-                  />
+                  {entry.kind === 'spotify' ? (
+                    <SpotifyAlbumCard album={album} localArtistId={artist.id} />
+                  ) : (
+                    <AlbumCard
+                      album={album}
+                      artist={album.artist}
+                      imageUrl={apiService.getImageUrl(album.image_path, 'album_small')}
+                      onClick={handleAlbumClick}
+                      hideArtist={album.artist?.id === artist.id}
+                    />
+                  )}
                 </Fragment>
               )
             })}

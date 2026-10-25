@@ -594,24 +594,28 @@
 }
 
 /* Small pill: both the "this is external" marker and the actual link. */
+/* Small Spotify logo + offsite arrow; the accessible name comes from aria-label. */
 .spotify-open-link {
-  display: inline-block;
-  box-sizing: border-box;
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 0.1rem;
   flex-shrink: 0;
   margin-top: 0.4rem;
-  padding: 0.15rem 0.5rem;
-  border: 1px solid #1db954;
-  border-radius: 999px;
-  color: #1a9e48;
-  font-size: 0.7rem;
-  font-weight: 600;
-  white-space: nowrap;
+  color: var(--color-text-muted);
+  font-size: 0.65rem;
+  line-height: 1;
   text-decoration: none;
+  opacity: 0.85;
 }
 
 .spotify-open-link:hover {
-  background: #1db954;
-  color: white;
+  opacity: 1;
+}
+
+.spotify-open-logo {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
 }
 
 .result-row .spotify-open-link {
@@ -4630,3 +4634,78 @@ body:has(.jukebox-app) {
 .spotify-card-button:disabled { opacity: 0.6; cursor: default; }
 .spotify-card-message { color: #dc2626; font-size: 0.875rem; margin-bottom: 0.75rem; }
 [data-theme="dark"] .spotify-card-message { color: #fca5a5; }
+
+/* Spotify album in the artist grid (#72): small logo marker in the cover corner.
+   Scoped with :has so other cards' image boxes are untouched. */
+.artist-card-image:has(> .spotify-album-marker) {
+  position: relative;
+}
+
+.spotify-album-marker {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  width: 1rem;
+  height: 1rem;
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+/* Spotify album page (#72): track rows styled like the album page's list. */
+.spotify-album-tracks {
+  background-color: var(--color-bg-surface);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.spotify-album-track {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  box-sizing: border-box;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.spotify-album-track:last-child {
+  border-bottom: none;
+}
+
+.spotify-album-track-number {
+  width: 1.5rem;
+  flex-shrink: 0;
+  text-align: right;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.spotify-album-track-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+}
+
+.spotify-album-track-duration {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.spotify-album-track .spotify-actions {
+  margin-top: 0;
+}
+
+.spotify-album-year {
+  margin: 0 0 0.5rem 0;
+  color: var(--color-text-muted);
+}
+
+.spotify-album-unavailable {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--color-text-muted);
+}
