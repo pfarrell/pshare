@@ -18,6 +18,9 @@ const IS_PLAYING_MISMATCH_POLLS = 2;
 const END_WINDOW_MS = SPOTIFY_POLL_MS + SPOTIFY_END_LEAD_MS;
 // A paused state this close to 0 right after the track was near its end means it finished.
 const END_RESET_POSITION_MS = 1000;
+// With no poll inside END_WINDOW_MS (background tabs throttle timers to ~1s), the end is still
+// recognised from the last poll that saw the track within this much of its end.
+const LATE_END_WINDOW_MS = PREFETCH_THRESHOLD_SECONDS * 1000;
 
 // Connects this page as a Spotify playback device (experimental, #72) and registers it with
 // the player store as its SpotifySource, when the signed-in session can play Spotify. While a
@@ -65,11 +68,12 @@ export const useSpotifyPlayback = () => {
     };
 
     const handleDisplaced = () => {
-      // Another device took the Spotify session over. Show it as paused here; a manual play
-      // takes it back (the store clears the displaced flag on manual starts).
-      if (usePlayerStore.getState().activeSource === 'spotify') {
-        usePlayerStore.getState().setIsPlaying(false);
-      }
+      // Another device took the Spotify session over. Never take it back automatically: carry
+      // on with local tracks via an auto advance, which skips Spotify entries while displaced
+      // (and stops as though the queue ended if only Spotify tracks remain). A manual play or
+      // skip onto a Spotify track clears the displaced flag and takes the stream back.
+      const store = usePlayerStore.getState();
+      if (store.activeSource === 'spotify' && store.spotifySource === source) store.playNext();
     };
 
     const loseDevice = (reason) => (detail) => {
@@ -121,7 +125,8 @@ export const useSpotifyPlayback = () => {
   // so a poll can't be relied on to land inside it. Once a poll sees the track within one poll
   // interval of the end, a timeout is scheduled for the lead point; and if the track has
   // already ended by the next look (paused back at 0, another uri, or no state), that counts as
-  // the end too. endFired keeps it to one advance per track.
+  // the end too. When throttled timers mean no poll lands that close (background tabs), the last
+  // playing poll stands in: see looksEndedLate. endFired keeps it to one advance per track.
   useEffect(() => {
     if (activeSource !== 'spotify' || !spotifySource?.getState) return undefined;
     let polling = false;
@@ -129,6 +134,9 @@ export const useSpotifyPlayback = () => {
     let mismatches = 0;
     // { uri, track } from the last poll that saw the track playing within the end window.
     let nearEnd = null;
+    // { uri, track, positionMs, durationMs } from the last poll that saw the current track
+    // playing. Cleared by a pause, a seek or a track change, like the end timeout.
+    let lastSeen = null;
     let endTimer = null;
     let applyingPoll = false;
 
@@ -140,6 +148,7 @@ export const useSpotifyPlayback = () => {
     const fireEnd = (store) => {
       endFired = true;
       nearEnd = null;
+      lastSeen = null;
       clearEndTimer();
       store.playNext();
     };
@@ -149,6 +158,18 @@ export const useSpotifyPlayback = () => {
     const looksEnded = (state, uri) => !state
       || state.uri !== uri
       || (state.paused && (state.positionMs < END_RESET_POSITION_MS || state.positionMs >= state.durationMs - SPOTIFY_END_LEAD_MS));
+
+    // Ended although no poll landed in the end window: the last playing poll was close to the
+    // end and now the track is gone (paused back at 0, another uri, no state); or Spotify moved
+    // on to another uri after the track was more than half played.
+    const looksEndedLate = (state, track) => {
+      if (!lastSeen || lastSeen.track !== track) return false;
+      const { uri, positionMs, durationMs } = lastSeen;
+      const otherUri = !!state && state.uri !== uri;
+      if (otherUri && positionMs > durationMs / 2) return true;
+      return durationMs - positionMs <= LATE_END_WINDOW_MS
+        && (!state || otherUri || (state.paused && state.positionMs < END_RESET_POSITION_MS));
+    };
 
     // The store still expects this track to be playing on this source, with nothing in flight.
     const stillExpected = (store, track) => store.activeSource === 'spotify'
@@ -184,7 +205,9 @@ export const useSpotifyPlayback = () => {
       if (!spotifySource.isSettled?.()) return;
       const track = store.currentTrack;
       if (nearEnd && nearEnd.track !== track) nearEnd = null;
-      if (nearEnd && !endFired && store.isPlaying && looksEnded(state, nearEnd.uri)) {
+      if (lastSeen && lastSeen.track !== track) lastSeen = null;
+      if (!endFired && store.isPlaying
+        && ((nearEnd && looksEnded(state, nearEnd.uri)) || looksEndedLate(state, track))) {
         fireEnd(store);
         return;
       }
@@ -209,6 +232,7 @@ export const useSpotifyPlayback = () => {
       }
 
       if (state.paused || state.durationMs <= 0) return;
+      lastSeen = { uri: state.uri, track, positionMs: state.positionMs, durationMs: state.durationMs };
       const remainingMs = state.durationMs - state.positionMs;
       // Re-arm only once clearly away from the end (e.g. repeat-one restarted the track).
       if (remainingMs > END_WINDOW_MS) endFired = false;
@@ -233,13 +257,15 @@ export const useSpotifyPlayback = () => {
     };
 
     // A pause, a seek (any currentTime change not made by a poll) or a track change cancels a
-    // pending end timeout; the next poll reschedules it if it still applies.
+    // pending end timeout and forgets the last playing position; the next poll re-establishes
+    // both if they still apply.
     const unsubscribe = usePlayerStore.subscribe((next, prev) => {
-      if (!endTimer) return;
+      if (!endTimer && !lastSeen) return;
       if (next.currentTrack !== prev.currentTrack
         || (prev.isPlaying && !next.isPlaying)
         || (!applyingPoll && next.currentTime !== prev.currentTime)) {
         clearEndTimer();
+        lastSeen = null;
       }
     });
 

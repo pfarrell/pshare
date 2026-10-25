@@ -1468,6 +1468,17 @@ describe('spotify source routing', () => {
     expect(source.activate).toHaveBeenCalled();
   });
 
+  test('a source registered after the first local play is activated on the next manual play', () => {
+    setup({ playlist: [track(1), track(2), track(3)], standbyUnlocked: false });
+    usePlayerStore.getState().playTrackAtIndex(0);
+    const source = fakeSource();
+    usePlayerStore.getState().setSpotifySource(source);
+    usePlayerStore.getState().playNext();
+    expect(source.activate).not.toHaveBeenCalled();
+    usePlayerStore.getState().playTrackAtIndex(2);
+    expect(source.activate).toHaveBeenCalledTimes(1);
+  });
+
   test('clearPlaylist while Spotify is active pauses the Spotify source', () => {
     const source = fakeSource();
     setup({ playlist: [spotifyTrack(1)], spotifySource: source });

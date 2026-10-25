@@ -274,6 +274,52 @@ describe('while a Spotify track is active', () => {
       expect(playNext).not.toHaveBeenCalled();
     });
 
+    describe('with polls 1000ms apart (throttled background tab), none inside the end window', () => {
+      // Each poll interval sees the same state; the state moves on by 1000ms between ticks.
+      const pollEvery1000 = async (states) => {
+        for (const s of states) {
+          adapter.getState.mockResolvedValue(s);
+          await tick(1000);
+        }
+      };
+
+      test.each([
+        ['paused back at 0', state(0, { paused: true })],
+        ['a different uri', state(1000, { uri: 'spotify:track:autoplayed' })],
+        ['no state', null],
+      ])('the track ending (%s) advances exactly once', async (_, ended) => {
+        await act(async () => { playSpotify(); });
+        await pollEvery1000([state(197500), state(198500), state(199500)]);
+        expect(playNext).not.toHaveBeenCalled();
+        await pollEvery1000([ended, ended, ended]);
+        expect(playNext).toHaveBeenCalledTimes(1);
+      });
+
+      test('Spotify moving to another uri past half the track advances', async () => {
+        await act(async () => { playSpotify(); });
+        await pollEvery1000([state(120000), state(3000, { uri: 'spotify:track:autoplayed' })]);
+        expect(playNext).toHaveBeenCalledTimes(1);
+      });
+
+      test('another uri before half the track does not advance', async () => {
+        await act(async () => { playSpotify(); });
+        await pollEvery1000([state(50000), state(3000, { uri: 'spotify:track:autoplayed' })]);
+        expect(playNext).not.toHaveBeenCalled();
+      });
+
+      test('a user pause 10s from the end, a seek to 0, then play, does not advance', async () => {
+        await act(async () => { playSpotify(); });
+        await pollEvery1000([state(189000), state(190000)]);
+        await act(async () => { usePlayerStore.setState({ isPlaying: false }); });
+        await pollEvery1000([state(190000, { paused: true })]);
+        await act(async () => { usePlayerStore.setState({ currentTime: 0 }); });
+        await pollEvery1000([state(0, { paused: true })]);
+        await act(async () => { usePlayerStore.setState({ isPlaying: true }); });
+        await pollEvery1000([state(0, { paused: true }), state(1000), state(2000)]);
+        expect(playNext).not.toHaveBeenCalled();
+      });
+    });
+
     test('a seek away from the end cancels the pending timeout', async () => {
       adapter.getState.mockResolvedValue(state(199790));
       await act(async () => { playSpotify(); });
@@ -333,14 +379,57 @@ describe('while a Spotify track is active', () => {
     expect(adapter.getState.mock.calls.length).toBe(calls);
   });
 
-  test('displacement while playing marks the player paused', async () => {
-    await mount();
-    await act(async () => { playSpotify(); });
-    const source = usePlayerStore.getState().spotifySource;
-    await act(async () => { await source.start(spotifyTrack); });
-    act(() => adapter.handlers.state(null));
-    expect(source.isDisplaced()).toBe(true);
-    expect(usePlayerStore.getState().isPlaying).toBe(false);
+  describe('displacement', () => {
+    const audio = () => ({
+      play: vi.fn(() => Promise.resolve()), pause: vi.fn(), load: vi.fn(), paused: true, src: '', currentTime: 0, duration: 0, readyState: 0,
+    });
+    const s2 = { ...spotifyTrack, uri: 'spotify:track:2', title: 'S2' };
+    const local = { id: 2, title: 'L2', url: '/stream/2', duration: 180, artist: { name: 'A' } };
+
+    // Plays the first queue entry (a Spotify track) manually through the real store, lets its
+    // start land, then has another device take the stream.
+    const playThenDisplace = async (playlist) => {
+      await mount();
+      const active = audio();
+      usePlayerStore.setState({
+        audioElementA: active, audioElementB: audio(), activeSlot: 'a', standbyUnlocked: true,
+        playlist, playbackMode: 'off', shuffleHistory: [], consecutiveSkips: 0, playlistFinished: false,
+      });
+      await act(async () => { usePlayerStore.getState().playTrackAtIndex(0); });
+      expect(adapter.playUri).toHaveBeenCalledTimes(1);
+      await act(async () => { adapter.handlers.state(null); });
+      return { active, source: usePlayerStore.getState().spotifySource };
+    };
+
+    test('continues with the next local track and does not take the stream back', async () => {
+      const { active, source } = await playThenDisplace([spotifyTrack, local]);
+      await tick(1000);
+      expect(source.isDisplaced()).toBe(true);
+      expect(usePlayerStore.getState().activeSource).toBe('local');
+      expect(usePlayerStore.getState().currentTrackIndex).toBe(1);
+      expect(usePlayerStore.getState().isPlaying).toBe(true);
+      expect(active.src).toBe('/stream/2');
+      expect(adapter.playUri).toHaveBeenCalledTimes(1);
+    });
+
+    test('stops as though the queue ended when only Spotify tracks remain', async () => {
+      await playThenDisplace([spotifyTrack, s2]);
+      await tick(1000);
+      expect(usePlayerStore.getState().isPlaying).toBe(false);
+      expect(usePlayerStore.getState().playlistFinished).toBe(true);
+      expect(usePlayerStore.getState().playlist).toHaveLength(2);
+      expect(adapter.playUri).toHaveBeenCalledTimes(1);
+    });
+
+    test('a manual play onto a Spotify entry afterwards clears displaced and starts it', async () => {
+      const { source } = await playThenDisplace([spotifyTrack, s2]);
+      await act(async () => { usePlayerStore.getState().playTrackAtIndex(1); });
+      expect(source.isDisplaced()).toBe(false);
+      expect(adapter.playUri).toHaveBeenCalledTimes(2);
+      expect(adapter.playUri).toHaveBeenLastCalledWith('spotify:track:2', 'device-1');
+      expect(usePlayerStore.getState().activeSource).toBe('spotify');
+      expect(usePlayerStore.getState().isPlaying).toBe(true);
+    });
   });
 });
 

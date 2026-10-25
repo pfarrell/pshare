@@ -94,12 +94,23 @@ export const spotifyCanStart = (source, auto) => {
   }
 };
 
+// The source most recently activated inside a user gesture.
+let activatedSpotifySource = null;
+
 const activateSpotify = (source) => {
+  if (source) activatedSpotifySource = source;
   try {
     source?.activate();
   } catch (error) {
     console.warn('Spotify activate failed:', error);
   }
+};
+
+// Called on every manual play, whichever source the track is on: the SDK has to be activated
+// inside a gesture, and the source may have registered after the first play. Once per source
+// is enough, so repeat plays don't re-activate.
+const activateSpotifyOnGesture = (source) => {
+  if (source && source !== activatedSpotifySource) activateSpotify(source);
 };
 
 // Identifies the latest playTrackAtIndex/clearPlaylist call, so a Spotify start() that settles
@@ -162,7 +173,6 @@ const playSpotifyTrackAtIndex = (set, get, index, auto, attempt) => {
   });
   if (!standbyUnlocked) {
     unlockAudioElement(get().getStandbyAudio());
-    activateSpotify(spotifySource);
     set({ standbyUnlocked: true });
   }
   get().trimQueueHistory();
@@ -340,6 +350,7 @@ export const usePlayerStore = create((set, get) => ({
     playAttempt += 1;
     // A deliberate selection starts a fresh skip budget.
     if (!auto) set({ consecutiveSkips: 0 });
+    if (!auto || !standbyUnlocked) activateSpotifyOnGesture(get().spotifySource);
     if (isSpotifyTrack(track)) {
       playSpotifyTrackAtIndex(set, get, index, auto, playAttempt);
       return;
@@ -371,7 +382,6 @@ export const usePlayerStore = create((set, get) => ({
     });
     if (!standbyUnlocked) {
       unlockAudioElement(get().getStandbyAudio());
-      activateSpotify(get().spotifySource);
       set({ standbyUnlocked: true });
     }
     get().trimQueueHistory();
