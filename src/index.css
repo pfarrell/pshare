@@ -4634,3 +4634,19 @@ body:has(.jukebox-app) {
 .spotify-card-button:disabled { opacity: 0.6; cursor: default; }
 .spotify-card-message { color: #dc2626; font-size: 0.875rem; margin-bottom: 0.75rem; }
 [data-theme="dark"] .spotify-card-message { color: #fca5a5; }
+
+/* Spotify album in the artist grid (#72): small logo marker in the cover corner.
+   Scoped with :has so other cards' image boxes are untouched. */
+.artist-card-image:has(> .spotify-album-marker) {
+  position: relative;
+}
+
+.spotify-album-marker {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  width: 1rem;
+  height: 1rem;
+  opacity: 0.9;
+  pointer-events: none;
+}
