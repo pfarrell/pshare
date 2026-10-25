@@ -40,6 +40,17 @@ test('labels cards as Spotify in card mode and renders rows in list mode', () =>
   expect(screen.getByRole('link', { name: 'Open Some Album in Spotify' })).toBeInTheDocument();
 });
 
+test('the open-in-Spotify link is a logo with an offsite arrow, not text', () => {
+  const albums = [{ id: 'a', name: 'Some Album', artists: [{ name: 'X' }], imageUrl: null, externalUrl: 'https://open.spotify.com/album/a' }];
+  render(<SpotifyResults albums={albums} />);
+  const link = screen.getByRole('link', { name: 'Open Some Album in Spotify' });
+  expect(link).toHaveAttribute('href', 'https://open.spotify.com/album/a');
+  expect(link).toHaveAttribute('target', '_blank');
+  expect(link.querySelector('svg.spotify-open-logo')).not.toBeNull();
+  expect(link).toHaveTextContent('↗');
+  expect(link).not.toHaveTextContent('Open in Spotify');
+});
+
 test('falls back to a placeholder when an image fails to load', () => {
   const { container } = render(
     <SpotifyResults albums={[{ id: 'a', name: 'Broken Art', artists: [], imageUrl: 'https://i.scdn.co/broken.jpg', externalUrl: 'https://open.spotify.com/album/a' }]} />

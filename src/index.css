@@ -594,24 +594,28 @@
 }
 
 /* Small pill: both the "this is external" marker and the actual link. */
+/* Small Spotify logo + offsite arrow; the accessible name comes from aria-label. */
 .spotify-open-link {
-  display: inline-block;
-  box-sizing: border-box;
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 0.1rem;
   flex-shrink: 0;
   margin-top: 0.4rem;
-  padding: 0.15rem 0.5rem;
-  border: 1px solid #1db954;
-  border-radius: 999px;
-  color: #1a9e48;
-  font-size: 0.7rem;
-  font-weight: 600;
-  white-space: nowrap;
+  color: var(--color-text-muted);
+  font-size: 0.65rem;
+  line-height: 1;
   text-decoration: none;
+  opacity: 0.85;
 }
 
 .spotify-open-link:hover {
-  background: #1db954;
-  color: white;
+  opacity: 1;
+}
+
+.spotify-open-logo {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
 }
 
 .result-row .spotify-open-link {
