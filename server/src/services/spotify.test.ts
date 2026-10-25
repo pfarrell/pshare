@@ -2,7 +2,7 @@
 import { test, after, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  searchSpotify, mapSearchResponse, pickImageUrl, isSpotifyConfigured, resetSpotifyTokenCache,
+  searchSpotify, getSpotifyAlbumTracks, mapSearchResponse, pickImageUrl, isSpotifyConfigured, resetSpotifyTokenCache,
   SpotifyNotConfiguredError, SpotifyRateLimitError, SpotifyApiError,
 } from './spotify.js'
 
@@ -235,4 +235,53 @@ test('mapSearchResponse never emits objects where strings are expected', () => {
   assert.equal(out.tracks[0].name, '')
   assert.equal(out.tracks[0].artists[0].name, '')
   assert.equal(out.albums[0].releaseYear, null)
+})
+
+const rawTrack = (n: number) => ({ id: `t${n}`, uri: `spotify:track:t${n}`, name: `Track ${n}`, artists: [{ id: 'a1', name: 'Artist' }], duration_ms: 1000 + n })
+const NEXT_URL = 'https://api.spotify.com/v1/albums/alb1/tracks?offset=50&limit=50'
+
+test('getSpotifyAlbumTracks follows tracks.next across pages', async () => {
+  stubFetch((call) => {
+    if (call.url === NEXT_URL) {
+      return json({ items: Array.from({ length: 12 }, (_, i) => rawTrack(50 + i)), next: null })
+    }
+    return json({
+      id: 'alb1', name: 'Album', images: [{ url: 'http://img/300', width: 300 }], artists: [{ id: 'a1', name: 'Artist' }],
+      tracks: { items: Array.from({ length: 50 }, (_, i) => rawTrack(i)), next: NEXT_URL },
+    })
+  })
+  const { album, tracks } = await getSpotifyAlbumTracks('alb1')
+  assert.equal(tracks.length, 62)
+  assert.deepEqual(tracks.map((t) => t.id), Array.from({ length: 62 }, (_, i) => `t${i}`))
+  assert.deepEqual(album, { id: 'alb1', name: 'Album', imageUrl: 'http://img/300', artists: [{ id: 'a1', name: 'Artist' }] })
+  assert.deepEqual(tracks[61].album, { id: 'alb1', name: 'Album', imageUrl: 'http://img/300' })
+  assert.equal(searchCalls().length, 2)
+  assert.equal(searchCalls()[0].url, 'https://api.spotify.com/v1/albums/alb1')
+})
+
+test('getSpotifyAlbumTracks maps null images, artists and durations safely', async () => {
+  stubFetch(() => json({
+    id: 'alb1', name: 'Album', images: null, artists: null,
+    tracks: { items: [null, { id: 't1', uri: 'spotify:track:t1', name: 'One', artists: null, duration_ms: null }], next: null },
+  }))
+  const { album, tracks } = await getSpotifyAlbumTracks('alb1')
+  assert.equal(album.imageUrl, null)
+  assert.deepEqual(album.artists, [])
+  assert.equal(tracks.length, 1)
+  assert.deepEqual(tracks[0].artists, [])
+  assert.equal(tracks[0].album.imageUrl, null)
+  assert.equal(tracks[0].durationMs, 0)
+})
+
+test('getSpotifyAlbumTracks refuses to follow a next URL off the Spotify API', async () => {
+  stubFetch(() => json({ id: 'alb1', tracks: { items: [rawTrack(1)], next: 'https://evil.example/steal' } }))
+  await assert.rejects(getSpotifyAlbumTracks('alb1'), SpotifyApiError)
+  assert.equal(calls.some((c) => c.url.includes('evil.example')), false)
+})
+
+test('getSpotifyAlbumTracks maps 429 and upstream errors', async () => {
+  stubFetch(() => new Response('', { status: 429, headers: { 'Retry-After': '7' } }))
+  await assert.rejects(getSpotifyAlbumTracks('alb1'), (e: any) => e instanceof SpotifyRateLimitError && e.retryAfter === 7)
+  stubFetch(() => new Response('', { status: 500 }))
+  await assert.rejects(getSpotifyAlbumTracks('alb1'), (e: any) => e instanceof SpotifyApiError && e.status === 500)
 })

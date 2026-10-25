@@ -8,6 +8,7 @@ import artists from './routes/artists.js'
 import albums from './routes/albums.js'
 import tracks from './routes/tracks.js'
 import search from './routes/search.js'
+import spotify from './routes/spotify.js'
 import streams, { downloads } from './routes/streams.js'
 import logs from './routes/logs.js'
 import playlists from './routes/playlists.js'
@@ -114,6 +115,7 @@ const protectedApp = new Hono()
 protectedApp.use('*', requireAuth)
 
 protectedApp.route('/search', search)
+protectedApp.route('/spotify', spotify)
 protectedApp.route('/jukebox/devices', jukeboxDevices)
 protectedApp.route('/download', downloads)
 protectedApp.route('/log', logs)
