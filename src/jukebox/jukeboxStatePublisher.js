@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { usePlayerStore } from '../stores/playerStore';
 import { apiService } from '../services/api';
+import { isSpotifyTrack } from '../utils/trackSource';
 
 // Kiosk side of the phone Queue page: publishes what is queued (the current
 // track onward, never history) so phones can show it. See
@@ -8,9 +9,12 @@ import { apiService } from '../services/api';
 export const PUBLISH_THROTTLE_MS = 1500;
 const MAX_QUEUE_ENTRIES = 300;
 
+// A Spotify row (#72) has no library id, so it carries its uri instead; the
+// phone addresses it by uri for jump/remove.
 const toEntry = (track, index) => ({
   index,
-  id: track?.id ?? null,
+  id: isSpotifyTrack(track) ? null : (track?.id ?? null),
+  ...(isSpotifyTrack(track) && track.uri ? { uri: track.uri } : {}),
   title: typeof track?.title === 'string' ? track.title : '',
   artist: typeof track?.artist?.name === 'string' && track.artist.name ? track.artist.name : null,
 });
@@ -21,7 +25,7 @@ const toEntry = (track, index) => ({
 // followed by every track still left to play, still addressed by real playlist
 // index so jump/remove hit the right row. The mode rides along so the phone can
 // say so instead of implying an order.
-export const buildQueueSnapshot = ({ playlist, currentTrackIndex, isPlaying, playbackMode, shuffleHistory }) => {
+export const buildQueueSnapshot = ({ playlist, currentTrackIndex, isPlaying, playbackMode, shuffleHistory, spotifySource }) => {
   const list = playlist ?? [];
   const mode = playbackMode ?? 'off';
   const current = currentTrackIndex ?? -1;
@@ -42,6 +46,8 @@ export const buildQueueSnapshot = ({ playlist, currentTrackIndex, isPlaying, pla
     currentIndex: list.length ? current : -1,
     isPlaying: !!isPlaying,
     playbackMode: mode,
+    // #72: phones offer Spotify adds only while the kiosk has a Spotify player.
+    spotify: spotifySource != null,
   };
 };
 
@@ -80,6 +86,7 @@ export const useJukeboxStatePublisher = (deviceId) => {
         || state.isPlaying !== prev.isPlaying
         || state.playbackMode !== prev.playbackMode
         || state.shuffleHistory !== prev.shuffleHistory
+        || (state.spotifySource == null) !== (prev.spotifySource == null)
       ) {
         schedule();
       }

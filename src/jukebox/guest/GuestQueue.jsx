@@ -11,7 +11,8 @@ import GuestStatus from './GuestStatus';
 // The kiosk's queue: the current track and what follows. Anyone with the QR
 // link can look; skipping to a track or removing one needs a login (a 401 sends
 // a logged-out visitor to login and back here). Commands name a queue row plus
-// its track id, so a stale view can never hit the wrong track.
+// its track id (a Spotify row's uri, #72), so a stale view can never hit the
+// wrong track.
 const GuestQueue = () => {
   const { token } = useGuest();
   const { pathname, search } = useLocation();
@@ -25,7 +26,8 @@ const GuestQueue = () => {
     setBusyKey(`${command}-${entry.index}`);
     setMessage(null);
     try {
-      await apiService.sendJukeboxCommand(token, command, { index: entry.index, trackId: entry.id });
+      const address = entry.id == null && typeof entry.uri === 'string' ? { uri: entry.uri } : { trackId: entry.id };
+      await apiService.sendJukeboxCommand(token, command, { index: entry.index, ...address });
       await refresh();
     } catch (err) {
       if (err?.response?.status === 401) {
@@ -75,7 +77,7 @@ const GuestQueue = () => {
     const artist = typeof entry.artist === 'string' ? entry.artist : '';
     return (
       <GuestRow
-        key={`${entry.index}-${entry.id}`}
+        key={`${entry.index}-${entry.id ?? entry.uri}`}
         className={entry === current ? 'jukebox-guest-row-current' : undefined}
         title={title}
         subtitle={artist}

@@ -212,6 +212,7 @@ const validState = () => ({
   currentIndex: 1,
   isPlaying: true,
   playbackMode: 'shuffle',
+  spotify: false,
 })
 
 const postState = (deviceId: number, cookie: string | undefined, body: unknown) =>

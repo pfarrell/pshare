@@ -1,7 +1,8 @@
 // server/src/routes/jukeboxPublic.ts
 // Public, token-scoped surface for phone visitors reached via a kiosk's QR
 // code (see docs/superpowers/specs/2026-09-25-jukebox-server-queue-design.md).
-// Grants exactly two things: search, and submitting a track. Never exposes
+// Grants exactly two things: search, and submitting a track (library or, #72,
+// Spotify, plus read-only Spotify browsing while the kiosk can play it). Never exposes
 // the events stream, the pending-queue catch-up endpoint, or profile data —
 // those live on the kiosk-authenticated surface in jukeboxDevices.ts.
 import { Hono } from 'hono'
@@ -10,9 +11,11 @@ import jwt from 'jsonwebtoken'
 import { jukeboxQueueService } from '../services/jukeboxQueueService.js'
 import { db } from '../db/database.js'
 import { sseBroadcaster } from '../services/sseBroadcaster.js'
-import { jukeboxStateService } from '../services/jukeboxStateService.js'
+import { jukeboxStateService, SPOTIFY_TRACK_URI } from '../services/jukeboxStateService.js'
 import { createFixedWindowLimiter } from '../utils/rateLimit.js'
-import { handleSearchRequest } from './search.js'
+import search, { handleSearchRequest } from './search.js'
+import spotify from './spotify.js'
+import { parseGuestSpotifyTrack, type GuestSpotifyTrack } from '../services/jukeboxSpotifyTrack.js'
 import artists, { fetchRandomArtists } from './artists.js'
 import albums, { fetchRandomAlbums } from './albums.js'
 import collections from './collections.js'
@@ -72,10 +75,16 @@ export const GUEST_TRACKS_PER_MINUTE = 1000
 // album is one tap but many submissions.
 const submissionsAllowed = createFixedWindowLimiter(GUEST_TRACKS_PER_MINUTE, 60_000)
 
+// #72: Spotify adds and browsing are offered only while the kiosk is listening
+// and has a Spotify player (it says so in its published snapshot).
+const kioskPlaysSpotify = (deviceId: number) =>
+  sseBroadcaster.commandListenerCount(deviceId) > 0 && jukeboxStateService.get(deviceId)?.spotify === true
+
 jukeboxPublic.post('/:token/queue', loadDeviceByToken, async (c: any) => {
   const device = c.get('jukeboxTokenDevice')
 
   const body = await c.req.json()
+  if (body && body.spotifyTracks !== undefined) return submitSpotifyTracks(c, device, body)
   const trackIds: number[] = Array.isArray(body.trackIds)
     ? body.trackIds.filter((id: unknown) => Number.isInteger(id))
     : []
@@ -105,6 +114,35 @@ jukeboxPublic.post('/:token/queue', loadDeviceByToken, async (c: any) => {
 
   return c.json(submissions, 201)
 })
+
+// POST /:token/queue with { spotifyTracks: [...] } — a guest's Spotify adds
+// (#72), each in the /search/spotify track shape. Same name, size and rate
+// rules as library ids; refused while the kiosk can't play Spotify.
+async function submitSpotifyTracks(c: any, device: { id: number; enqueue_token: string }, body: any) {
+  const raw = Array.isArray(body.spotifyTracks) ? body.spotifyTracks : []
+  const tracks = raw.map(parseGuestSpotifyTrack)
+  if (tracks.length === 0 || tracks.some((t: GuestSpotifyTrack | null) => t === null)) {
+    return c.json({ error: 'spotifyTracks must be a non-empty array of Spotify tracks' }, 400)
+  }
+  if (tracks.length > MAX_GUEST_QUEUE_IDS) {
+    return c.json({ error: `at most ${MAX_GUEST_QUEUE_IDS} tracks per request` }, 400)
+  }
+  if (!kioskPlaysSpotify(device.id)) return c.json({ error: "The jukebox can't play Spotify right now" }, 409)
+
+  if (!submissionsAllowed(device.enqueue_token, tracks.length)) {
+    return c.json({ error: 'Too many submissions, try again in a moment' }, 429)
+  }
+
+  const userId = userIdFromAuthCookie(c)
+  const name = typeof body.name === 'string' ? body.name.trim().slice(0, 50) : ''
+  if (!userId && !name) return c.json({ error: 'name is required' }, 400)
+
+  const submissions = await Promise.all(
+    (tracks as GuestSpotifyTrack[]).map((t) => jukeboxQueueService.submitSpotify(device.id, t, userId ? { userId } : { name }))
+  )
+  submissions.forEach((submission) => sseBroadcaster.broadcastQueueItemAdded(device.id, submission))
+  return c.json(submissions, 201)
+}
 
 // --- Read-only browse surface -------------------------------------------
 // Detail views reuse the real (already public) routes by dispatching to them
@@ -144,6 +182,41 @@ const pickTrack = (t: any) => ({
 })
 
 const HOME_SIZE = 30
+
+// --- Spotify browse (#72) --------------------------------------------------
+// Read-throughs to the logged-in Spotify routes (same reasoning as the library
+// read-throughs below: no cookie is forwarded). Spotify catalog calls use the
+// app's own credentials, never the kiosk's account. Unavailable (the kiosk
+// can't play Spotify) is a quiet empty answer, not an error.
+const SPOTIFY_ID = /^[A-Za-z0-9]{1,64}$/
+const NO_SPOTIFY = { available: false, tracks: [], albums: [], artists: [] }
+
+jukeboxPublic.get('/:token/spotify/search', loadDeviceForRead, async (c: any) => {
+  const device = c.get('jukeboxTokenDevice')
+  const q = (c.req.query('q') ?? '').trim()
+  if (!q || !kioskPlaysSpotify(device.id)) return c.json(NO_SPOTIFY)
+  const body = await readThrough(search, `/spotify?q=${encodeURIComponent(q)}`)
+  if (!body?.configured) return c.json(NO_SPOTIFY)
+  return c.json({ available: true, tracks: body.tracks ?? [], albums: body.albums ?? [], artists: body.artists ?? [] })
+})
+
+jukeboxPublic.get('/:token/spotify/album/:id', loadDeviceForRead, async (c: any) => {
+  const device = c.get('jukeboxTokenDevice')
+  const id = c.req.param('id')
+  if (!SPOTIFY_ID.test(id) || !kioskPlaysSpotify(device.id)) return c.json({ error: 'Not found' }, 404)
+  const body = await readThrough(spotify, `/albums/${id}/tracks`)
+  if (!body?.configured || !body.album) return c.json({ error: 'Not found' }, 404)
+  return c.json({ album: body.album, tracks: body.tracks ?? [] })
+})
+
+jukeboxPublic.get('/:token/spotify/artist/:id', loadDeviceForRead, async (c: any) => {
+  const device = c.get('jukeboxTokenDevice')
+  const id = c.req.param('id')
+  if (!SPOTIFY_ID.test(id) || !kioskPlaysSpotify(device.id)) return c.json({ error: 'Not found' }, 404)
+  const body = await readThrough(spotify, `/catalog/artists/${id}/albums`)
+  if (!body?.configured || !body.spotifyArtist) return c.json({ error: 'Not found' }, 404)
+  return c.json({ artist: body.spotifyArtist, albums: body.albums ?? [] })
+})
 
 jukeboxPublic.get('/:token/home', loadDeviceForRead, async (c: any) => {
   if (c.req.query('mode') === 'albums') {
@@ -316,9 +389,9 @@ async function loadDeviceForQueue(c: any, next: any) {
 jukeboxPublic.get('/:token/queue', loadDeviceForQueue, async (c: any) => {
   const device = c.get('jukeboxTokenDevice')
   if (sseBroadcaster.commandListenerCount(device.id) === 0) {
-    return c.json({ connected: false, queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off' })
+    return c.json({ connected: false, queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off', spotify: false })
   }
-  const state = jukeboxStateService.get(device.id) ?? { queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off' }
+  const state = jukeboxStateService.get(device.id) ?? { queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off', spotify: false }
   return c.json({ connected: true, ...state })
 })
 
@@ -344,14 +417,16 @@ jukeboxPublic.post('/:token/command', loadDeviceByToken, async (c: any) => {
   }
 
   // jump/remove address a queue row: the kiosk checks that row still holds
-  // trackId before acting, so a stale phone view can never hit the wrong track.
-  let payload: { command: string; index?: number; trackId?: number } = { command }
+  // trackId (or, for a Spotify row, uri) before acting, so a stale phone view
+  // can never hit the wrong track.
+  let payload: { command: string; index?: number; trackId?: number; uri?: string } = { command }
   if (INDEXED_COMMANDS.includes(command)) {
-    const { index, trackId } = body
-    if (!Number.isInteger(index) || index < 0 || !Number.isInteger(trackId)) {
-      return c.json({ error: 'index (non-negative integer) and trackId (integer) are required' }, 400)
+    const { index, trackId, uri } = body
+    const spotifyRow = trackId === undefined && typeof uri === 'string' && SPOTIFY_TRACK_URI.test(uri)
+    if (!Number.isInteger(index) || index < 0 || !(Number.isInteger(trackId) || spotifyRow)) {
+      return c.json({ error: 'index (non-negative integer) and trackId (integer) or a Spotify track uri are required' }, 400)
     }
-    payload = { command, index, trackId }
+    payload = spotifyRow ? { command, index, uri } : { command, index, trackId }
   }
 
   if (!commandsAllowed(device.enqueue_token)) {

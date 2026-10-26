@@ -12,7 +12,7 @@ const valid = () => ({
 })
 
 test('parses a valid snapshot, defaulting the playback mode to off', () => {
-  assert.deepEqual(parseKioskState(valid()), { ...valid(), playbackMode: 'off' })
+  assert.deepEqual(parseKioskState(valid()), { ...valid(), playbackMode: 'off', spotify: false })
 })
 
 test('accepts every known playback mode and rejects anything else', () => {
@@ -25,7 +25,7 @@ test('accepts every known playback mode and rejects anything else', () => {
 })
 
 test('accepts an empty queue with nothing playing', () => {
-  assert.deepEqual(parseKioskState({ queue: [], currentIndex: -1, isPlaying: false }), { queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off' })
+  assert.deepEqual(parseKioskState({ queue: [], currentIndex: -1, isPlaying: false }), { queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off', spotify: false })
 })
 
 test('trims over-long text and drops unknown fields', () => {
@@ -39,7 +39,7 @@ test('trims over-long text and drops unknown fields', () => {
   assert.equal(parsed.queue[0].title.length, MAX_TEXT_LENGTH)
   assert.equal(parsed.queue[0].artist!.length, MAX_TEXT_LENGTH)
   assert.deepEqual(Object.keys(parsed.queue[0]).sort(), ['artist', 'id', 'index', 'title'])
-  assert.deepEqual(Object.keys(parsed).sort(), ['currentIndex', 'isPlaying', 'playbackMode', 'queue'])
+  assert.deepEqual(Object.keys(parsed).sort(), ['currentIndex', 'isPlaying', 'playbackMode', 'queue', 'spotify'])
 })
 
 test('rejects malformed snapshots', () => {
@@ -56,8 +56,25 @@ test('rejects malformed snapshots', () => {
     { ...valid(), queue: [{ index: 0, id: 1, title: 5, artist: null }] },
     { ...valid(), queue: [{ index: 0, id: 1, title: 't', artist: 5 }] },
     { ...valid(), queue: [null] },
+    { ...valid(), queue: [{ index: 0, id: null, title: 't', artist: null }] },
+    { ...valid(), queue: [{ index: 0, id: null, uri: 'spotify:album:x', title: 't', artist: null }] },
+    { ...valid(), spotify: 'yes' },
   ]
   for (const body of bad) assert.equal(parseKioskState(body), null, JSON.stringify(body)?.slice(0, 60))
+})
+
+test('#72: a Spotify row has a null id and a track uri; the spotify flag rides along', () => {
+  const parsed = parseKioskState({
+    ...valid(),
+    queue: [
+      { index: 2, id: 10, title: 'Song', artist: 'Band' },
+      { index: 3, id: null, uri: 'spotify:track:abc', title: 'Snooze', artist: 'SZA' },
+    ],
+    spotify: true,
+  })!
+  assert.deepEqual(parsed.queue[1], { index: 3, id: null, uri: 'spotify:track:abc', title: 'Snooze', artist: 'SZA' })
+  assert.deepEqual(Object.keys(parsed.queue[0]).sort(), ['artist', 'id', 'index', 'title'])
+  assert.equal(parsed.spotify, true)
 })
 
 test('accepts exactly the maximum number of entries', () => {
@@ -66,8 +83,8 @@ test('accepts exactly the maximum number of entries', () => {
 })
 
 test('the store keeps only the latest snapshot per device', () => {
-  const empty = { queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off' as const }
-  const full = { ...valid(), playbackMode: 'off' as const }
+  const empty = { queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off' as const, spotify: false }
+  const full = { ...valid(), playbackMode: 'off' as const, spotify: false }
   jukeboxStateService.set(901, full)
   jukeboxStateService.set(901, empty)
   jukeboxStateService.set(902, full)

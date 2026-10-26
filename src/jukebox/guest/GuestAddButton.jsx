@@ -11,21 +11,28 @@ const label = (variant, { state, count }, shuffle) => {
     case 'added': return all ? 'Added' : '✓';
     case 'slow': return 'Slow down, try again in a moment';
     case 'empty': return 'Nothing to add';
+    case 'unavailable': return all ? 'Spotify is off' : '!';
     case 'error': return all ? 'Try again' : '!';
     default: return all ? (shuffle ? 'Shuffle' : 'Add all') : '+';
   }
 };
 
-const GuestAddButton = ({ itemKey, label: name, trackIds, kind, id, variant = 'icon' }) => {
+// `spotifyTracks` (#72): Spotify tracks, or a function resolving them, sent
+// instead of library ids.
+const GuestAddButton = ({ itemKey, label: name, trackIds, spotifyTracks, kind, id, variant = 'icon' }) => {
   const { token, enqueue, statusFor } = useGuest();
   const status = statusFor(itemKey);
   // Artists and collections can be huge (a collection may hold 140+ albums),
   // so they shuffle a random batch, like the kiosk's "Shuffle All".
-  const shuffle = !trackIds && SHUFFLE_KINDS.includes(kind);
+  const shuffle = !trackIds && !spotifyTracks && SHUFFLE_KINDS.includes(kind);
 
   const handleClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (spotifyTracks) {
+      enqueue(itemKey, spotifyTracks, { spotify: true });
+      return;
+    }
     const fetchIds = shuffle ? apiService.guestRandomTracks : apiService.guestTrackIds;
     const source = trackIds ?? (() => fetchIds(token, kind, id).then((res) => res.data?.trackIds ?? []));
     enqueue(itemKey, source);

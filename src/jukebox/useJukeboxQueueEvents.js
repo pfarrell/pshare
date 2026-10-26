@@ -3,6 +3,7 @@ import { usePlayerStore } from '../stores/playerStore';
 import { apiService, jukeboxEventsUrl } from '../services/api';
 import { invalidateProfilesCache } from '../utils/profilesCache';
 import { requestJukeboxStatePublish } from './jukeboxStatePublisher';
+import { isSpotifyTrack, toSpotifyQueueTrack } from '../utils/trackSource';
 
 // Opens one EventSource for the kiosk's own device and reconciles both event
 // types the stream carries — see
@@ -27,14 +28,19 @@ export const useJukeboxQueueEvents = (deviceId) => {
       // can't double-deliver the same submission.
       toDeliver.forEach((s) => deliveredIds.current.add(s.id));
 
+      // A guest's Spotify track (#72) already carries everything the queue
+      // entry needs, so it skips the library lookup; a malformed one fails
+      // like a failed lookup.
       const results = await Promise.allSettled(
-        toDeliver.map((s) => apiService.getTrack(s.track_id))
+        toDeliver.map((s) => (s.spotify_track
+          ? Promise.resolve(toSpotifyQueueTrack(s.spotify_track)).then((entry) => entry ?? Promise.reject(new Error('Bad Spotify submission')))
+          : apiService.getTrack(s.track_id).then((res) => res.data.track)))
       );
 
       const tracks = [];
       results.forEach((result, i) => {
         if (result.status === 'fulfilled') {
-          tracks.push(result.value.data.track);
+          tracks.push(result.value);
         } else {
           // Failed lookup (transient 5xx, network blip, deleted track):
           // un-mark it so a future catch-up (on the next 'open', see below)
@@ -88,11 +94,15 @@ export const useJukeboxQueueEvents = (deviceId) => {
       else if (command === 'next') playNext({ manual: true });
       else if (command === 'prev') playPrev();
       else if (command === 'jump' || command === 'remove') {
-        const { index, trackId } = payload;
+        const { index, trackId, uri } = payload;
         // The phone addressed a row it saw a moment ago. Act only if that row
         // still holds that exact track (duplicates and reshuffles can't fool
         // this); otherwise do nothing and republish so the phone shows the truth.
-        const valid = Number.isInteger(index) && index >= 0 && Number.isInteger(trackId) && playlist[index]?.id === trackId;
+        // A Spotify row (#72) is addressed by its uri instead of a track id.
+        const row = Number.isInteger(index) && index >= 0 ? playlist[index] : undefined;
+        const valid = Number.isInteger(trackId)
+          ? !isSpotifyTrack(row) && row?.id === trackId
+          : typeof uri === 'string' && isSpotifyTrack(row) && row.uri === uri;
         if (valid) {
           if (command === 'jump') playTrackAtIndex(index);
           else removeTrackFromPlaylist(index);

@@ -1,6 +1,7 @@
 // server/src/services/jukeboxQueueService.ts
 import crypto from 'node:crypto'
 import { db } from '../db/database.js'
+import type { GuestSpotifyTrack } from './jukeboxSpotifyTrack.js'
 
 export const jukeboxQueueService = {
   async findDeviceByToken(token: string) {
@@ -31,6 +32,25 @@ export const jukeboxQueueService = {
       .values({
         jukebox_device_id: deviceId,
         track_id: trackId,
+        submitted_by_name: userId ? null : (name ?? null),
+        submitted_by_user_id: userId ?? null,
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow()
+  },
+
+  // #72: a guest's Spotify track, delivered to the kiosk like a library one.
+  async submitSpotify(
+    deviceId: number,
+    spotifyTrack: GuestSpotifyTrack,
+    { name, userId }: { name?: string | null; userId?: number | null } = {}
+  ) {
+    return db
+      .insertInto('jukebox_queue_submissions')
+      .values({
+        jukebox_device_id: deviceId,
+        track_id: null,
+        spotify_track: JSON.stringify(spotifyTrack),
         submitted_by_name: userId ? null : (name ?? null),
         submitted_by_user_id: userId ?? null,
       })

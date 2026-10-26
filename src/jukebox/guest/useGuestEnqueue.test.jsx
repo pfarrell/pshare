@@ -3,7 +3,7 @@ import { useGuestEnqueue } from './useGuestEnqueue';
 import { apiService } from '../../services/api';
 
 vi.mock('../../services/api', () => ({
-  apiService: { submitToJukebox: vi.fn() },
+  apiService: { submitToJukebox: vi.fn(), submitSpotifyToJukebox: vi.fn() },
 }));
 
 beforeEach(() => {
@@ -72,4 +72,18 @@ test('reports the resolved track count while adding', async () => {
 
   expect(result.current.statusFor('k')).toEqual({ state: 'adding', count: 4 });
   await act(async () => { release({ data: [] }); await pending; });
+});
+
+test('#72: spotify items go to submitSpotifyToJukebox; a 409 reports unavailable', async () => {
+  const tracks = [{ uri: 'spotify:track:a' }];
+  apiService.submitSpotifyToJukebox.mockResolvedValueOnce({ data: [] });
+  const { result } = renderHook(() => useGuestEnqueue('tok'));
+  await act(async () => { await result.current.enqueue('s1', tracks, { spotify: true }); });
+  expect(apiService.submitSpotifyToJukebox).toHaveBeenCalledWith('tok', tracks, 'Riley');
+  expect(apiService.submitToJukebox).not.toHaveBeenCalled();
+  expect(result.current.statusFor('s1').state).toBe('added');
+
+  apiService.submitSpotifyToJukebox.mockRejectedValueOnce({ response: { status: 409 } });
+  await act(async () => { await result.current.enqueue('s2', tracks, { spotify: true }); });
+  expect(result.current.statusFor('s2').state).toBe('unavailable');
 });

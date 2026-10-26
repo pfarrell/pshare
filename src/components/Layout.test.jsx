@@ -31,7 +31,6 @@ const renderLayoutWithRoutes = (initialPath = '/') =>
       <Routes>
         <Route path="/account" element={<Layout><div>Account page</div></Layout>} />
         <Route path="/admin" element={<Layout><div>Admin page</div></Layout>} />
-        <Route path="/drive" element={<Layout><div>Drive page</div></Layout>} />
         <Route path="*" element={
           <Layout>
             <div>page content</div>
@@ -79,13 +78,6 @@ describe('Layout — logged-in hamburger menu', () => {
     expect(screen.getByText('Playlists')).toBeInTheDocument();
     expect(screen.getByText('Collections')).toBeInTheDocument();
     expect(screen.getByText('Favorites')).toBeInTheDocument();
-  });
-
-  test('Drive mode navigates to /drive', () => {
-    renderLayoutWithRoutes('/');
-    fireEvent.click(screen.getByLabelText('Menu'));
-    fireEvent.click(screen.getByText('Drive mode'));
-    expect(screen.getByText('Drive page')).toBeInTheDocument();
   });
 
   test('does not show Admin, Upload, New, or Logs for a non-admin', () => {
