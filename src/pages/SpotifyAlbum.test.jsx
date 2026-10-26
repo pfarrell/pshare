@@ -7,7 +7,7 @@ vi.mock('../player/spotify/useCanPlaySpotify', () => ({
   useCanPlaySpotify: () => canPlay.value,
   useSpotifyPlayability: () => (canPlay.value ? 'ready' : canPlay.checking ? 'checking' : 'unavailable'),
 }));
-vi.mock('../services/api', () => ({ apiService: { getSpotifyAlbumTracks: vi.fn() } }));
+vi.mock('../services/api', () => ({ apiService: { getSpotifyAlbumDetails: vi.fn(), getImageUrl: vi.fn(() => null) } }));
 
 import { apiService } from '../services/api';
 import { usePlayerStore } from '../stores/playerStore';
@@ -27,6 +27,7 @@ const renderPage = (path = '/spotify/album/lov', state) => render(
     <Routes>
       <Route path="/spotify/album/:spotifyId" element={<SpotifyAlbum />} />
       <Route path="/artist/:id" element={<div>artist page</div>} />
+      <Route path="/spotify/artist/:id" element={<div>spotify artist page</div>} />
     </Routes>
   </MemoryRouter>,
 );
@@ -36,7 +37,7 @@ let prevAddTracks;
 beforeEach(() => {
   canPlay.value = true;
   canPlay.checking = false;
-  apiService.getSpotifyAlbumTracks.mockReset();
+  apiService.getSpotifyAlbumDetails.mockReset();
   addTracks = vi.fn();
   prevAddTracks = usePlayerStore.getState().addTracks;
   usePlayerStore.setState({ addTracks });
@@ -44,47 +45,57 @@ beforeEach(() => {
 });
 
 describe('SpotifyAlbum page', () => {
-  test('renders header and tracks for an eligible session', async () => {
-    apiService.getSpotifyAlbumTracks.mockResolvedValue({ data: payload });
-    renderPage('/spotify/album/lov', { localArtistId: 5, year: '2019' });
+  test('renders the album like a library album: header, meta line, About, track rows', async () => {
+    apiService.getSpotifyAlbumDetails.mockResolvedValue({ data: {
+      ...payload,
+      album: { ...payload.album, releaseYear: '2019', label: 'Republic' },
+      summary: { summary: 'Lover is the seventh studio album by Taylor Swift.', url: 'https://en.wikipedia.org/wiki/Lover_(album)' },
+      localArtistId: null,
+    } });
+    renderPage();
     expect(await screen.findByRole('heading', { name: 'Lover' })).toBeInTheDocument();
-    expect(screen.getByText('Cruel Summer')).toBeInTheDocument();
-    expect(screen.getByText('2:58')).toBeInTheDocument();
-    expect(screen.getByText('2019')).toBeInTheDocument();
+    expect(screen.getByText('2019 · Republic · From Spotify')).toBeInTheDocument();
+    expect(screen.getByText('About this album')).toBeInTheDocument();
+    expect(screen.getByText(/seventh studio album/)).toBeInTheDocument();
+    expect(screen.getByText(/Cruel Summer/)).toBeInTheDocument();
+    expect(screen.queryByText(/Cruel Summer - Taylor Swift/)).toBeNull();
     expect(screen.getByRole('link', { name: 'Open Lover in Spotify' })).toBeInTheDocument();
   });
 
-  test('Play enqueues all tracks immediately; per-track Add enqueues one', async () => {
-    apiService.getSpotifyAlbumTracks.mockResolvedValue({ data: payload });
+  test('no Wikipedia match just leaves the About section out', async () => {
+    apiService.getSpotifyAlbumDetails.mockResolvedValue({ data: { ...payload, summary: null } });
     renderPage();
-    await screen.findByText('Cruel Summer');
-    fireEvent.click(screen.getByRole('button', { name: 'Play Lover' }));
+    await screen.findByRole('heading', { name: 'Lover' });
+    expect(screen.queryByText('About this album')).toBeNull();
+  });
+
+  test('Play enqueues the whole album immediately; a row play button adds that track', async () => {
+    apiService.getSpotifyAlbumDetails.mockResolvedValue({ data: payload });
+    renderPage();
+    await screen.findByRole('heading', { name: 'Lover' });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Play' })[0]);
     await waitFor(() => expect(addTracks).toHaveBeenCalledTimes(1));
     expect(addTracks.mock.calls[0][0].map((t) => t.uri)).toEqual(['spotify:track:1', 'spotify:track:2']);
     expect(addTracks.mock.calls[0][2]).toMatchObject({ playImmediately: true });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Add Cruel Summer to queue' }));
-    await waitFor(() => expect(addTracks).toHaveBeenCalledTimes(2));
-    expect(addTracks.mock.calls[1][0].map((t) => t.uri)).toEqual(['spotify:track:2']);
   });
 
-  test('artist name links back when localArtistId state is present, plain text otherwise', async () => {
-    apiService.getSpotifyAlbumTracks.mockResolvedValue({ data: payload });
-    const { unmount } = renderPage('/spotify/album/lov', { localArtistId: 5 });
+  test('artist links to the library artist (state or response), else the Spotify artist page', async () => {
+    apiService.getSpotifyAlbumDetails.mockResolvedValue({ data: { ...payload, localArtistId: 7 } });
+    const first = renderPage();
     fireEvent.click(await screen.findByRole('link', { name: 'Taylor Swift' }));
     expect(screen.getByText('artist page')).toBeInTheDocument();
-    unmount();
+    first.unmount();
 
+    apiService.getSpotifyAlbumDetails.mockResolvedValue({ data: { ...payload, localArtistId: null } });
     renderPage();
-    await screen.findByText('Cruel Summer');
-    expect(screen.queryByRole('link', { name: 'Taylor Swift' })).toBeNull();
-    expect(screen.getByText('Taylor Swift')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('link', { name: 'Taylor Swift' }));
+    expect(screen.getByText('spotify artist page')).toBeInTheDocument();
   });
 
   test('invalid id shows the empty state without calling the API', async () => {
     renderPage('/spotify/album/bad-id!');
     expect(await screen.findByText("This album isn't available right now.")).toBeInTheDocument();
-    expect(apiService.getSpotifyAlbumTracks).not.toHaveBeenCalled();
+    expect(apiService.getSpotifyAlbumDetails).not.toHaveBeenCalled();
   });
 
   test('while eligibility is still being checked it shows loading, not the unavailable message', async () => {
@@ -93,35 +104,35 @@ describe('SpotifyAlbum page', () => {
     renderPage();
     await new Promise((r) => setTimeout(r, 0));
     expect(screen.queryByText("This album isn't available right now.")).toBeNull();
-    expect(apiService.getSpotifyAlbumTracks).not.toHaveBeenCalled();
+    expect(apiService.getSpotifyAlbumDetails).not.toHaveBeenCalled();
   });
 
   test('ineligible session shows the empty state without calling the API', async () => {
     canPlay.value = false;
     renderPage();
     expect(await screen.findByText("This album isn't available right now.")).toBeInTheDocument();
-    expect(apiService.getSpotifyAlbumTracks).not.toHaveBeenCalled();
+    expect(apiService.getSpotifyAlbumDetails).not.toHaveBeenCalled();
   });
 
   test('request failure and configured:false show the empty state', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    apiService.getSpotifyAlbumTracks.mockRejectedValue(new Error('502'));
+    apiService.getSpotifyAlbumDetails.mockRejectedValue(new Error('502'));
     const { unmount } = renderPage();
     expect(await screen.findByText("This album isn't available right now.")).toBeInTheDocument();
     unmount();
-    apiService.getSpotifyAlbumTracks.mockResolvedValue({ data: { configured: false, album: null, tracks: [] } });
+    apiService.getSpotifyAlbumDetails.mockResolvedValue({ data: { configured: false, album: null, tracks: [] } });
     renderPage();
     expect(await screen.findByText("This album isn't available right now.")).toBeInTheDocument();
     warn.mockRestore();
   });
 
   test('null imageUrl, empty artists and durationMs 0 render without throwing', async () => {
-    apiService.getSpotifyAlbumTracks.mockResolvedValue({ data: {
+    apiService.getSpotifyAlbumDetails.mockResolvedValue({ data: {
       configured: true,
       album: { id: 'x', name: 'Bare', imageUrl: null, artists: [] },
       tracks: [{ uri: 'spotify:track:9', id: '9', name: 'Silent', artists: null, durationMs: 0 }],
     } });
     renderPage('/spotify/album/x');
-    expect(await screen.findByText('Silent')).toBeInTheDocument();
+    expect(await screen.findByText(/Silent/)).toBeInTheDocument();
   });
 });

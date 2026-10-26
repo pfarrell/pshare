@@ -23,6 +23,15 @@ describe('useSpotifyCatalogArtist', () => {
     await waitFor(() => expect(result.current.status).toBe('ready'));
     expect(result.current.artist.name).toBe('SZA');
     expect(result.current.albums.map((a) => a.id)).toEqual(['sos']);
+    expect(apiService.getSpotifyCatalogArtistAlbums).toHaveBeenCalledWith('sza1', { details: false });
+  });
+
+  test('details: true asks for the summary and returns it', async () => {
+    apiService.getSpotifyCatalogArtistAlbums.mockResolvedValue({ data: { ...body, summary: { summary: 'SZA is a singer.' } } });
+    const { result } = renderHook(() => useSpotifyCatalogArtist('sza1', { details: true }));
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.summary.summary).toBe('SZA is a singer.');
+    expect(apiService.getSpotifyCatalogArtistAlbums).toHaveBeenCalledWith('sza1', { details: true });
   });
 
   test('unavailable without a request when the session cannot play Spotify or the id is bad', async () => {

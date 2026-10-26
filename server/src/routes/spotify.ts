@@ -12,6 +12,7 @@ import {
 import { spotifyLibraryMatcher } from '../services/spotifyLibraryMatch.js'
 import { db } from '../db/database.js'
 import { parseIntParam } from '../utils/http.js'
+import { getAlbumSummary, getArtistSummary, withDeadline } from '../services/wikipedia.js'
 import { extractIpAddress } from '../utils/requestIp.js'
 import { parseSpotifyPlay, spotifyPlays } from '../services/spotifyPlays.js'
 import type { Variables } from '../types.js'
@@ -20,8 +21,42 @@ const spotify = new Hono<{ Variables: Variables }>()
 
 const SPOTIFY_ID = /^[A-Za-z0-9]{1,64}$/
 
+// The Spotify pages wait a little longer than library pages (1s) for a first
+// Wikipedia lookup: there's no admin override to fall back on, and the lookup
+// keeps running past the deadline and caches either way.
+const SUMMARY_DEADLINE_MS = 2500
+
+// Spotify titles carry edition suffixes Wikipedia articles don't:
+// "Abbey Road (Remastered 2019)" is handled by the summary service's paren
+// stripping; this drops "- 2011 Remaster" style tails and "Deluxe: …" ones.
+export function wikiAlbumTitle(name: string): string {
+  const trimmed = name
+    .replace(/\s+-\s+.*\b(remaster(ed)?|deluxe|edition|version|anniversary|expanded|mono|stereo)\b.*$/i, '')
+    .replace(/\s+deluxe\b.*$/i, '')
+    .trim()
+  return trimmed || name
+}
+
+// The library artist matching a Spotify artist list (first match wins), or
+// null. Uses the same "has playable tracks" rule as search.
+async function localArtistIdFor(artists: { id: string; name: string }[]): Promise<number | null> {
+  if (artists.length === 0) return null
+  try {
+    const annotated = await spotifyLibraryMatcher.annotate({
+      tracks: [], albums: [],
+      artists: artists.map((a) => ({ uri: '', id: a.id, name: a.name, imageUrl: null, externalUrl: null })),
+    })
+    return annotated.artists.find((a) => a.localId !== null)?.localId ?? null
+  } catch (err) {
+    console.error('Spotify album artist match failed:', err)
+    return null
+  }
+}
+
 // GET /spotify/albums/:id/tracks — every track of a Spotify album (all pages),
 // for enqueueing a whole album. Unconfigured is a normal 200, like /search/spotify.
+// ?details=1 (the Spotify album page) adds a Wikipedia `summary` and the
+// library artist's `localArtistId`; enqueue callers skip both.
 spotify.get('/albums/:id/tracks', async (c) => {
   const id = c.req.param('id')
   if (!SPOTIFY_ID.test(id)) return c.json({ error: 'Invalid album id' }, 400)
@@ -29,7 +64,15 @@ spotify.get('/albums/:id/tracks', async (c) => {
 
   try {
     const { album, tracks } = await getSpotifyAlbumTracks(id)
-    return c.json({ configured: true, album, tracks })
+    if (c.req.query('details') !== '1') return c.json({ configured: true, album, tracks })
+    const primary = album.artists[0]?.name ?? ''
+    const [summary, localArtistId] = await Promise.all([
+      primary && album.name
+        ? withDeadline(getAlbumSummary(primary, wikiAlbumTitle(album.name)), SUMMARY_DEADLINE_MS)
+        : Promise.resolve(null),
+      localArtistIdFor(album.artists),
+    ])
+    return c.json({ configured: true, album, tracks, summary, localArtistId })
   } catch (err) {
     if (err instanceof SpotifyApiError && err.status === 404) return c.json({ error: 'Spotify album not found' }, 404)
     return upstreamFailure(c, err, 'Spotify album tracks failed')
@@ -128,7 +171,11 @@ spotify.get('/catalog/artists/:spotifyId/albums', async (c) => {
     }
   }
 
-  return c.json({ configured: true, spotifyArtist: entry.spotifyArtist, albums: await withLocalIds(entry.albums) })
+  const albums = await withLocalIds(entry.albums)
+  if (c.req.query('details') !== '1') return c.json({ configured: true, spotifyArtist: entry.spotifyArtist, albums })
+  // ?details=1 (the Spotify artist page) adds a Wikipedia summary.
+  const summary = await withDeadline(getArtistSummary(entry.spotifyArtist?.name ?? ''), SUMMARY_DEADLINE_MS)
+  return c.json({ configured: true, spotifyArtist: entry.spotifyArtist, albums, summary })
 })
 
 // POST /spotify/plays — a Spotify track played past the 5-second mark (the

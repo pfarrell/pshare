@@ -2,7 +2,8 @@
 import { useParams } from 'react-router-dom';
 import Loading from '../components/Loading';
 import CardGrid from '../components/CardGrid';
-import OpenInSpotify from '../components/OpenInSpotify';
+import OpenInSpotify, { SpotifyLogo } from '../components/OpenInSpotify';
+import AboutSection from '../components/AboutSection';
 import SpotifyAlbumCard from '../components/SpotifyAlbumCard';
 import { useSpotifyCatalogArtist } from '../player/spotify/useSpotifyCatalogArtist';
 import { mergeArtistAlbums } from '../utils/mergeArtistAlbums';
@@ -17,7 +18,7 @@ const text = (v) => (typeof v === 'string' ? v : '');
 
 const SpotifyArtist = () => {
   const { spotifyId } = useParams();
-  const result = useSpotifyCatalogArtist(spotifyId);
+  const result = useSpotifyCatalogArtist(spotifyId, { details: true });
 
   if (result.status === 'loading') return <Loading />;
   if (result.status !== 'ready') return <p className="spotify-album-unavailable">{UNAVAILABLE}</p>;
@@ -40,6 +41,11 @@ const SpotifyArtist = () => {
               <OpenInSpotify url={text(result.artist.externalUrl) || null} name={name} />
             </div>
           </div>
+          <p className="spotify-album-meta">
+            <SpotifyLogo className="spotify-album-meta-logo" />
+            <span>From Spotify</span>
+          </p>
+          <AboutSection heading="About this artist" summary={result.summary} />
         </div>
       </div>
 
