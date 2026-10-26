@@ -55,6 +55,16 @@ test('tapping a track jumps to it by row index and track id, then refreshes', as
   await waitFor(() => expect(apiService.getJukeboxQueue.mock.calls.length).toBeGreaterThan(1));
 });
 
+test('#72: a Spotify row is jumped to and removed by its uri', async () => {
+  apiService.getJukeboxQueue.mockResolvedValue({ data: live({ queue: [
+    { index: 4, id: 10, title: 'Current Song', artist: 'Band' },
+    { index: 5, id: null, uri: 'spotify:track:abc', title: 'Snooze', artist: 'SZA' },
+  ] }) });
+  renderQueue();
+  fireEvent.click(await screen.findByRole('button', { name: 'Remove Snooze from queue' }));
+  await waitFor(() => expect(apiService.sendJukeboxCommand).toHaveBeenCalledWith('tok', 'remove', { index: 5, uri: 'spotify:track:abc' }));
+});
+
 test('each upcoming track has a remove button that sends remove with index and track id', async () => {
   renderQueue();
   fireEvent.click(await screen.findByRole('button', { name: 'Remove Next Song from queue' }));

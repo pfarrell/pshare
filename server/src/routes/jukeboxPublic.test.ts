@@ -549,6 +549,25 @@ test('POST command jump and remove 400 without a valid non-negative integer inde
   unsub()
 })
 
+test('#72: POST command jump and remove address a Spotify row by uri', async () => {
+  const device = await guestDevice('jpub-cmd-uri')
+  const user = await createUser('jpub-cmd-uri-user')
+  const received: unknown[] = []
+  const unsub = sseBroadcaster.subscribeToCommands(device.id, (p) => received.push(p))
+
+  const ok = await postCommandBody(device.enqueue_token, { command: 'remove', index: 4, uri: 'spotify:track:abc' }, authCookieFor(user))
+  assert.equal(ok.status, 200)
+  for (const body of [
+    { command: 'jump', index: 4, uri: 'spotify:album:abc' },
+    { command: 'jump', index: 4, uri: 'spotify:track:a/b' },
+    { command: 'jump', index: 4, uri: 7 },
+  ]) {
+    assert.equal((await postCommandBody(device.enqueue_token, body, authCookieFor(user))).status, 400, JSON.stringify(body))
+  }
+  assert.deepEqual(received, [{ command: 'remove', index: 4, uri: 'spotify:track:abc' }])
+  unsub()
+})
+
 test('POST command toggle/next/prev drop any extra index or trackId', async () => {
   const device = await guestDevice('jpub-cmd-extra')
   const user = await createUser('jpub-cmd-extra-user')
@@ -578,6 +597,7 @@ const snapshot = () => ({
   currentIndex: 4,
   isPlaying: true,
   playbackMode: 'shuffle' as const,
+  spotify: false,
 })
 
 test('GET /jukebox/:token/queue 404s for an unknown token', async () => {
@@ -604,7 +624,7 @@ test('GET /jukebox/:token/queue never returns a stale queue when no kiosk is con
 
   const { body } = await getJson(`/jukebox/${device.enqueue_token}/queue`)
 
-  assert.deepEqual(body, { connected: false, queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off' })
+  assert.deepEqual(body, { connected: false, queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off', spotify: false })
 })
 
 test('GET /jukebox/:token/queue is connected with an empty queue before the kiosk has published', async () => {
@@ -613,7 +633,7 @@ test('GET /jukebox/:token/queue is connected with an empty queue before the kios
 
   const { body } = await getJson(`/jukebox/${device.enqueue_token}/queue`)
 
-  assert.deepEqual(body, { connected: true, queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off' })
+  assert.deepEqual(body, { connected: true, queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off', spotify: false })
   unsub()
 })
 

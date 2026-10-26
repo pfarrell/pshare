@@ -10,7 +10,7 @@ import jwt from 'jsonwebtoken'
 import { jukeboxQueueService } from '../services/jukeboxQueueService.js'
 import { db } from '../db/database.js'
 import { sseBroadcaster } from '../services/sseBroadcaster.js'
-import { jukeboxStateService } from '../services/jukeboxStateService.js'
+import { jukeboxStateService, SPOTIFY_TRACK_URI } from '../services/jukeboxStateService.js'
 import { createFixedWindowLimiter } from '../utils/rateLimit.js'
 import { handleSearchRequest } from './search.js'
 import artists, { fetchRandomArtists } from './artists.js'
@@ -316,9 +316,9 @@ async function loadDeviceForQueue(c: any, next: any) {
 jukeboxPublic.get('/:token/queue', loadDeviceForQueue, async (c: any) => {
   const device = c.get('jukeboxTokenDevice')
   if (sseBroadcaster.commandListenerCount(device.id) === 0) {
-    return c.json({ connected: false, queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off' })
+    return c.json({ connected: false, queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off', spotify: false })
   }
-  const state = jukeboxStateService.get(device.id) ?? { queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off' }
+  const state = jukeboxStateService.get(device.id) ?? { queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off', spotify: false }
   return c.json({ connected: true, ...state })
 })
 
@@ -344,14 +344,16 @@ jukeboxPublic.post('/:token/command', loadDeviceByToken, async (c: any) => {
   }
 
   // jump/remove address a queue row: the kiosk checks that row still holds
-  // trackId before acting, so a stale phone view can never hit the wrong track.
-  let payload: { command: string; index?: number; trackId?: number } = { command }
+  // trackId (or, for a Spotify row, uri) before acting, so a stale phone view
+  // can never hit the wrong track.
+  let payload: { command: string; index?: number; trackId?: number; uri?: string } = { command }
   if (INDEXED_COMMANDS.includes(command)) {
-    const { index, trackId } = body
-    if (!Number.isInteger(index) || index < 0 || !Number.isInteger(trackId)) {
-      return c.json({ error: 'index (non-negative integer) and trackId (integer) are required' }, 400)
+    const { index, trackId, uri } = body
+    const spotifyRow = trackId === undefined && typeof uri === 'string' && SPOTIFY_TRACK_URI.test(uri)
+    if (!Number.isInteger(index) || index < 0 || !(Number.isInteger(trackId) || spotifyRow)) {
+      return c.json({ error: 'index (non-negative integer) and trackId (integer) or a Spotify track uri are required' }, 400)
     }
-    payload = { command, index, trackId }
+    payload = spotifyRow ? { command, index, uri } : { command, index, trackId }
   }
 
   if (!commandsAllowed(device.enqueue_token)) {

@@ -3,6 +3,7 @@ import { usePlayerStore } from '../stores/playerStore';
 import { apiService, jukeboxEventsUrl } from '../services/api';
 import { invalidateProfilesCache } from '../utils/profilesCache';
 import { requestJukeboxStatePublish } from './jukeboxStatePublisher';
+import { isSpotifyTrack } from '../utils/trackSource';
 
 // Opens one EventSource for the kiosk's own device and reconciles both event
 // types the stream carries — see
@@ -88,11 +89,15 @@ export const useJukeboxQueueEvents = (deviceId) => {
       else if (command === 'next') playNext({ manual: true });
       else if (command === 'prev') playPrev();
       else if (command === 'jump' || command === 'remove') {
-        const { index, trackId } = payload;
+        const { index, trackId, uri } = payload;
         // The phone addressed a row it saw a moment ago. Act only if that row
         // still holds that exact track (duplicates and reshuffles can't fool
         // this); otherwise do nothing and republish so the phone shows the truth.
-        const valid = Number.isInteger(index) && index >= 0 && Number.isInteger(trackId) && playlist[index]?.id === trackId;
+        // A Spotify row (#72) is addressed by its uri instead of a track id.
+        const row = Number.isInteger(index) && index >= 0 ? playlist[index] : undefined;
+        const valid = Number.isInteger(trackId)
+          ? !isSpotifyTrack(row) && row?.id === trackId
+          : typeof uri === 'string' && isSpotifyTrack(row) && row.uri === uri;
         if (valid) {
           if (command === 'jump') playTrackAtIndex(index);
           else removeTrackFromPlaylist(index);

@@ -249,6 +249,19 @@ describe('jump and remove commands (queue control from a logged-in phone)', () =
     return { actions, source: FakeEventSource.instances[0] };
   };
 
+  test('#72: a Spotify row is addressed by uri, never by a track id', () => {
+    const spotify = { source: 'spotify', uri: 'spotify:track:abc', title: 'Snooze' };
+    const { actions, source } = setup([track(1), spotify]);
+
+    source.emit('playback-command', { command: 'remove', index: 1, uri: 'spotify:track:other' });
+    source.emit('playback-command', { command: 'jump', index: 0, uri: 'spotify:track:abc' });
+    expect(actions.removeTrackFromPlaylist).not.toHaveBeenCalled();
+    expect(actions.playTrackAtIndex).not.toHaveBeenCalled();
+
+    source.emit('playback-command', { command: 'remove', index: 1, uri: 'spotify:track:abc' });
+    expect(actions.removeTrackFromPlaylist).toHaveBeenCalledWith(1);
+  });
+
   test('jump plays the row when it still holds that track, then republishes', () => {
     const { actions, source } = setup([track(1), track(2), track(3)]);
     requestJukeboxStatePublish.mockClear();

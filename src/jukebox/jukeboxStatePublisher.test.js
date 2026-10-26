@@ -38,7 +38,7 @@ describe('buildQueueSnapshot', () => {
 
   test('an empty playlist gives an empty queue', () => {
     expect(buildQueueSnapshot({ playlist: [], currentTrackIndex: -1, isPlaying: false }))
-      .toEqual({ queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off' });
+      .toEqual({ queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off', spotify: false });
   });
 
   test('is null-safe for a missing artist, blank artist, or missing title', () => {
@@ -97,6 +97,15 @@ describe('buildQueueSnapshot', () => {
       expect(snap.playbackMode).toBe(playbackMode);
       expect(snap.queue.map((q) => q.index)).toEqual([1, 2, 3]);
     }
+  });
+
+  test('#72: a Spotify row carries its uri and a null id; the spotify flag follows the source', () => {
+    const spotify = { source: 'spotify', uri: 'spotify:track:abc', title: 'Snooze', artist: { name: 'SZA' } };
+    const snap = buildQueueSnapshot({ playlist: [track(1), spotify], currentTrackIndex: 0, isPlaying: true, spotifySource: {} });
+    expect(snap.queue[1]).toEqual({ index: 1, id: null, uri: 'spotify:track:abc', title: 'Snooze', artist: 'SZA' });
+    expect(snap.queue[0]).not.toHaveProperty('uri');
+    expect(snap.spotify).toBe(true);
+    expect(buildQueueSnapshot({ playlist: [], currentTrackIndex: -1, isPlaying: false }).spotify).toBe(false);
   });
 
   test('a missing mode is reported as off', () => {
