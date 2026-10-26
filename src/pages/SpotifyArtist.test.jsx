@@ -29,6 +29,7 @@ describe('SpotifyArtist', () => {
     result.value = {
       status: 'ready',
       artist: { id: 'sza1', name: 'SZA', imageUrl: null, externalUrl: 'https://open.spotify.com/artist/sza1' },
+      summary: { summary: 'Solána Imani Rowe, known as SZA, is an American singer.' },
       albums: [
         { id: 'ctrl', name: 'Ctrl', releaseYear: '2017', localId: 9 },
         { id: 'sos', name: 'SOS', releaseYear: '2022', localId: null },
@@ -39,6 +40,8 @@ describe('SpotifyArtist', () => {
     const titles = [...container.querySelectorAll('h3')].map((h) => h.textContent);
     expect(titles.indexOf('SOS')).toBeLessThan(titles.indexOf('Ctrl'));
     expect(container.querySelectorAll('.spotify-album-marker')).toHaveLength(1);
+    expect(screen.getByText('About this artist')).toBeInTheDocument();
+    expect(screen.getByText(/American singer/)).toBeInTheDocument();
   });
 
   test('says so when the artist has no albums', () => {

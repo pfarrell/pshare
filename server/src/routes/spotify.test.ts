@@ -92,7 +92,8 @@ let ownedAlbumIds = new Set<string>()
 mock.method(spotifyLibraryMatcher, 'annotate', async (r: SpotifySearchResult) => {
   matcherCalls++
   return {
-    tracks: [], artists: [],
+    tracks: [],
+    artists: r.artists.map((a) => ({ ...a, localId: a.name === 'Owned Artist' ? 55 : null })),
     albums: r.albums.map((a) => ({ ...a, localId: ownedAlbumIds.has(a.id) ? 77 : null })),
   }
 })
@@ -253,4 +254,63 @@ test('plays: recent albums, size defaulted and capped', async () => {
   assert.deepEqual(body.map((a: any) => a.id), ['sos1'])
   await app.request('/spotify/plays/recent-albums?size=5000')
   assert.deepEqual(recentSizes, [20, 200])
+})
+
+// --- ?details=1 (Spotify album/artist pages): Wikipedia summary, library artist ---
+import { wikiAlbumTitle } from './spotify.js'
+
+test('wikiAlbumTitle drops Spotify edition tails but never empties a title', () => {
+  assert.equal(wikiAlbumTitle('Rumours - 2004 Remaster'), 'Rumours')
+  assert.equal(wikiAlbumTitle('SOS Deluxe: LANA'), 'SOS')
+  assert.equal(wikiAlbumTitle('Ctrl (Deluxe)'), 'Ctrl (Deluxe)')
+  assert.equal(wikiAlbumTitle('Back - To Black'), 'Back - To Black')
+  assert.equal(wikiAlbumTitle('Deluxe'), 'Deluxe')
+})
+
+const wikiAndAlbum = (artistName: string, extract: string | null, albumName = 'Kind of Blue (Legacy Edition)') => (url: string) => {
+  if (url.startsWith('https://en.wikipedia.org/')) {
+    return extract && decodeURIComponent(url).includes('Kind of Blue')
+      ? new Response(JSON.stringify({ extract, content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Kind_of_Blue' } } }))
+      : new Response('', { status: 404 })
+  }
+  return new Response(JSON.stringify({
+    id: 'kob', name: albumName, release_date: '1959-08-17', label: 'Columbia', images: [],
+    artists: [{ id: 'md', name: artistName }],
+    tracks: { items: [{ id: 't1', uri: 'spotify:track:t1', name: 'So What', duration_ms: 5 }], next: null },
+  }))
+}
+
+test('album details: summary, year, label and the library artist id', async () => {
+  stubArtistSpotify(wikiAndAlbum('Owned Artist', 'Kind of Blue is a studio album by Miles Davis.'))
+  const body = await (await app.request('/spotify/albums/kob/tracks?details=1')).json()
+  assert.equal(body.album.releaseYear, '1959')
+  assert.equal(body.album.label, 'Columbia')
+  assert.equal(body.localArtistId, 55)
+  assert.match(body.summary.summary, /studio album by Miles Davis/)
+})
+
+test('album details: no Wikipedia match and an unknown artist are nulls; plain requests skip both', async () => {
+  stubArtistSpotify(wikiAndAlbum('Someone New', null, 'Unheard Of Album'))
+  const body = await (await app.request('/spotify/albums/kob/tracks?details=1')).json()
+  assert.equal(body.summary, null)
+  assert.equal(body.localArtistId, null)
+  apiCalls = []
+  const plain = await (await app.request('/spotify/albums/kob/tracks')).json()
+  assert.equal('summary' in plain, false)
+  assert.equal(apiCalls.some((u) => u.includes('wikipedia')), false)
+})
+
+test('catalog artist details: adds a Wikipedia summary; plain requests skip it', async () => {
+  stubArtistSpotify((url: string) => {
+    if (url.startsWith('https://en.wikipedia.org/')) {
+      return decodeURIComponent(url).includes('Zzwiki Singer')
+        ? new Response(JSON.stringify({ extract: 'Zzwiki Singer is an American singer.' }))
+        : new Response('', { status: 404 })
+    }
+    return catalogApi({ artist: { id: 'zz1', name: 'Zzwiki Singer', images: [] }, albums: [albumRaw('a', 'One')] })(url)
+  })
+  const plain = await (await app.request('/spotify/catalog/artists/zz1/albums')).json()
+  assert.equal('summary' in plain, false)
+  const body = await (await app.request('/spotify/catalog/artists/zz1/albums?details=1')).json()
+  assert.match(body.summary.summary, /American singer/)
 })

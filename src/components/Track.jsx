@@ -20,7 +20,8 @@ import { isSpotifyTrack } from '../utils/trackSource';
 
 // forwardRef lets Album.jsx grab the DOM node of the track that arrived
 // playing (via the mobile now-playing tap) and scroll it into view.
-const Track = forwardRef(({ track, index, trackCount, includeMeta = false, showArtist = false, isPlaying = false, showMakeSingle = false, showEdit = false, onMadeSingle, scrollAnchor = false }, ref) => {
+// hideArtist: the Spotify album page (#72) drops the " - Artist" suffix on rows by the album's own artist, as library albums do.
+const Track = forwardRef(({ track, index, trackCount, includeMeta = false, showArtist = false, hideArtist = false, isPlaying = false, showMakeSingle = false, showEdit = false, onMadeSingle, scrollAnchor = false }, ref) => {
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [pressedButton, setPressedButton] = useState(null);
@@ -265,7 +266,7 @@ const Track = forwardRef(({ track, index, trackCount, includeMeta = false, showA
           color: isPlaying ? '#1d4ed8' : 'var(--color-text-primary)'
         }}>
           {String(index + 1).padStart(2, '0')}. {track.title}
-          {(showArtist || spotify || track.artist.id !== track.album?.artist?.id) && track.artist.name && (' - ' + track.artist.name)}
+          {!hideArtist && (showArtist || spotify || track.artist.id !== track.album?.artist?.id) && track.artist.name && (' - ' + track.artist.name)}
 
           {track.duration && (
             <span style={{

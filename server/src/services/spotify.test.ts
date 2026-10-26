@@ -254,7 +254,7 @@ test('getSpotifyAlbumTracks follows tracks.next across pages', async () => {
   const { album, tracks } = await getSpotifyAlbumTracks('alb1')
   assert.equal(tracks.length, 62)
   assert.deepEqual(tracks.map((t) => t.id), Array.from({ length: 62 }, (_, i) => `t${i}`))
-  assert.deepEqual(album, { id: 'alb1', name: 'Album', imageUrl: 'http://img/300', artists: [{ id: 'a1', name: 'Artist' }] })
+  assert.deepEqual(album, { id: 'alb1', name: 'Album', imageUrl: 'http://img/300', artists: [{ id: 'a1', name: 'Artist' }], releaseYear: null, label: null })
   assert.deepEqual(tracks[61].album, { id: 'alb1', name: 'Album', imageUrl: 'http://img/300' })
   assert.equal(searchCalls().length, 2)
   assert.equal(searchCalls()[0].url, 'https://api.spotify.com/v1/albums/alb1')

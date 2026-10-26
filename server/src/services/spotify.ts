@@ -230,12 +230,12 @@ export async function searchSpotify(
 }
 
 export interface SpotifyAlbumTracks {
-  album: { id: string; name: string; imageUrl: string | null; artists: SpotifyArtistRef[] }
+  album: { id: string; name: string; imageUrl: string | null; artists: SpotifyArtistRef[]; releaseYear: string | null; label: string | null }
   tracks: SpotifyTrack[]
 }
 
 interface RawAlbumTracksPage { items?: (RawTrack | null)[] | null; next?: string | null }
-interface RawAlbumWithTracks extends RawAlbum { tracks?: RawAlbumTracksPage | null }
+interface RawAlbumWithTracks extends RawAlbum { tracks?: RawAlbumTracksPage | null; label?: string | null }
 
 // Safety valve against a `next` loop; 50 tracks/page covers any real album many times over.
 const MAX_ALBUM_TRACK_PAGES = 50
@@ -249,6 +249,8 @@ export async function getSpotifyAlbumTracks(albumId: string): Promise<SpotifyAlb
     name: str(raw.name),
     imageUrl: pickImageUrl(raw.images),
     artists: mapArtistRefs(raw.artists),
+    releaseYear: releaseYearFrom(raw.release_date),
+    label: str(raw.label) || null,
   }
   const rawTracks: RawTrack[] = []
   let page: RawAlbumTracksPage | null | undefined = raw.tracks

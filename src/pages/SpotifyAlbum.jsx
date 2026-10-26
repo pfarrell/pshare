@@ -3,46 +3,59 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { apiService } from '../services/api';
 import Loading from '../components/Loading';
-import OpenInSpotify from '../components/OpenInSpotify';
+import Track from '../components/Track';
+import AboutSection from '../components/AboutSection';
+import PlayActionsMenu from '../components/PlayActionsMenu';
+import OpenInSpotify, { SpotifyLogo } from '../components/OpenInSpotify';
 import { useQueueActions } from '../hooks/useQueueActions';
+import { usePlayerStore } from '../stores/playerStore';
 import { useSpotifyPlayability } from '../player/spotify/useCanPlaySpotify';
-import { toSpotifyQueueTrack } from '../utils/trackSource';
-import { formatDuration } from '../utils/formatters';
+import { toSpotifyQueueTrack, isSpotifyTrack } from '../utils/trackSource';
 
-// A Spotify album the library doesn't own (#72), laid out like the Album page:
-// cover, title, artist, year, Play/Add for the whole album and per track.
-// Reached from the artist page grid; anything unplayable shows a quiet empty
-// state rather than an error (there is no error boundary).
+// A Spotify album the library doesn't own (#72), built from the Album page's
+// own parts so it reads as part of P·Share: same header, a Play split button,
+// a Wikipedia "About this album" (best guess from the Spotify title, may be
+// absent), and the shared Track rows. The artist links to the library artist
+// when the library has them, otherwise to the in-app Spotify artist page.
+// Anything unplayable shows a quiet empty state (there is no error boundary).
 const SPOTIFY_ID = /^[A-Za-z0-9]{1,64}$/;
 const UNAVAILABLE = "This album isn't available right now.";
 const FALLBACK_COVER = `${import.meta.env.BASE_URL}icons/icon-512.png`;
 const text = (v) => (typeof v === 'string' ? v : '');
+const linkStyle = { color: '#3b82f6', textDecoration: 'none' };
 
-const QueueButtons = ({ source, name }) => {
-  const { loading, play, addToQueue } = useQueueActions(source, { errorLabel: 'Failed to queue Spotify tracks' });
-  return (
-    <span className="spotify-actions">
-      <button type="button" className="spotify-action-btn" disabled={loading} aria-label={`Play ${name}`} onClick={play}>▶</button>
-      <button type="button" className="spotify-action-btn" disabled={loading} aria-label={`Add ${name} to queue`} onClick={addToQueue}>+</button>
-    </span>
-  );
-};
+const ArtistLinks = ({ artists, localArtistId }) => (
+  <>
+    {artists.map((artist, i) => {
+      const name = text(artist?.name);
+      // The library artist (if any) is the album's primary one.
+      const to = i === 0 && localArtistId != null
+        ? `/artist/${localArtistId}`
+        : (SPOTIFY_ID.test(text(artist?.id)) ? `/spotify/artist/${artist.id}` : null);
+      return (
+        <span key={`${artist?.id ?? ''}-${i}`}>
+          {i > 0 && ', '}
+          {to ? <Link to={to} style={linkStyle}>{name}</Link> : <span style={{ color: 'var(--color-text-primary)' }}>{name}</span>}
+        </span>
+      );
+    })}
+  </>
+);
 
 const SpotifyAlbum = () => {
   const { spotifyId } = useParams();
   const location = useLocation();
-  const localArtistId = location.state?.localArtistId ?? null;
-  const year = text(location.state?.year);
   const playability = useSpotifyPlayability();
   const canPlay = playability === 'ready';
   const validId = SPOTIFY_ID.test(spotifyId ?? '');
   const [state, setState] = useState({ id: null, status: 'loading', data: null });
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
 
   useEffect(() => {
     if (!validId || !canPlay) return undefined;
     let cancelled = false;
     Promise.resolve()
-      .then(() => apiService.getSpotifyAlbumTracks(spotifyId))
+      .then(() => apiService.getSpotifyAlbumDetails(spotifyId))
       .then((res) => {
         if (cancelled) return;
         const data = res?.data;
@@ -57,23 +70,33 @@ const SpotifyAlbum = () => {
     return () => { cancelled = true; };
   }, [spotifyId, validId, canPlay]);
 
+  const ready = state.id === spotifyId && state.status === 'ready';
+  const album = ready ? state.data.album : null;
+  const entries = ready
+    ? state.data.tracks.map((t) => toSpotifyQueueTrack(t, album)).filter(Boolean)
+    : [];
+  const queue = useQueueActions(entries, { errorLabel: 'Failed to queue Spotify tracks' });
+
   const empty = <p className="spotify-album-unavailable">{UNAVAILABLE}</p>;
   if (!validId || playability === 'unavailable') return empty;
-  if (!canPlay) return <Loading />;
-  if (state.id !== spotifyId || state.status === 'loading') return <Loading />;
-  if (state.status !== 'ready') return empty;
+  if (!canPlay || state.id !== spotifyId || state.status === 'loading') return <Loading />;
+  if (!ready) return empty;
 
-  const { album } = state.data;
   const title = text(album.name);
-  const artistName = (Array.isArray(album.artists) ? album.artists : []).map((a) => text(a?.name)).filter(Boolean).join(', ');
-  const entries = state.data.tracks.map((t) => ({ raw: t, entry: toSpotifyQueueTrack(t, album) })).filter((x) => x.entry);
+  const artists = (Array.isArray(album.artists) ? album.artists : []).filter(Boolean);
+  const artistName = artists.map((a) => text(a.name)).filter(Boolean).join(', ');
+  // Navigation state (from an artist page grid) wins; the response's match covers search/deep links.
+  const localArtistId = location.state?.localArtistId ?? state.data.localArtistId ?? null;
+  const year = text(album.releaseYear) || text(location.state?.year);
+  const meta = [year, text(album.label)].filter(Boolean).join(' · ');
   const externalUrl = album.id ? `https://open.spotify.com/album/${album.id}` : null;
+  const playing = (entry) => isSpotifyTrack(currentTrack) && currentTrack.uri === entry.uri;
 
   return (
     <div style={{ padding: '.5rem', maxWidth: '1400px', margin: '0 auto' }}>
       <div className="media-page-header">
         <div style={{ flexShrink: 0 }}>
-          <img src={text(album.imageUrl) || FALLBACK_COVER} alt={title} className="full-image" />
+          <img src={text(album.imageUrl) || FALLBACK_COVER} alt={artistName ? `${title} by ${artistName}` : title} className="full-image" />
         </div>
         <div className="album-info" style={{ flex: 1 }}>
           <div className="album-header-title-row">
@@ -81,32 +104,49 @@ const SpotifyAlbum = () => {
               <h1 className="album-header-title" style={{ fontSize: '2.5rem', fontWeight: 'bold', margin: '0 0 0.5rem 0', color: 'var(--color-text-primary)' }}>
                 {title}
               </h1>
-              {artistName && (
+              {artists.length > 0 && (
                 <h2 className="album-header-artist" style={{ fontSize: '1.5rem', fontWeight: 'normal', margin: '0 0 0.5rem 0' }}>
                   <span style={{ color: 'var(--color-text-primary)' }}>by</span>{' '}
-                  {localArtistId != null
-                    ? <Link to={`/artist/${localArtistId}`} style={{ color: '#3b82f6' }}>{artistName}</Link>
-                    : <span style={{ color: 'var(--color-text-primary)' }}>{artistName}</span>}
+                  <ArtistLinks artists={artists} localArtistId={localArtistId} />
                 </h2>
               )}
-              {year && <p className="spotify-album-year">{year}</p>}
             </div>
             <div className="album-header-actions" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <QueueButtons source={entries.map((x) => x.entry)} name={title} />
+              <PlayActionsMenu
+                onPlay={queue.play}
+                onPlayNext={queue.playNext}
+                onAddToQueue={queue.addToQueue}
+                disabled={queue.loading || entries.length === 0}
+              />
               <OpenInSpotify url={externalUrl} name={title} />
             </div>
+          </div>
+          <p className="spotify-album-meta">
+            <SpotifyLogo className="spotify-album-meta-logo" />
+            <span>{meta ? `${meta} · From Spotify` : 'From Spotify'}</span>
+          </p>
+          <div className="album-header-about">
+            <AboutSection heading="About this album" summary={state.data.summary} />
           </div>
         </div>
       </div>
 
-      <div className="spotify-album-tracks">
-        {entries.map(({ raw, entry }, index) => (
-          <div className="spotify-album-track" key={entry.uri || index}>
-            <span className="spotify-album-track-number">{index + 1}</span>
-            <span className="spotify-album-track-title">{entry.title}</span>
-            <span className="spotify-album-track-duration">{raw?.durationMs ? formatDuration(Math.round(raw.durationMs / 1000)) : ''}</span>
-            <QueueButtons source={[entry]} name={entry.title} />
-          </div>
+      <div style={{
+        backgroundColor: 'var(--color-bg-surface)',
+        borderRadius: '8px',
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+        overflowX: 'hidden',
+        overflowY: 'visible',
+      }}>
+        {entries.map((entry, index) => (
+          <Track
+            key={entry.uri || index}
+            track={entry}
+            index={index}
+            trackCount={entries.length}
+            isPlaying={playing(entry)}
+            hideArtist={entry.artist?.name === artistName}
+          />
         ))}
       </div>
     </div>
