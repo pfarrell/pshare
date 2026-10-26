@@ -55,7 +55,6 @@ describe('runSearchCommand', () => {
   let addTracks;
   let setQueueSource;
   let navigate;
-  let speak;
 
   const searchResponse = (results, extra = {}) => ({ data: { results, hasMore: false, resultCounts: {}, ...extra } });
 
@@ -67,7 +66,6 @@ describe('runSearchCommand', () => {
     setQueueSource = vi.fn();
     usePlayerStore.setState({ clearPlaylist, addTracks, setQueueSource });
     navigate = vi.fn();
-    speak = vi.fn();
   });
 
   afterEach(() => {
@@ -86,7 +84,7 @@ describe('runSearchCommand', () => {
     ]));
     apiService.getRandomScopeTracks.mockResolvedValue({ data: { tracks } });
 
-    const result = await runSearchCommand({ type: 'artist', query: 'radiohead' }, { profileId: 5, navigate, speak });
+    const result = await runSearchCommand({ type: 'artist', query: 'radiohead' }, { profileId: 5, navigate });
 
     expect(apiService.search).toHaveBeenCalledWith('radiohead', undefined, 5);
     expect(apiService.getRandomScopeTracks).toHaveBeenCalledWith('artist', 3);
@@ -97,7 +95,7 @@ describe('runSearchCommand', () => {
     apiService.search.mockResolvedValue(searchResponse([{ type: 'collection', data: { id: 6, name: 'Road Trip' } }]));
     apiService.getRandomScopeTracks.mockResolvedValue({ data: { tracks } });
 
-    await runSearchCommand({ type: 'collection', query: 'road trip' }, { navigate, speak });
+    await runSearchCommand({ type: 'collection', query: 'road trip' }, { navigate });
 
     expect(clearPlaylist).toHaveBeenCalled();
     expect(clearPlaylist.mock.invocationCallOrder[0]).toBeLessThan(addTracks.mock.invocationCallOrder[0]);
@@ -105,44 +103,33 @@ describe('runSearchCommand', () => {
     expect(setQueueSource).toHaveBeenCalledWith({ type: 'collection', id: 6 });
   });
 
-  test('navigates to the matched page and announces it', async () => {
+  test('navigates to the matched page', async () => {
     apiService.search.mockResolvedValue(searchResponse([{ type: 'collection', data: { id: 6, name: 'Road Trip' } }]));
     apiService.getRandomScopeTracks.mockResolvedValue({ data: { tracks } });
 
-    await runSearchCommand({ type: 'collection', query: 'road trip' }, { navigate, speak });
+    await runSearchCommand({ type: 'collection', query: 'road trip' }, { navigate });
 
     expect(navigate).toHaveBeenCalledWith('/collection/6');
-    expect(speak).toHaveBeenCalledWith('Playing Road Trip');
   });
 
-  test('album: plays the album tracks in order and names the artist', async () => {
+  test('album: plays the album tracks in order', async () => {
     apiService.search.mockResolvedValue(searchResponse([
       { type: 'album', data: { id: 12, title: 'OK Computer', artist: { id: 3, name: 'Radiohead' } } },
     ]));
     apiService.getAlbum.mockResolvedValue({ data: { tracks } });
 
-    await runSearchCommand({ type: 'album', query: 'ok computer' }, { navigate, speak });
+    await runSearchCommand({ type: 'album', query: 'ok computer' }, { navigate });
 
     expect(apiService.getAlbum).toHaveBeenCalledWith(12, { summary: false });
     expect(addTracks).toHaveBeenCalledWith(tracks, false, { flashActivity: true, playImmediately: true });
     expect(navigate).toHaveBeenCalledWith('/album/12');
-    expect(speak).toHaveBeenCalledWith('Playing OK Computer by Radiohead');
-  });
-
-  test('album with a null artist announces just the title', async () => {
-    apiService.search.mockResolvedValue(searchResponse([{ type: 'album', data: { id: 12, title: 'Mystery', artist: null } }]));
-    apiService.getAlbum.mockResolvedValue({ data: { tracks } });
-
-    await runSearchCommand({ type: 'album', query: 'mystery' }, { navigate, speak });
-
-    expect(speak).toHaveBeenCalledWith('Playing Mystery');
   });
 
   test('playlist: plays tracks tagged with their source playlist, like the Playlist page', async () => {
     apiService.search.mockResolvedValue(searchResponse([{ type: 'playlist', data: { id: 8, name: 'Morning Mix' } }]));
     apiService.getPlaylist.mockResolvedValue({ data: { playlist: { id: 8, name: 'Morning Mix' }, tracks } });
 
-    await runSearchCommand({ type: 'playlist', query: 'morning mix' }, { navigate, speak });
+    await runSearchCommand({ type: 'playlist', query: 'morning mix' }, { navigate });
 
     expect(apiService.getPlaylist).toHaveBeenCalledWith(8);
     expect(addTracks.mock.calls[0][0]).toEqual(tracks.map((t) => ({ ...t, source_playlist: { id: 8, name: 'Morning Mix' } })));
@@ -156,7 +143,7 @@ describe('runSearchCommand', () => {
       .mockResolvedValueOnce(searchResponse([{ type: 'playlist', data: { id: 8, name: 'Morning Mix' } }]));
     apiService.getPlaylist.mockResolvedValue({ data: { playlist: { id: 8, name: 'Morning Mix' }, tracks } });
 
-    await runSearchCommand({ type: 'playlist', query: 'morning' }, { navigate, speak });
+    await runSearchCommand({ type: 'playlist', query: 'morning' }, { navigate });
 
     expect(apiService.search).toHaveBeenNthCalledWith(2, 'morning', 1, null);
     expect(navigate).toHaveBeenCalledWith('/playlist/8');
@@ -165,35 +152,32 @@ describe('runSearchCommand', () => {
   test('no match: leaves the queue alone, stays put, and says so', async () => {
     apiService.search.mockResolvedValue(searchResponse([{ type: 'artist', data: { id: 3, name: 'Abba' } }]));
 
-    const result = await runSearchCommand({ type: 'album', query: 'abbey road' }, { navigate, speak });
+    const result = await runSearchCommand({ type: 'album', query: 'abbey road' }, { navigate });
 
     expect(result).toEqual({ status: 'not_found' });
     expect(clearPlaylist).not.toHaveBeenCalled();
     expect(addTracks).not.toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalled();
-    expect(speak).toHaveBeenCalledWith('No album found for abbey road');
   });
 
   test('a match with no playable tracks is treated as no match', async () => {
     apiService.search.mockResolvedValue(searchResponse([{ type: 'artist', data: { id: 3, name: 'Empty' } }]));
     apiService.getRandomScopeTracks.mockResolvedValue({ data: { tracks: [] } });
 
-    const result = await runSearchCommand({ type: 'artist', query: 'empty' }, { navigate, speak });
+    const result = await runSearchCommand({ type: 'artist', query: 'empty' }, { navigate });
 
     expect(result).toEqual({ status: 'not_found' });
     expect(clearPlaylist).not.toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalled();
-    expect(speak).toHaveBeenCalledWith('No artist found for empty');
   });
 
   test('a failed request is treated as no match', async () => {
     apiService.search.mockRejectedValue(new Error('network down'));
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    const result = await runSearchCommand({ type: 'artist', query: 'radiohead' }, { navigate, speak });
+    const result = await runSearchCommand({ type: 'artist', query: 'radiohead' }, { navigate });
 
     expect(result).toEqual({ status: 'not_found' });
     expect(clearPlaylist).not.toHaveBeenCalled();
-    expect(speak).toHaveBeenCalledWith('No artist found for radiohead');
   });
 });

@@ -409,20 +409,6 @@ export const usePlayerStore = create((set, get) => ({
     get().playNext();
   },
 
-  // For a gesture whose playback only starts after async work (a voice
-  // command's search, say): unlock any element that hasn't played yet while
-  // we're still inside the gesture. The active element is only touched before
-  // anything has ever been loaded into it, so a real track is never replaced.
-  unlockForGesture: () => {
-    const { currentTrack, standbyUnlocked } = get();
-    activateSpotify(get().spotifySource);
-    if (!currentTrack) unlockAudioElement(get().getActiveAudio());
-    if (!standbyUnlocked) {
-      unlockAudioElement(get().getStandbyAudio());
-      set({ standbyUnlocked: true });
-    }
-  },
-
   togglePlayPause: () => {
     const { playlistFinished, playlist, pageTracks, playbackMode, currentTrackIndex, activeSource, isPlaying, spotifySource } = get();
     const audioElement = get().getActiveAudio();

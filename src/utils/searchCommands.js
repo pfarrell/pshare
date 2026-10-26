@@ -3,7 +3,6 @@
 
 import { apiService } from '../services/api';
 import { usePlayerStore } from '../stores/playerStore';
-import { speakText } from './speech';
 
 // "play list" is how iOS dictation often hears "playlist".
 const COMMAND_RE = /^play\s+(artist|album|collection|playlist|play\s+list)[\s.,!?;:]+(.+)$/i;
@@ -60,19 +59,11 @@ const loadTracks = async (type, entity) => {
   }
 };
 
-const spokenName = (type, entity) => {
-  if (type === 'album') {
-    const artistName = entity.artist?.name;
-    return artistName ? `${entity.title} by ${artistName}` : `${entity.title}`;
-  }
-  return `${entity.name ?? ''}`;
-};
-
 // Finds the best match for a parsed command, replaces the queue with it, and
 // navigates to its page. Anything that goes wrong — no match, nothing
 // playable, a failed request — leaves the queue and page untouched.
-export const runSearchCommand = async (command, { profileId = null, navigate, speak = speakText } = {}) => {
-  const { type, query } = command;
+export const runSearchCommand = async (command, { profileId = null, navigate } = {}) => {
+  const { type } = command;
   let entity;
   let tracks;
   try {
@@ -84,7 +75,6 @@ export const runSearchCommand = async (command, { profileId = null, navigate, sp
   }
 
   if (!tracks?.length) {
-    speak(`No ${type} found for ${query}`);
     return { status: 'not_found' };
   }
 
@@ -94,7 +84,5 @@ export const runSearchCommand = async (command, { profileId = null, navigate, sp
   setQueueSource({ type, id: entity.id });
   navigate(`/${type}/${entity.id}`);
 
-  const name = spokenName(type, entity);
-  speak(`Playing ${name}`);
   return { status: 'playing', type, id: entity.id, name: entity.name ?? entity.title };
 };
