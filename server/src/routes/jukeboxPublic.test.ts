@@ -655,3 +655,91 @@ test('queue polling has its own limit and does not consume the browse read limit
   assert.equal(cmd.status, 200, 'commands are unaffected')
   unsub()
 })
+
+// --- #72: guest Spotify adds and browsing ---
+const spotifyTrackBody = (n = 1) => ({
+  uri: `spotify:track:t${n}`, id: `t${n}`, name: `Song ${n}`, artists: [{ name: 'SZA' }],
+  album: { id: 'sos', name: 'SOS', imageUrl: 'https://i.scdn.co/sos' }, durationMs: 1000,
+})
+const postQueue = (token: string, body: unknown) => app().request(`/jukebox/${token}/queue`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+})
+// A kiosk that is listening, optionally with a Spotify player.
+const listeningKiosk = (deviceId: number, spotify: boolean) => {
+  jukeboxStateService.set(deviceId, { queue: [], currentIndex: -1, isPlaying: false, playbackMode: 'off', spotify })
+  return sseBroadcaster.subscribeToCommands(deviceId, () => {})
+}
+
+test('#72: POST queue with spotifyTracks stores and broadcasts them while the kiosk can play Spotify', async () => {
+  const device = await guestDevice('jpub-spotify-add')
+  const unsub = listeningKiosk(device.id, true)
+  const added: any[] = []
+  const unsubAdded = sseBroadcaster.subscribeToDevice(device.id, (data) => added.push(data))
+
+  const res = await postQueue(device.enqueue_token, { spotifyTracks: [spotifyTrackBody(1), spotifyTrackBody(2)], name: 'Riley' })
+  const body = await res.json()
+
+  assert.equal(res.status, 201)
+  assert.deepEqual(body.map((s: any) => s.spotify_track.uri), ['spotify:track:t1', 'spotify:track:t2'])
+  assert.equal(body[0].track_id, null)
+  assert.equal(body[0].submitted_by_name, 'Riley')
+  assert.equal(added.length, 2)
+  unsub(); unsubAdded()
+})
+
+test('#72: POST queue with spotifyTracks 409s while the kiosk cannot play Spotify, 400s on a bad track', async () => {
+  const device = await guestDevice('jpub-spotify-add-no')
+  let unsub = listeningKiosk(device.id, false)
+  assert.equal((await postQueue(device.enqueue_token, { spotifyTracks: [spotifyTrackBody()], name: 'Riley' })).status, 409)
+  unsub()
+  unsub = listeningKiosk(device.id, true)
+  for (const spotifyTracks of [[], [{ uri: 'spotify:album:x' }], 'nope', [spotifyTrackBody(), null]]) {
+    assert.equal((await postQueue(device.enqueue_token, { spotifyTracks, name: 'Riley' })).status, 400, JSON.stringify(spotifyTracks))
+  }
+  assert.equal((await postQueue(device.enqueue_token, { spotifyTracks: [spotifyTrackBody()] })).status, 400, 'name required')
+  const rows = await db.selectFrom('jukebox_queue_submissions').select('id').where('jukebox_device_id', '=', device.id).execute()
+  assert.equal(rows.length, 0)
+  unsub()
+})
+
+test('#72: Spotify browse is a quiet empty answer while the kiosk cannot play Spotify', async () => {
+  const device = await guestDevice('jpub-spotify-browse-no')
+  const unsub = listeningKiosk(device.id, false)
+  const search = await getJson(`/jukebox/${device.enqueue_token}/spotify/search?q=sza`)
+  assert.deepEqual(search.body, { available: false, tracks: [], albums: [], artists: [] })
+  assert.equal((await getJson(`/jukebox/${device.enqueue_token}/spotify/album/sos`)).status, 404)
+  assert.equal((await getJson(`/jukebox/${device.enqueue_token}/spotify/artist/sza1`)).status, 404)
+  unsub()
+})
+
+test('#72: Spotify search and album read through to the Spotify routes when the kiosk can play Spotify', async () => {
+  const device = await guestDevice('jpub-spotify-browse')
+  const unsub = listeningKiosk(device.id, true)
+  const realFetch = globalThis.fetch
+  const realEnv = { id: process.env.SPOTIFY_CLIENT_ID, secret: process.env.SPOTIFY_CLIENT_SECRET }
+  process.env.SPOTIFY_CLIENT_ID = 'cid'
+  process.env.SPOTIFY_CLIENT_SECRET = 'csecret'
+  globalThis.fetch = (async (url: any) => {
+    const u = String(url)
+    if (u.startsWith('https://accounts.spotify.com/')) return new Response(JSON.stringify({ access_token: 'tok', expires_in: 3600 }))
+    if (u.includes('/search?')) {
+      return new Response(JSON.stringify({ tracks: { items: [{ id: 't1', uri: 'spotify:track:t1', name: 'Snooze', artists: [{ id: 'a', name: 'SZA' }], album: { id: 'sos', name: 'SOS', images: [] }, duration_ms: 5 }] }, albums: { items: [] }, artists: { items: [] } }))
+    }
+    return new Response(JSON.stringify({ id: 'sos', name: 'SOS', images: [], artists: [{ id: 'a', name: 'SZA' }], tracks: { items: [{ id: 't1', uri: 'spotify:track:t1', name: 'Snooze', duration_ms: 5 }], next: null } }))
+  }) as any
+  try {
+    const search = await getJson(`/jukebox/${device.enqueue_token}/spotify/search?q=sza`)
+    assert.equal(search.body.available, true)
+    assert.deepEqual(search.body.tracks.map((t: any) => t.uri), ['spotify:track:t1'])
+    const album = await getJson(`/jukebox/${device.enqueue_token}/spotify/album/sos`)
+    assert.equal(album.status, 200)
+    assert.equal(album.body.album.name, 'SOS')
+    assert.equal(album.body.tracks[0].album.id, 'sos')
+    assert.equal((await getJson(`/jukebox/${device.enqueue_token}/spotify/album/a-b`)).status, 404)
+  } finally {
+    globalThis.fetch = realFetch
+    if (realEnv.id === undefined) delete process.env.SPOTIFY_CLIENT_ID; else process.env.SPOTIFY_CLIENT_ID = realEnv.id
+    if (realEnv.secret === undefined) delete process.env.SPOTIFY_CLIENT_SECRET; else process.env.SPOTIFY_CLIENT_SECRET = realEnv.secret
+    unsub()
+  }
+})

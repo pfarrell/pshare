@@ -115,3 +115,15 @@ test('markDelivered returns false for a submission belonging to a different devi
   assert.equal(result, false)
   assert.equal((await jukeboxQueueService.listPending(otherDevice.id)).length, 1)
 })
+
+test('#72: submitSpotify stores the Spotify track and lists it pending in submission order', async () => {
+  const { device, track } = await setup()
+  const spotifyTrack = { uri: 'spotify:track:abc', id: 'abc', name: 'Snooze', artists: [{ name: 'SZA' }], album: { id: 'sos', name: 'SOS', imageUrl: null }, durationMs: 1000 }
+  const local = await jukeboxQueueService.submit(device.id, track.id, { name: 'Riley' })
+  const spotify = await jukeboxQueueService.submitSpotify(device.id, spotifyTrack, { name: 'Riley' })
+  assert.equal(spotify.track_id, null)
+  assert.deepEqual(spotify.spotify_track, spotifyTrack)
+  const pending = await jukeboxQueueService.listPending(device.id)
+  assert.deepEqual(pending.map((p) => p.id), [local.id, spotify.id])
+  assert.equal(pending[0].spotify_track, null)
+})

@@ -202,7 +202,9 @@ interface DesktopDeviceTable {
 interface JukeboxQueueSubmissionTable {
   id: Generated<number>
   jukebox_device_id: number
-  track_id: number
+  track_id: number | null
+  // #72: a guest's Spotify track (see services/jukeboxSpotifyTrack.ts); exactly one of the two is set
+  spotify_track: ColumnType<unknown, string | null | undefined, string | null> | null
   submitted_by_name: string | null
   submitted_by_user_id: number | null
   submitted_at: ColumnType<Date, string | Date | undefined, never>

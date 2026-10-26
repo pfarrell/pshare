@@ -4,7 +4,7 @@
 // need for a cross-process broker.
 type Listener = (payload: unknown) => void
 
-export type PlaybackCommandPayload = { command: string; index?: number; trackId?: number }
+export type PlaybackCommandPayload = { command: string; index?: number; trackId?: number; uri?: string }
 
 const deviceListeners = new Map<number, Set<Listener>>()
 const profileListeners = new Set<() => void>()
