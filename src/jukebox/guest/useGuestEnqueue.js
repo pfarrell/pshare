@@ -10,7 +10,8 @@ const IDLE = { state: 'idle', count: 0 };
 // or a function that resolves them (used for the artist/collection "Shuffle"
 // and album/playlist "Add all", where the ids come from a guest endpoint), and
 // submits them in chunks so one tap can add more than the server's
-// per-request cap.
+// per-request cap. With { spotify: true } the items are Spotify tracks (#72,
+// the /search/spotify track shape) instead of library ids.
 export const useGuestEnqueue = (token) => {
   const [statuses, setStatuses] = useState({});
   const timers = useRef({});
@@ -27,7 +28,7 @@ export const useGuestEnqueue = (token) => {
     }
   }, []);
 
-  const enqueue = useCallback(async (key, source) => {
+  const enqueue = useCallback(async (key, source, { spotify = false } = {}) => {
     setStatus(key, 'adding');
     try {
       const ids = typeof source === 'function' ? await source() : source;
@@ -38,11 +39,14 @@ export const useGuestEnqueue = (token) => {
       setStatus(key, 'adding', ids.length);
       const name = getStoredGuestName();
       for (let i = 0; i < ids.length; i += CHUNK) {
-        await apiService.submitToJukebox(token, ids.slice(i, i + CHUNK), name);
+        const chunk = ids.slice(i, i + CHUNK);
+        if (spotify) await apiService.submitSpotifyToJukebox(token, chunk, name);
+        else await apiService.submitToJukebox(token, chunk, name);
       }
       setStatus(key, 'added');
     } catch (err) {
-      setStatus(key, err?.response?.status === 429 ? 'slow' : 'error');
+      const status = err?.response?.status;
+      setStatus(key, status === 429 ? 'slow' : status === 409 && spotify ? 'unavailable' : 'error');
     }
   }, [token, setStatus]);
 

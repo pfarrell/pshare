@@ -3,7 +3,7 @@ import { usePlayerStore } from '../stores/playerStore';
 import { apiService, jukeboxEventsUrl } from '../services/api';
 import { invalidateProfilesCache } from '../utils/profilesCache';
 import { requestJukeboxStatePublish } from './jukeboxStatePublisher';
-import { isSpotifyTrack } from '../utils/trackSource';
+import { isSpotifyTrack, toSpotifyQueueTrack } from '../utils/trackSource';
 
 // Opens one EventSource for the kiosk's own device and reconciles both event
 // types the stream carries — see
@@ -28,14 +28,19 @@ export const useJukeboxQueueEvents = (deviceId) => {
       // can't double-deliver the same submission.
       toDeliver.forEach((s) => deliveredIds.current.add(s.id));
 
+      // A guest's Spotify track (#72) already carries everything the queue
+      // entry needs, so it skips the library lookup; a malformed one fails
+      // like a failed lookup.
       const results = await Promise.allSettled(
-        toDeliver.map((s) => apiService.getTrack(s.track_id))
+        toDeliver.map((s) => (s.spotify_track
+          ? Promise.resolve(toSpotifyQueueTrack(s.spotify_track)).then((entry) => entry ?? Promise.reject(new Error('Bad Spotify submission')))
+          : apiService.getTrack(s.track_id).then((res) => res.data.track)))
       );
 
       const tracks = [];
       results.forEach((result, i) => {
         if (result.status === 'fulfilled') {
-          tracks.push(result.value.data.track);
+          tracks.push(result.value);
         } else {
           // Failed lookup (transient 5xx, network blip, deleted track):
           // un-mark it so a future catch-up (on the next 'open', see below)

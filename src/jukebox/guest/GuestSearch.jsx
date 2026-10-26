@@ -7,6 +7,7 @@ import GuestRow from './GuestRow';
 import GuestAddButton from './GuestAddButton';
 import GuestStatus from './GuestStatus';
 import { plural } from './plural';
+import GuestSpotifySection from './GuestSpotifySection';
 
 const MIN_QUERY = 3;
 const PREVIEW = 5;
@@ -51,7 +52,12 @@ const GuestSearch = () => {
   const tracks = (data?.tracks ?? []).filter(Boolean);
 
   if (![artists, albums, playlists, collections, tracks].some((list) => list.length)) {
-    return <div className="jukebox-guest-message">No results for "{query}".</div>;
+    return (
+      <>
+        <div className="jukebox-guest-message">No results for "{query}".</div>
+        <GuestSpotifySection query={query} />
+      </>
+    );
   }
 
   // Tracks lead: a song-title search is the common case on a phone, and the
@@ -82,6 +88,7 @@ const GuestSearch = () => {
           title={c.name ?? ''} subtitle={plural(c.album_count, 'album')}
           action={<GuestAddButton itemKey={`collection-${c.id}`} label={c.name ?? 'collection'} kind="collection" id={c.id} variant="all" />} />
       )} />
+      <GuestSpotifySection query={query} />
     </>
   );
 };

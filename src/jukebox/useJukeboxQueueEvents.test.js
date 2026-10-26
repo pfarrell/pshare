@@ -91,6 +91,24 @@ test('a queue-item-added event resolves and adds the track, then marks it delive
   await waitFor(() => expect(apiService.markJukeboxDelivered).toHaveBeenCalledWith(5, 2));
 });
 
+test('#72: a Spotify submission becomes a Spotify queue entry without a library lookup, in submission order', async () => {
+  apiService.getTrack.mockResolvedValue({ data: { track: { id: 20, title: 'Live Track' } } });
+  const addTracks = vi.fn();
+  usePlayerStore.setState({ addTracks });
+  apiService.getJukeboxPendingQueue.mockResolvedValue({ data: [
+    { id: 1, track_id: null, spotify_track: { uri: 'spotify:track:abc', id: 'abc', name: 'Snooze', artists: [{ name: 'SZA' }], album: { id: 'sos', name: 'SOS', imageUrl: null }, durationMs: 2000 } },
+    { id: 2, track_id: 20, spotify_track: null },
+  ] });
+  renderHook(() => useJukeboxQueueEvents(5));
+
+  await waitFor(() => expect(addTracks).toHaveBeenCalled());
+  const [entries] = addTracks.mock.calls[0];
+  expect(entries[0]).toMatchObject({ source: 'spotify', uri: 'spotify:track:abc', title: 'Snooze', artist: { name: 'SZA' }, album: { title: 'SOS', spotifyId: 'sos' }, duration: 2 });
+  expect(entries[1]).toEqual({ id: 20, title: 'Live Track' });
+  expect(apiService.getTrack).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(apiService.markJukeboxDelivered).toHaveBeenCalledWith(5, 1));
+});
+
 test('a profiles-changed event invalidates the profiles cache', async () => {
   renderHook(() => useJukeboxQueueEvents(5));
   await waitFor(() => expect(apiService.getJukeboxPendingQueue).toHaveBeenCalled());

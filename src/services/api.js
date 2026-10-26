@@ -158,6 +158,11 @@ export const apiService = {
   // Jukebox phone enqueue (see docs/superpowers/specs/2026-09-25-jukebox-server-queue-design.md)
   jukeboxSearch: (token, query) => api.get(`/jukebox/${token}/search${qs({ q: query })}`),
   submitToJukebox: (token, trackIds, name) => api.post(`/jukebox/${token}/queue`, { trackIds, name: name || undefined }),
+  // #72: guest Spotify adds/browsing (only while the kiosk can play Spotify)
+  submitSpotifyToJukebox: (token, spotifyTracks, name) => api.post(`/jukebox/${token}/queue`, { spotifyTracks, name: name || undefined }),
+  guestSpotifySearch: (token, query) => api.get(`/jukebox/${token}/spotify/search${qs({ q: query })}`), // { available, tracks, albums, artists }
+  guestSpotifyAlbum: (token, id) => api.get(`/jukebox/${token}/spotify/album/${id}`), // { album, tracks }
+  guestSpotifyArtist: (token, id) => api.get(`/jukebox/${token}/spotify/artist/${id}`), // { artist, albums } (owned ones with localId)
   // Guest browse (read-only) - see docs/superpowers/specs/2026-09-29-jukebox-guest-browse-design.md
   guestHome: (token, mode) => api.get(`/jukebox/${token}/home${qs({ mode })}`),
   guestArtist: (token, id) => api.get(`/jukebox/${token}/artist/${id}`),
