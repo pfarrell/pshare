@@ -99,12 +99,21 @@ mock.method(spotifyLibraryMatcher, 'annotate', async (r: SpotifySearchResult) =>
 })
 mock.method(localArtistLookup, 'findName', async (id: number) => (id === 5 ? 'Taylor Swift' : null))
 
-const artistApi = (opts: { artists?: unknown[]; albums?: unknown[] } = {}) => (url: string) => {
+const artistApi = (opts: { artists?: unknown[]; albums?: unknown[]; singlesTotal?: number; appearsOn?: unknown[]; releaseTracks?: Record<string, unknown[]> } = {}) => (url: string) => {
   if (url.includes('/search?')) {
     return new Response(JSON.stringify({ artists: { items: opts.artists ?? [{ id: 'ts', name: 'Taylor Swift' }] } }))
   }
+  const u = new URL(url)
+  const groups = u.searchParams.get('include_groups')
+  if (groups === 'single,compilation') return new Response(JSON.stringify({ items: [], total: opts.singlesTotal ?? 0, next: null }))
+  if (groups === 'appears_on') return new Response(JSON.stringify({ items: opts.appearsOn ?? [], next: null }))
+  if (u.pathname.startsWith('/v1/albums/')) {
+    const id = u.pathname.split('/').pop() as string
+    return new Response(JSON.stringify({ id, name: `Release ${id}`, images: [], tracks: { items: opts.releaseTracks?.[id] ?? [], next: null } }))
+  }
   return new Response(JSON.stringify({ items: opts.albums ?? [], next: null }))
 }
+const guestCalls = () => apiCalls.filter((u) => u.includes('include_groups=single') || u.includes('include_groups=appears_on') || u.includes('/v1/albums/'))
 function stubArtistSpotify(handler: (url: string) => Response) {
   globalThis.fetch = (async (url: any) => {
     if (String(url).startsWith('https://accounts.spotify.com/')) {
@@ -165,7 +174,54 @@ test('artist albums: a second request within ttl makes no Spotify calls but re-r
 test('artist albums: no exact Spotify artist match → 200 with null artist and no albums', async () => {
   stubArtistSpotify(artistApi({ artists: [{ id: 'x', name: 'Taylor Swift Piano Covers' }] }))
   const body = await (await app.request('/spotify/artists/5/albums')).json()
-  assert.deepEqual(body, { configured: true, spotifyArtist: null, albums: [] })
+  assert.deepEqual(body, { configured: true, spotifyArtist: null, albums: [], hasOwnReleases: null, guestTracks: [] })
+})
+
+test('artist albums: an artist with albums has own releases and costs no extra Spotify calls', async () => {
+  stubArtistSpotify(artistApi({ albums: [albumRaw('a', 'Lover')] }))
+  const body = await (await app.request('/spotify/artists/5/albums')).json()
+  assert.equal(body.hasOwnReleases, true)
+  assert.deepEqual(body.guestTracks, [])
+  assert.deepEqual(guestCalls(), [])
+})
+
+test('artist albums: albums the library owns still count as own releases', async () => {
+  ownedAlbumIds = new Set(['owned'])
+  stubArtistSpotify(artistApi({ albums: [albumRaw('owned', 'Fearless')] }))
+  const body = await (await app.request('/spotify/artists/5/albums')).json()
+  assert.deepEqual(body.albums, [])
+  assert.equal(body.hasOwnReleases, true)
+  assert.deepEqual(guestCalls(), [])
+})
+
+test('artist albums: singles only is not "not on Spotify" and skips the guest lookup', async () => {
+  stubArtistSpotify(artistApi({ singlesTotal: 4 }))
+  const body = await (await app.request('/spotify/artists/5/albums')).json()
+  assert.equal(body.hasOwnReleases, true)
+  assert.deepEqual(body.guestTracks, [])
+  assert.ok(!apiCalls.some((u) => u.includes('include_groups=appears_on')))
+})
+
+test('artist albums: no releases of their own → hasOwnReleases false with guest tracks, cached', async () => {
+  const me = { id: 'ts', name: 'Taylor Swift' }
+  stubArtistSpotify(artistApi({
+    appearsOn: [albumRaw('r1', 'Collab')],
+    releaseTracks: { r1: [
+      { id: 'g1', uri: 'spotify:track:g1', name: 'Guest Spot', artists: [{ id: 'x', name: 'Host' }, me], duration_ms: 1000 },
+      { id: 'h1', uri: 'spotify:track:h1', name: 'Host Only', artists: [{ id: 'x', name: 'Host' }], duration_ms: 1000 },
+    ] },
+  }))
+  const body = await (await app.request('/spotify/artists/5/albums')).json()
+  assert.equal(body.hasOwnReleases, false)
+  assert.deepEqual(body.albums, [])
+  assert.deepEqual(body.guestTracks.map((t: any) => t.id), ['g1'])
+  assert.equal(body.guestTracks[0].album.name, 'Release r1')
+
+  const callsAfterFirst = apiCalls.length
+  const again = await (await app.request('/spotify/artists/5/albums')).json()
+  assert.equal(apiCalls.length, callsAfterFirst)
+  assert.deepEqual(again.guestTracks.map((t: any) => t.id), ['g1'])
+  assert.equal(again.hasOwnReleases, false)
 })
 
 test('artist albums: 429 passes through with Retry-After', async () => {

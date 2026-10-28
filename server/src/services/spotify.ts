@@ -326,6 +326,36 @@ export async function getSpotifyArtistAlbums(spotifyArtistId: string): Promise<S
   return dedupeAlbumsByTitle(albums)
 }
 
+// Whether the artist has any singles or compilations of their own. Used only when
+// getSpotifyArtistAlbums came back empty, to tell "not on Spotify" (some artists
+// have pulled their catalogue) from "singles only".
+export async function hasSpotifySinglesOrCompilations(spotifyArtistId: string): Promise<boolean> {
+  if (!isSpotifyConfigured()) throw new SpotifyNotConfiguredError()
+  const qs = new URLSearchParams({ include_groups: 'single,compilation', limit: '1' })
+  const page = await spotifyGet<RawArtistAlbumsPage & { total?: number | null }>(
+    `${API}/artists/${encodeURIComponent(spotifyArtistId)}/albums?${qs}`, 'artist releases')
+  return (typeof page?.total === 'number' ? page.total : items(page as RawPage<RawAlbum>).length) > 0
+}
+
+// Other artists' releases this artist appears on are opened one call each, so cap them.
+export const MAX_GUEST_RELEASES = 10
+
+// The tracks this artist is credited on in other artists' releases (Spotify's
+// "appears on", which lists releases, not tracks), first page only, once each.
+export async function getSpotifyGuestTracks(spotifyArtistId: string): Promise<SpotifyTrack[]> {
+  if (!isSpotifyConfigured()) throw new SpotifyNotConfiguredError()
+  const qs = new URLSearchParams({ include_groups: 'appears_on', limit: String(MAX_GUEST_RELEASES) })
+  const page = await spotifyGet<RawArtistAlbumsPage>(`${API}/artists/${encodeURIComponent(spotifyArtistId)}/albums?${qs}`, 'artist appears on')
+  const releases = items(page as RawPage<RawAlbum>).slice(0, MAX_GUEST_RELEASES)
+  const albums = await Promise.all(releases.map((r) => getSpotifyAlbumTracks(str(r.id))))
+  const seen = new Set<string>()
+  return albums.flatMap(({ tracks }) => tracks).filter((t) => {
+    if (seen.has(t.id) || !t.artists.some((a) => a.id === spotifyArtistId)) return false
+    seen.add(t.id)
+    return true
+  })
+}
+
 // Spotify lists some titles more than once (markets, reissues): keep the earliest
 // release, then the one with more tracks. Order of first appearance is preserved.
 export function dedupeAlbumsByTitle(albums: SpotifyArtistAlbum[]): SpotifyArtistAlbum[] {
