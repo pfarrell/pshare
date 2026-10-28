@@ -49,7 +49,7 @@ const SpotifyActions = ({ source, name }) => {
   const { loading, play, addToQueue } = useQueueActions(source, { errorLabel: 'Failed to load Spotify tracks' });
   return (
     <span className="spotify-actions">
-      <button type="button" className="spotify-action-btn" disabled={loading} aria-label={`Play ${name}`} onClick={play}>▶</button>
+      <button type="button" className="spotify-action-btn spotify-action-play" disabled={loading} aria-label={`Play ${name}`} onClick={play}>▶</button>
       <button type="button" className="spotify-action-btn" disabled={loading} aria-label={`Add ${name} to queue`} onClick={addToQueue}>+</button>
     </span>
   );

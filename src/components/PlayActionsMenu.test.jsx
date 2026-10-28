@@ -183,3 +183,14 @@ describe('PlayActionsMenu', () => {
     });
   });
 });
+
+describe('PlayActionsMenu — Spotify green (#72)', () => {
+  test('spotify colours the split button and the plain play button green', () => {
+    const { container, rerender } = render(<PlayActionsMenu onPlay={vi.fn()} onPlayNext={vi.fn()} onAddToQueue={vi.fn()} spotify />);
+    expect(container.querySelector('.play-split.play-split-spotify')).toBeInTheDocument();
+    rerender(<PlayActionsMenu onPlay={vi.fn()} spotify />);
+    expect(screen.getByRole('button', { name: 'Play' })).toHaveClass('play-button-spotify');
+    rerender(<PlayActionsMenu onPlay={vi.fn()} onPlayNext={vi.fn()} onAddToQueue={vi.fn()} />);
+    expect(container.querySelector('.play-split-spotify')).toBeNull();
+  });
+});

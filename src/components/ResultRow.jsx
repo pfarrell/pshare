@@ -125,6 +125,7 @@ const ResultRow = ({
       {play && (
         <PlayButton
           size={isMobile ? 32 : 40}
+          className={play.spotify ? 'play-button-spotify' : ''}
           data-result-row-play="true"
           onClick={handlePlayClick}
           onContextMenu={handlePlayContextMenu}

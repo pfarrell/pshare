@@ -921,3 +921,14 @@ describe('Track component — Spotify marker (#72 album fill)', () => {
     expect(plain.querySelector('.track-spotify-marker')).toBeNull();
   });
 });
+
+describe('Track component — green play for Spotify rows (#72)', () => {
+  test('a Spotify entry in the default layout has the green play button; a library track does not', () => {
+    const entry = { source: 'spotify', uri: 'spotify:track:g', title: 'Green Song', artist: { name: 'A' }, album: { title: 'Al' }, duration: 60 };
+    const { unmount } = render(<MemoryRouter><Track track={entry} index={0} trackCount={1} /></MemoryRouter>);
+    expect(screen.getByRole('button', { name: 'Play Green Song' })).toHaveClass('play-button-spotify');
+    unmount();
+    renderTrack();
+    expect(document.querySelector('.track-play-button')).not.toHaveClass('play-button-spotify');
+  });
+});

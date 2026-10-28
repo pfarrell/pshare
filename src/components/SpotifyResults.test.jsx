@@ -164,3 +164,11 @@ describe('album links (#72)', () => {
     expect(screen.getByText('Linked Album')).toBeInTheDocument();
   });
 });
+
+describe('SpotifyResults — green play (#72)', () => {
+  test('the Spotify play buttons are the green play style; add stays plain', () => {
+    render(<MemoryRouter><SpotifyResults canPlay albums={[{ id: 'al', name: 'Album G', artists: [{ name: 'A' }], releaseYear: '2020', imageUrl: null }]} /></MemoryRouter>);
+    expect(screen.getByRole('button', { name: 'Play Album G' })).toHaveClass('spotify-action-play');
+    expect(screen.getByRole('button', { name: 'Add Album G to queue' })).not.toHaveClass('spotify-action-play');
+  });
+});
