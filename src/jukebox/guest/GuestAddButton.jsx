@@ -18,17 +18,22 @@ const label = (variant, { state, count }, shuffle) => {
 };
 
 // `spotifyTracks` (#72): Spotify tracks, or a function resolving them, sent
-// instead of library ids.
-const GuestAddButton = ({ itemKey, label: name, trackIds, spotifyTracks, kind, id, variant = 'icon' }) => {
+// instead of library ids. `items` (#72): an ordered mix of { trackId } and
+// { spotifyTrack }, for a library album filled from Spotify.
+const GuestAddButton = ({ itemKey, label: name, trackIds, spotifyTracks, items, kind, id, variant = 'icon' }) => {
   const { token, enqueue, statusFor } = useGuest();
   const status = statusFor(itemKey);
   // Artists and collections can be huge (a collection may hold 140+ albums),
   // so they shuffle a random batch, like the kiosk's "Shuffle All".
-  const shuffle = !trackIds && !spotifyTracks && SHUFFLE_KINDS.includes(kind);
+  const shuffle = !trackIds && !spotifyTracks && !items && SHUFFLE_KINDS.includes(kind);
 
   const handleClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (items) {
+      enqueue(itemKey, items, { mixed: true });
+      return;
+    }
     if (spotifyTracks) {
       enqueue(itemKey, spotifyTracks, { spotify: true });
       return;

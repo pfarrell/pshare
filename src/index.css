@@ -4675,6 +4675,14 @@ body:has(.jukebox-app) {
   position: relative;
 }
 
+.jukebox-guest-spotify-marker {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  margin-left: 0.4rem;
+  vertical-align: -0.1em;
+}
+
 .track-spotify-marker {
   display: inline-block;
   width: 0.9em;
