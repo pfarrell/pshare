@@ -4675,6 +4675,15 @@ body:has(.jukebox-app) {
   position: relative;
 }
 
+.track-spotify-marker {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  margin-left: 0.4rem;
+  vertical-align: -0.1em;
+  opacity: 0.9;
+}
+
 .spotify-album-marker {
   position: absolute;
   top: 0.4rem;

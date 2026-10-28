@@ -902,3 +902,22 @@ describe('Track component — row layout', () => {
     expect(container.querySelector('.track-row')).toBeNull();
   });
 });
+
+describe('Track component — Spotify marker (#72 album fill)', () => {
+  const entry = { source: 'spotify', uri: 'spotify:track:m', title: 'Filled Song', artist: { name: 'A' }, album: { title: 'Al' }, duration: 60 };
+
+  test('markSpotify shows the Spotify marker on a Spotify entry only', () => {
+    const { container, unmount } = render(
+      <MemoryRouter><Track track={entry} index={0} trackCount={1} markSpotify /></MemoryRouter>
+    );
+    expect(container.querySelector('.track-spotify-marker')).toBeInTheDocument();
+    unmount();
+
+    const library = renderTrack({ markSpotify: true });
+    expect(library.container.querySelector('.track-spotify-marker')).toBeNull();
+    library.unmount();
+
+    const { container: plain } = render(<MemoryRouter><Track track={entry} index={0} trackCount={1} /></MemoryRouter>);
+    expect(plain.querySelector('.track-spotify-marker')).toBeNull();
+  });
+});
