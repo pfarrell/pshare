@@ -13,8 +13,13 @@ vi.mock('./AddToPlaylistModal', () => ({ default: () => null }));
 vi.mock('./TrackNotesModal', () => ({ default: () => null }));
 
 vi.mock('../services/api', () => ({
-  apiService: { makeTrackSingle: vi.fn(), submitToJukebox: vi.fn() },
+  apiService: { makeTrackSingle: vi.fn(), submitToJukebox: vi.fn(), getImageUrl: (path) => `/img/${path}` },
 }));
+
+// null follows window.innerWidth like the real hook (some tests resize it);
+// the row-layout tests set it to flip between desktop and mobile on rerender.
+let mockIsMobile = null;
+vi.mock('../hooks/useIsMobile', () => ({ useIsMobile: () => mockIsMobile ?? window.innerWidth <= 768 }));
 
 vi.mock('../utils/shareLink', () => ({ shareLink: vi.fn() }));
 
@@ -48,6 +53,7 @@ const renderTrack = (props = {}, { route = '/' } = {}) =>
   );
 
 beforeEach(() => {
+  mockIsMobile = null;
   usePlayerStore.setState({
     playlist: [],
     currentTrack: null,
@@ -767,4 +773,126 @@ test('renders a Spotify queue entry (as JukeboxQueueRow does) with title and art
     </MemoryRouter>
   );
   expect(screen.getByText(/Spotify Title/)).toHaveTextContent('Spotify Artist');
+});
+
+describe('Track component — row layout', () => {
+  const rowTrack = { ...mockTrack, image_path: 'covers/test.jpg' };
+  const spotifyEntry = {
+    source: 'spotify',
+    uri: 'spotify:track:abc',
+    spotifyId: 'abc',
+    title: 'Spotify Song',
+    artist: { name: 'Spotify Artist' },
+    album: { title: 'Spotify Album', spotifyId: 'alb' },
+    imageUrl: 'https://i.scdn.co/image/x',
+    duration: 245,
+  };
+
+  test('row layout shows thumbnail, title and "artist · album · m:ss" subtitle without a track number', () => {
+    const { container } = renderTrack({ layout: 'row', track: rowTrack, index: 2 });
+    const row = container.querySelector('.track-row');
+    expect(row).toBeInTheDocument();
+    expect(row.querySelector('.track-row-image img')).toHaveAttribute('src', '/img/covers/test.jpg');
+    expect(row.querySelector('.track-row-title')).toHaveTextContent(/^Test Track$/);
+    expect(row.querySelector('.track-row-subtitle')).toHaveTextContent('Test Artist · Test Album · 3:00');
+    expect(screen.queryByText(/03\./)).not.toBeInTheDocument();
+  });
+
+  test('row layout subtitle names link to the artist and album pages', () => {
+    renderTrack({ layout: 'row', track: rowTrack });
+    expect(screen.getByRole('link', { name: 'Test Artist' })).toHaveAttribute('href', '/artist/2');
+    expect(screen.getByRole('link', { name: 'Test Album' })).toHaveAttribute('href', '/album/10');
+  });
+
+  test('clicking a subtitle link does not also play the track', () => {
+    const addTrack = vi.fn();
+    usePlayerStore.setState({ addTrack });
+    renderTrack({ layout: 'row', track: rowTrack });
+    fireEvent.click(screen.getByRole('link', { name: 'Test Artist' }));
+    expect(addTrack).not.toHaveBeenCalled();
+  });
+
+  test('row layout hides the _Singles album name', () => {
+    const { container } = renderTrack({ layout: 'row', track: { ...rowTrack, album: { ...rowTrack.album, title: '_Singles' } } });
+    expect(container.querySelector('.track-row-subtitle')).toHaveTextContent('Test Artist · 3:00');
+  });
+
+  test('row layout falls back to a glyph when the track has no image', () => {
+    const { container } = renderTrack({ layout: 'row' });
+    expect(container.querySelector('.track-row-image img')).toBeNull();
+    expect(container.querySelector('.track-row-image')).toHaveTextContent('♪');
+  });
+
+  test('row layout with showNumber shows "03." for index 2', () => {
+    renderTrack({ layout: 'row', track: rowTrack, index: 2, showNumber: true });
+    expect(screen.getByText('03.')).toBeInTheDocument();
+  });
+
+  test('row layout + button adds the track to the queue', () => {
+    const addTrack = vi.fn();
+    usePlayerStore.setState({ addTrack });
+    renderTrack({ layout: 'row', track: rowTrack });
+    fireEvent.click(screen.getByRole('button', { name: 'Add Test Track to queue' }));
+    expect(addTrack).toHaveBeenCalledWith(rowTrack, { flashActivity: true });
+  });
+
+  test('row layout play button plays the track', () => {
+    const addTrack = vi.fn();
+    usePlayerStore.setState({ addTrack });
+    renderTrack({ layout: 'row', track: rowTrack });
+    fireEvent.click(screen.getByRole('button', { name: 'Play Test Track' }));
+    expect(addTrack).toHaveBeenCalledWith(rowTrack, { flashActivity: true });
+  });
+
+  test('row layout keeps the row context menu (Go to Artist present on right-click)', () => {
+    const { container } = renderTrack({ layout: 'row', track: rowTrack });
+    fireEvent.contextMenu(container.querySelector('.track-row-title'));
+    expect(screen.getByText('🎤 Go to Artist')).toBeInTheDocument();
+  });
+
+  test('playing library row has class currently-playing; playing Spotify row has currently-playing and track-row-spotify', () => {
+    const { container, unmount } = renderTrack({ layout: 'row', track: rowTrack, isPlaying: true });
+    expect(container.querySelector('.track-row')).toHaveClass('currently-playing');
+    expect(container.querySelector('.track-row')).not.toHaveClass('track-row-spotify');
+    unmount();
+
+    const spotify = renderTrack({ layout: 'row', track: spotifyEntry, isPlaying: true });
+    expect(spotify.container.querySelector('.track-row')).toHaveClass('currently-playing', 'track-row-spotify');
+  });
+
+  test('Spotify row shows a green play button, a plain-text subtitle and the Open in Spotify link', () => {
+    const { container } = renderTrack({ layout: 'row', track: spotifyEntry, externalUrl: 'https://open.spotify.com/track/abc' });
+    expect(screen.getByRole('button', { name: 'Play Spotify Song' })).toHaveClass('track-row-play-spotify');
+    expect(container.querySelector('.track-row-subtitle')).toHaveTextContent('Spotify Artist · Spotify Album · 4:05');
+    expect(screen.queryByRole('link', { name: 'Spotify Artist' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open Spotify Song in Spotify' })).toHaveAttribute('href', 'https://open.spotify.com/track/abc');
+    expect(container.querySelector('.track-row-image img')).toHaveAttribute('src', 'https://i.scdn.co/image/x');
+  });
+
+  test('Spotify row with playable=false has no Play button but has the Open in Spotify link', () => {
+    renderTrack({ layout: 'row', track: spotifyEntry, playable: false, externalUrl: 'https://open.spotify.com/track/abc' });
+    expect(screen.queryByRole('button', { name: 'Play Spotify Song' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add Spotify Song to queue' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open Spotify Song in Spotify' })).toBeInTheDocument();
+  });
+
+  test('row layout on mobile renders the default markup (no .track-row)', () => {
+    mockIsMobile = true;
+    const { container, rerender } = renderTrack({ layout: 'row', track: rowTrack });
+    expect(container.querySelector('.track-row')).toBeNull();
+    expect(container.querySelector('.track-item')).toBeInTheDocument();
+
+    // A fresh element per rerender: React skips re-rendering an identical element.
+    const tree = () => (
+      <MemoryRouter>
+        <Track track={rowTrack} index={0} trackCount={1} layout="row" />
+      </MemoryRouter>
+    );
+    mockIsMobile = false;
+    rerender(tree());
+    expect(container.querySelector('.track-row')).toBeInTheDocument();
+    mockIsMobile = true;
+    rerender(tree());
+    expect(container.querySelector('.track-row')).toBeNull();
+  });
 });

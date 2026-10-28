@@ -5,7 +5,7 @@ import { useAuthStore } from '../stores/authStore';
 import { apiService } from '../services/api';
 import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
 import { formatDuration } from '../utils/formatters';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useIsCurrentPage } from '../hooks/useIsCurrentPage';
@@ -17,11 +17,26 @@ import { shareLink } from '../utils/shareLink';
 import { getStoredJukeboxToken } from '../utils/jukeboxEnqueueToken';
 import toast from 'react-hot-toast';
 import { isSpotifyTrack } from '../utils/trackSource';
+import OpenInSpotify from './OpenInSpotify';
 
 // forwardRef lets Album.jsx grab the DOM node of the track that arrived
 // playing (via the mobile now-playing tap) and scroll it into view.
 // hideArtist: the Spotify album page (#72) drops the " - Artist" suffix on rows by the album's own artist, as library albums do.
-const Track = forwardRef(({ track, index, trackCount, includeMeta = false, showArtist = false, hideArtist = false, isPlaying = false, showMakeSingle = false, showEdit = false, onMadeSingle, scrollAnchor = false }, ref) => {
+// layout="row" (desktop only; mobile always gets the default markup) is the
+// Spotify-search-style row used by Search, Playlist, Library and Artist:
+// thumbnail, title over "artist · album · m:ss", ▶ and + on the right.
+// showNumber keeps the position number there (Playlist); externalUrl is a
+// Spotify row's Open in Spotify link; playable=false hides a Spotify row's
+// ▶/+ for sessions that can't play Spotify.
+
+const TrackRowImage = ({ src, alt }) => {
+  const [failed, setFailed] = useState(false);
+  if (typeof src !== 'string' || !src || failed) {
+    return <div className="track-row-image-fallback" aria-hidden="true">♪</div>;
+  }
+  return <img src={src} alt={alt} onError={() => setFailed(true)} />;
+};
+const Track = forwardRef(({ track, index, trackCount, includeMeta = false, showArtist = false, hideArtist = false, isPlaying = false, showMakeSingle = false, showEdit = false, onMadeSingle, scrollAnchor = false, layout = 'default', showNumber = false, externalUrl = null, playable = true }, ref) => {
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [pressedButton, setPressedButton] = useState(null);
@@ -222,6 +237,102 @@ const Track = forwardRef(({ track, index, trackCount, includeMeta = false, showA
     isAuthenticated && getStoredJukeboxToken() && { key: 'jukebox', icon: '🎉', label: 'Send to Jukebox', onClick: handleSendToJukebox },
   ];
 
+  const overlays = (
+    <>
+        <ContextMenu
+          open={playCtxMenu.open}
+          position={playCtxMenu.position}
+          openedViaTouch={playCtxMenu.openedViaTouch}
+          onDismiss={playCtxMenu.dismiss}
+          onSwallowTouch={playCtxMenu.swallowTouch}
+          actions={playMenuActions}
+          testId="track-play-menu-backdrop"
+        />
+
+        <ContextMenu
+          open={ctxMenu.open}
+          position={ctxMenu.position}
+          openedViaTouch={ctxMenu.openedViaTouch}
+          onDismiss={ctxMenu.dismiss}
+          onSwallowTouch={ctxMenu.swallowTouch}
+          actions={rowMenuActions}
+          testId="track-menu-backdrop"
+        />
+
+        {showPlaylistModal && (
+          <AddToPlaylistModal
+            track={track}
+            onClose={() => setShowPlaylistModal(false)}
+          />
+        )}
+
+        {showNotesModal && (
+          <TrackNotesModal
+            track={track}
+            onClose={() => setShowNotesModal(false)}
+          />
+        )}
+    </>
+  );
+
+  if (layout === 'row' && !isMobile) {
+    const imageSrc = track.image_path ? apiService.getImageUrl(track.image_path, 'album_small') : track.imageUrl;
+    const albumTitle = track.album?.title && track.album.title !== '_Singles' ? track.album.title : '';
+    const stop = (e) => e.stopPropagation();
+    const subtitle = [
+      track.artist?.name && (!spotify && track.artist.id
+        ? <Link key="artist" to={`/artist/${track.artist.id}`} onClick={stop}>{track.artist.name}</Link>
+        : track.artist.name),
+      albumTitle && (!spotify && track.album?.id
+        ? <Link key="album" to={`/album/${track.album.id}`} onClick={stop}>{albumTitle}</Link>
+        : albumTitle),
+      track.duration ? formatDuration(track.duration) : '',
+    ].filter(Boolean);
+    const canPlayRow = !spotify || playable;
+
+    return (
+      <div
+        ref={ref}
+        className={`track-row${spotify ? ' track-row-spotify' : ''}${isPlaying ? ' currently-playing' : ''}`}
+        {...ctxMenu.triggerProps}
+      >
+        {showNumber && <span className="track-row-number">{String(index + 1).padStart(2, '0')}.</span>}
+        <div className="track-row-image">
+          <TrackRowImage src={imageSrc} alt={albumTitle || track.title} />
+        </div>
+        <div className="track-row-text" onClick={canPlayRow ? handleTrackClick : undefined}>
+          <h4 className="track-row-title">{track.title}</h4>
+          {subtitle.length > 0 && (
+            <p className="track-row-subtitle">
+              {subtitle.map((part, i) => (
+                <span key={i}>{i > 0 && ' · '}{part}</span>
+              ))}
+            </p>
+          )}
+        </div>
+        <div className="track-row-actions">
+          {canPlayRow && (
+            <>
+              <PlayButton
+                size={28}
+                className={`track-row-play${spotify ? ' track-row-play-spotify' : ''}`}
+                active={isPlaying}
+                onClick={handleTrackClick}
+                aria-label={isPlaying ? 'Now playing' : `Play ${track.title}`}
+                {...playCtxMenu.triggerProps}
+              >
+                {isPlaying && <span className="play-button-note">♪</span>}
+              </PlayButton>
+              <button type="button" className="track-row-add" aria-label={`Add ${track.title} to queue`} onClick={handleAddToQueue}>+</button>
+            </>
+          )}
+          {spotify && <OpenInSpotify url={externalUrl} name={track.title} />}
+        </div>
+        {overlays}
+      </div>
+    );
+  }
+
   return (
     <div
       ref={ref}
@@ -315,39 +426,7 @@ const Track = forwardRef(({ track, index, trackCount, includeMeta = false, showA
         </h4>
       </div>
 
-      <ContextMenu
-        open={playCtxMenu.open}
-        position={playCtxMenu.position}
-        openedViaTouch={playCtxMenu.openedViaTouch}
-        onDismiss={playCtxMenu.dismiss}
-        onSwallowTouch={playCtxMenu.swallowTouch}
-        actions={playMenuActions}
-        testId="track-play-menu-backdrop"
-      />
-
-      <ContextMenu
-        open={ctxMenu.open}
-        position={ctxMenu.position}
-        openedViaTouch={ctxMenu.openedViaTouch}
-        onDismiss={ctxMenu.dismiss}
-        onSwallowTouch={ctxMenu.swallowTouch}
-        actions={rowMenuActions}
-        testId="track-menu-backdrop"
-      />
-
-      {showPlaylistModal && (
-        <AddToPlaylistModal
-          track={track}
-          onClose={() => setShowPlaylistModal(false)}
-        />
-      )}
-
-      {showNotesModal && (
-        <TrackNotesModal
-          track={track}
-          onClose={() => setShowNotesModal(false)}
-        />
-      )}
+      {overlays}
     </div>
   );
 });
