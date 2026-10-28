@@ -1,28 +1,15 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { searchService, RESULT_LIMIT } from '../services/searchService.js'
+import { filterQuery } from '../services/searchQuery.js'
 import { logService } from '../services/logService.js'
 import { extractIpAddress } from '../utils/requestIp.js'
 import { resolveProfileTagIds } from '../services/profileFilter.js'
 import { isSpotifyConfigured, searchSpotify, SpotifyRateLimitError } from '../services/spotify.js'
 import { filterRelevantArtists, spotifyLibraryMatcher, withNullLocalIds, type AnnotatedSpotifyResult } from '../services/spotifyLibraryMatch.js'
+import { spotifySearchScorer, withNullScores, type ScoredSpotifyResult } from '../services/spotifySearchScore.js'
 
 const search = new Hono()
-
-const STOP_WORDS = new Set([
-  'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from',
-  'has', 'he', 'in', 'is', 'it', 'its', 'of', 'on', 'that', 'the',
-  'to', 'was', 'will', 'with',
-])
-
-function filterQuery(q: string): string {
-  return q
-    .replace(/[^\w\s]/g, '')
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((w) => w && !STOP_WORDS.has(w))
-    .join(' ')
-}
 
 const QUOTE_CHARS = new Set(['"', '“', '”'])
 
@@ -176,10 +163,13 @@ search.get('/', handleSearchRequest)
 // stop-word-filtered one, since Spotify does its own matching. Unconfigured
 // is a normal 200 with empty lists so the frontend can just hide the section.
 // Every item carries `localId` (matching library row, or null) so the
-// frontend can hide what the library already owns; artists unrelated to the
-// query are dropped. A failed library lookup degrades to localId: null.
+// frontend can hide what the library already owns, and `score` (the library
+// search's ranking score, or null when the name doesn't match — see
+// spotifySearchScore.ts) so it can mix them into library results; artists
+// unrelated to the query are dropped. A failed library lookup degrades to
+// localId: null, a failed scoring query to score: null.
 search.get('/spotify', async (c) => {
-  const { query } = parseQuoted(c.req.query('q') ?? '')
+  const { query, exactOnly } = parseQuoted(c.req.query('q') ?? '')
   if (!query) return c.json({ error: 'Missing q' }, 400)
   if (!isSpotifyConfigured()) return c.json({ configured: false, tracks: [], albums: [], artists: [] })
 
@@ -193,7 +183,14 @@ search.get('/spotify', async (c) => {
       console.error('Spotify library match failed:', err)
       annotated = withNullLocalIds(relevant)
     }
-    const { tracks, albums, artists } = annotated
+    let scored: ScoredSpotifyResult
+    try {
+      scored = await spotifySearchScorer.score(annotated, query, exactOnly)
+    } catch (err) {
+      console.error('Spotify search scoring failed:', err)
+      scored = withNullScores(annotated)
+    }
+    const { tracks, albums, artists } = scored
     return c.json({ configured: true, tracks, albums, artists })
   } catch (err) {
     if (err instanceof SpotifyRateLimitError) {
