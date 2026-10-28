@@ -18,8 +18,13 @@ vi.mock('../services/api', () => ({
     getAdjacentAlbums: vi.fn(),
     getImageUrl: () => 'http://example.com/image.jpg',
     makeTrackSingle: vi.fn(),
+    getSpotifyAlbumFill: vi.fn(),
   },
 }));
+
+// #72 album fill: eligibility is stubbed; ineligible by default.
+const spotifyEligible = { value: false };
+vi.mock('../player/spotify/useCanPlaySpotify', () => ({ useCanPlaySpotify: () => spotifyEligible.value }));
 
 const albumData = {
   artist: { id: 5, name: 'Album Artist' },
@@ -441,5 +446,80 @@ describe('Album page — Make Single', () => {
 
     await waitFor(() => expect(screen.queryByText(/Track One/)).not.toBeInTheDocument());
     expect(screen.getByText(/Track Two/)).toBeInTheDocument();
+  });
+});
+
+describe('Album page — Spotify fill (#72)', () => {
+  const libTrack = (id, title, track_number) => ({
+    id, title, track_number, duration: 180,
+    artist: { id: 5, name: 'Album Artist' }, album: { id: 10, title: 'Test Album', artist: { id: 5, name: 'Album Artist' } },
+  });
+  const fillTrack = (position, name) => ({
+    position, uri: `spotify:track:p${position}`, id: `p${position}`, name,
+    artists: [{ id: 'aa', name: 'Album Artist' }], album: { id: 'sp', name: 'Test Album', imageUrl: null }, durationMs: 200000,
+  });
+  const fill = {
+    configured: true, spotifyAlbum: { id: 'sp', name: 'Test Album', imageUrl: null },
+    tracks: [fillTrack(1, 'Spot One'), fillTrack(2, 'Spot Two'), fillTrack(11, 'Spot Eleven')],
+    libraryPositions: { 1: 10 },
+  };
+  const rowTitles = () => [...document.querySelectorAll('.track-title')].map((el) => el.textContent);
+
+  beforeEach(() => {
+    spotifyEligible.value = true;
+    window.innerWidth = 1024;
+    apiService.getAlbum.mockResolvedValue({ data: { ...albumData, tracks: [libTrack(1, 'Library Ten', '10')] } });
+    apiService.getSpotifyAlbumFill.mockReset();
+    apiService.getSpotifyAlbumFill.mockResolvedValue({ data: fill });
+  });
+  afterEach(() => {
+    spotifyEligible.value = false;
+    window.innerWidth = 1024;
+  });
+
+  test('eligible desktop: Spotify tracks appear in their positions, numbered in order, with a Spotify marker', async () => {
+    renderAlbum();
+    await screen.findByText(/Spot Eleven/);
+    const titles = rowTitles();
+    expect(titles.map((t) => t.slice(0, 3))).toEqual(['01.', '02.', '03.', '04.']);
+    expect(titles[0]).toContain('Spot One');
+    expect(titles[2]).toContain('Library Ten');
+    expect(titles[3]).toContain('Spot Eleven');
+    expect(titles[0]).not.toContain('Album Artist');
+    expect(document.querySelectorAll('.track-spotify-marker')).toHaveLength(3);
+    expect(apiService.getSpotifyAlbumFill).toHaveBeenCalledWith(10);
+  });
+
+  test('Play album queues the merged list in order', async () => {
+    const addTracks = vi.fn();
+    usePlayerStore.setState({ addTracks, setQueueSource: vi.fn(), currentTrack: null });
+    renderAlbum();
+    await screen.findByText(/Spot Eleven/);
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    const queued = addTracks.mock.calls[0][0];
+    expect(queued.map((t) => t.uri ?? t.id)).toEqual(['spotify:track:p1', 'spotify:track:p2', 1, 'spotify:track:p11']);
+  });
+
+  test('a playing Spotify track highlights only its own row', async () => {
+    usePlayerStore.setState({ currentTrack: { source: 'spotify', uri: 'spotify:track:p2', title: 'Spot Two', artist: { name: 'Album Artist' } } });
+    renderAlbum();
+    await screen.findByText(/Spot Eleven/);
+    const playing = [...document.querySelectorAll('.track-title')].filter((el) => el.style.color === 'rgb(29, 78, 216)');
+    expect(playing.map((el) => el.textContent)).toEqual([expect.stringContaining('Spot Two')]);
+    usePlayerStore.setState({ currentTrack: null });
+  });
+
+  test('ineligible or mobile: no fill request, tracks unchanged', async () => {
+    spotifyEligible.value = false;
+    const { unmount } = renderAlbum();
+    await screen.findByText(/Library Ten/);
+    unmount();
+    spotifyEligible.value = true;
+    window.innerWidth = 375;
+    renderAlbum();
+    await screen.findByText(/Library Ten/);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(apiService.getSpotifyAlbumFill).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Spot One/)).toBeNull();
   });
 });

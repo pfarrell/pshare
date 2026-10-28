@@ -1,5 +1,5 @@
 // src/pages/Album.jsx
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import ImageLightbox from '../components/ImageLightbox';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { apiService } from '../services/api';
@@ -21,6 +21,10 @@ import { useOvertoneAction } from '../hooks/useOvertoneAction';
 import { useFetch } from '../hooks/useFetch';
 import { useEntityHeaderActions } from '../hooks/useEntityHeaderActions';
 import { useQueueActions } from '../hooks/useQueueActions';
+import { useIsMobile } from '../hooks/useIsMobile';
+import { useSpotifyAlbumFill } from '../player/spotify/useSpotifyAlbumFill';
+import { mergeAlbumFill } from '../utils/mergeAlbumFill';
+import { isSpotifyTrack } from '../utils/trackSource';
 
 const Album = () => {
   const { id } = useParams();
@@ -39,6 +43,11 @@ const Album = () => {
     () => apiService.getAlbum(id).then((response) => response.data),
     [id]
   );
+  // #72: Spotify tracks for the positions this library album is missing
+  // (desktop sessions that can play Spotify only; otherwise the library list as-is).
+  const isMobile = useIsMobile();
+  const fill = useSpotifyAlbumFill(albumData?.album?.id ?? null, { enabled: !isMobile });
+  const tracks = useMemo(() => mergeAlbumFill(albumData?.tracks, fill), [albumData?.tracks, fill]);
   const [showAlbumModal, setShowAlbumModal] = useState(false);
   const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [adjacentAlbums, setAdjacentAlbums] = useState({ prev: null, next: null });
@@ -75,9 +84,9 @@ const Album = () => {
   useEffect(() => {
     // Lets the footer play button start playing this album's tracks when the playlist is
     // empty, instead of trying to resume a track that was never loaded.
-    setPageTracks(albumData?.tracks || []);
+    setPageTracks(tracks || []);
     return () => setPageTracks([]);
-  }, [albumData, setPageTracks]);
+  }, [tracks, setPageTracks]);
 
   useEffect(() => {
     if (!scrollToTrackIdRef.current || !activeTrackRef.current) return;
@@ -85,15 +94,18 @@ const Album = () => {
     scrollToTrackIdRef.current = null; // one-shot: only on the arrival that requested it
   }, [albumData]);
 
-  const queue = useQueueActions(albumData?.tracks, { queueSource: albumData?.album ? { type: 'album', id: albumData.album.id } : undefined });
+  const queue = useQueueActions(tracks, { queueSource: albumData?.album ? { type: 'album', id: albumData.album.id } : undefined });
 
   const handleMadeSingle = (trackId) => {
     setAlbumData((d) => ({ ...d, tracks: d.tracks.filter((t) => t.id !== trackId) }));
   };
 
   // Helper function to check if a track is currently playing
+  // Spotify entries have no id, so they compare by uri; the two kinds never match each other.
   const isTrackPlaying = (track) => {
-    return currentTrack && currentTrack.id === track.id;
+    if (!currentTrack) return false;
+    if (isSpotifyTrack(track)) return isSpotifyTrack(currentTrack) && currentTrack.uri === track.uri;
+    return !isSpotifyTrack(currentTrack) && currentTrack.id === track.id;
   };
 
   if (loading) {
@@ -104,7 +116,7 @@ const Album = () => {
     return <PageError message={error ? 'Failed to load album' : 'Album not found'} />;
   }
 
-  const { artist, album, tracks, summary, secondary_artists, compilation_artists, collections, notes } = albumData;
+  const { artist, album, summary, secondary_artists, compilation_artists, collections, notes } = albumData;
 
   // Collaborators are folded into the primary artist heading itself
   // ("Elton John, Ray Charles"); every other non-primary role (featured,
@@ -261,20 +273,25 @@ const Album = () => {
         overflowX: 'hidden',
         overflowY: 'visible'
       }}>
-        {tracks.map((track, index) => (
-          <Track
-            key={track.id || index}
-            ref={track.id === scrollToTrackIdRef.current ? activeTrackRef : undefined}
-            scrollAnchor={track.id === scrollToTrackIdRef.current}
-            track={track}
-            index={index}
-            trackCount={tracks.length}
-            isPlaying={isTrackPlaying(track)}
-            showMakeSingle={isAdmin}
-            showEdit={isAdmin}
-            onMadeSingle={handleMadeSingle}
-          />
-        ))}
+        {tracks.map((track, index) => {
+          const spotify = isSpotifyTrack(track);
+          return (
+            <Track
+              key={spotify ? track.uri : (track.id || index)}
+              ref={!spotify && track.id === scrollToTrackIdRef.current ? activeTrackRef : undefined}
+              scrollAnchor={!spotify && track.id === scrollToTrackIdRef.current}
+              track={track}
+              index={index}
+              trackCount={tracks.length}
+              isPlaying={isTrackPlaying(track)}
+              showMakeSingle={isAdmin && !spotify}
+              showEdit={isAdmin && !spotify}
+              onMadeSingle={handleMadeSingle}
+              markSpotify={spotify}
+              hideArtist={spotify && track.artist?.name === artist?.name}
+            />
+          );
+        })}
       </div>
 
       <ExternalLinks entityType="album" entityId={parseInt(id)} />

@@ -17,15 +17,17 @@ export interface CachedArtistAlbums {
 // Local artist ids are numbers, Spotify ids are strings, so the two never collide.
 type CacheKey = number | string
 
-export function createSpotifyArtistAlbumsCache({ ttlMs, maxEntries, now = Date.now }: {
+// Generic over the cached value so other per-entity Spotify lookups (album
+// fills) share the same TTL + LRU behaviour.
+export function createSpotifyArtistAlbumsCache<V = CachedArtistAlbums>({ ttlMs, maxEntries, now = Date.now }: {
   ttlMs: number
   maxEntries: number
   now?: () => number
 }) {
   // Map iteration order is insertion order, so re-inserting on read makes the first key the LRU one.
-  const entries = new Map<CacheKey, { value: CachedArtistAlbums; expiresAt: number }>()
+  const entries = new Map<CacheKey, { value: V; expiresAt: number }>()
   return {
-    get(key: CacheKey): CachedArtistAlbums | undefined {
+    get(key: CacheKey): V | undefined {
       const hit = entries.get(key)
       if (!hit) return undefined
       entries.delete(key)
@@ -33,7 +35,7 @@ export function createSpotifyArtistAlbumsCache({ ttlMs, maxEntries, now = Date.n
       entries.set(key, hit)
       return hit.value
     },
-    set(key: CacheKey, value: CachedArtistAlbums): void {
+    set(key: CacheKey, value: V): void {
       entries.delete(key)
       entries.set(key, { value, expiresAt: now() + ttlMs })
       while (entries.size > maxEntries) entries.delete(entries.keys().next().value as CacheKey)

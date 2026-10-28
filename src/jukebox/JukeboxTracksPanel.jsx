@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { apiService } from '../services/api';
 import Track from '../components/Track';
 import { useQueueActions } from '../hooks/useQueueActions';
 import { useTouchScroll } from './useTouchScroll';
+import { useSpotifyAlbumFill } from '../player/spotify/useSpotifyAlbumFill';
+import { mergeAlbumFill } from '../utils/mergeAlbumFill';
+import { isSpotifyTrack } from '../utils/trackSource';
 
 // The album's track list, shown in its own panel to the left of the Browse
 // panel (see JukeboxBrowsePanel, which owns which album is selected). Tapping a
@@ -29,10 +32,15 @@ const JukeboxTracksPanel = ({ album, onClose, onEnqueue, onSelectArtist }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-fetch only when the album actually changes, not on every load() identity change
   }, [album.id]);
 
+  // #72: Spotify tracks for the positions this library album is missing, when
+  // the kiosk can play Spotify; otherwise exactly the library tracks.
+  const fill = useSpotifyAlbumFill(album.id);
+  const tracks = useMemo(() => mergeAlbumFill(data?.tracks ?? [], fill), [data, fill]);
+
   // Hand the hook the tracks we've already loaded (not a refetching function),
   // so a tap can't fail on the network. Empty until loaded, when the buttons
   // below are disabled anyway.
-  const queue = useQueueActions(data?.tracks ?? [], {
+  const queue = useQueueActions(tracks, {
     queueSource: { type: 'album', id: album.id },
     errorLabel: 'Failed to queue album',
   });
@@ -97,8 +105,15 @@ const JukeboxTracksPanel = ({ album, onClose, onEnqueue, onSelectArtist }) => {
           // Track's handler ever ran — confirmed on real hardware, not just in
           // theory (see JukeboxTracksPanel.test.jsx).
           <div className="jukebox-search-tracks" onClick={() => onEnqueue?.()}>
-            {data.tracks.map((track, index) => (
-              <Track key={track.id} track={track} index={index} trackCount={data.tracks.length} />
+            {tracks.map((track, index) => (
+              <Track
+                key={track.id ?? track.uri}
+                track={track}
+                index={index}
+                trackCount={tracks.length}
+                markSpotify={isSpotifyTrack(track)}
+                hideArtist={isSpotifyTrack(track) && track.artist?.name === artist?.name}
+              />
             ))}
           </div>
         )}

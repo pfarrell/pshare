@@ -17,7 +17,7 @@ const album = (id: string, name: string, artistNames: string[]): SpotifyAlbum =>
 })
 const track = (id: string, name: string, artistNames: string[]): SpotifyTrack => ({
   uri: `spotify:track:${id}`, id, name, artists: artistNames.map((n, i) => ({ id: `${id}-a${i}`, name: n })),
-  album: { id: 'x', name: 'x', imageUrl: null }, durationMs: 0, explicit: false, externalUrl: null,
+  album: { id: 'x', name: 'x', imageUrl: null }, durationMs: 0, explicit: false, externalUrl: null, discNumber: null, trackNumber: null,
 })
 const empty: SpotifySearchResult = { tracks: [], albums: [], artists: [] }
 

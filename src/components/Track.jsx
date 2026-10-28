@@ -17,7 +17,7 @@ import { shareLink } from '../utils/shareLink';
 import { getStoredJukeboxToken } from '../utils/jukeboxEnqueueToken';
 import toast from 'react-hot-toast';
 import { isSpotifyTrack } from '../utils/trackSource';
-import OpenInSpotify from './OpenInSpotify';
+import OpenInSpotify, { SpotifyLogo } from './OpenInSpotify';
 
 // forwardRef lets Album.jsx grab the DOM node of the track that arrived
 // playing (via the mobile now-playing tap) and scroll it into view.
@@ -36,7 +36,7 @@ const TrackRowImage = ({ src, alt }) => {
   }
   return <img src={src} alt={alt} onError={() => setFailed(true)} />;
 };
-const Track = forwardRef(({ track, index, trackCount, includeMeta = false, showArtist = false, hideArtist = false, isPlaying = false, showMakeSingle = false, showEdit = false, onMadeSingle, scrollAnchor = false, layout = 'default', showNumber = false, externalUrl = null, playable = true }, ref) => {
+const Track = forwardRef(({ track, index, trackCount, includeMeta = false, showArtist = false, hideArtist = false, isPlaying = false, showMakeSingle = false, showEdit = false, onMadeSingle, scrollAnchor = false, layout = 'default', showNumber = false, externalUrl = null, playable = true, markSpotify = false }, ref) => {
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [pressedButton, setPressedButton] = useState(null);
@@ -378,6 +378,8 @@ const Track = forwardRef(({ track, index, trackCount, includeMeta = false, showA
         }}>
           {String(index + 1).padStart(2, '0')}. {track.title}
           {!hideArtist && (showArtist || spotify || track.artist.id !== track.album?.artist?.id) && track.artist.name && (' - ' + track.artist.name)}
+          {/* #72: marks a Spotify track filling a gap on a library album. */}
+          {markSpotify && spotify && <SpotifyLogo className="track-spotify-marker" />}
 
           {track.duration && (
             <span style={{
