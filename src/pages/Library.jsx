@@ -72,6 +72,7 @@ const Library = () => {
               track={f.item}
               index={index}
               trackCount={itemsForKind.length}
+              layout="row"
               isPlaying={currentTrack?.id === f.item.id}
               showEdit={isAdmin}
             />

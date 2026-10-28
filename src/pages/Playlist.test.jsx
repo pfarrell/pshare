@@ -266,3 +266,11 @@ test('admins can manage the playlist\'s tags on the playlist page', async () => 
   expect(screen.getByPlaceholderText('add tag…')).toBeInTheDocument();
   expect(apiService.getPlaylistTags).toHaveBeenCalledWith(20);
 });
+
+test('Playlist renders tracks with the row layout and position numbers', async () => {
+  const { container } = renderPlaylist();
+  await screen.findByText(/Track One/);
+  expect(container.querySelectorAll('.track-row')).toHaveLength(2);
+  expect(screen.getByText('01.')).toBeInTheDocument();
+  expect(screen.getByText('02.')).toBeInTheDocument();
+});

@@ -9,9 +9,13 @@ import Track from '../components/Track';
 import SearchResultCard from '../components/SearchResultCard';
 import SearchTypeFilterPills from '../components/SearchTypeFilterPills';
 import CardGrid from '../components/CardGrid';
-import SpotifyResults from '../components/SpotifyResults';
+import SpotifyResults, { SpotifyResultCard, SpotifyTrackRow } from '../components/SpotifyResults';
 import { useCanPlaySpotify } from '../player/spotify/useCanPlaySpotify';
 import { visibleSpotifyResults, spotifyItemCount } from '../utils/spotifyResults';
+import { mergeRankedResults, mergeTracks } from '../utils/mergeSearchResults';
+import { isSpotifyTrack, toSpotifyQueueTrack } from '../utils/trackSource';
+import { useIsMobile } from '../hooks/useIsMobile';
+import { usePlayerStore } from '../stores/playerStore';
 
 const EMPTY_COUNTS = { album: 0, artist: 0, playlist: 0, collection: 0 };
 const PAGE_SIZE = 30;
@@ -54,6 +58,8 @@ const Search = () => {
 
   // Whether Spotify results can be played in-page (#72).
   const canPlay = useCanPlaySpotify();
+  const isMobile = useIsMobile();
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
 
   // Fired alongside (not after) the local search and never awaited, so local
   // results render as soon as they arrive. First page only — loadMore never
@@ -86,7 +92,13 @@ const Search = () => {
     setError(null);
     setLoadMoreError(null);
     setSpotifyOnly(false);
-    fetchSpotify(searchQuery, searchGenerationRef.current);
+    // A profile filter limits results to that profile's tags, which Spotify
+    // items can't have, so a filtered search leaves Spotify out entirely.
+    if (activeProfileId) {
+      setSpotify({ loading: false, data: null });
+    } else {
+      fetchSpotify(searchQuery, searchGenerationRef.current);
+    }
 
     try {
       const response = await apiService.search(searchQuery, undefined, activeProfileId);
@@ -178,9 +190,10 @@ const Search = () => {
   }, [hasMore, loadMore]);
 
   // The Spotify pill and the type pills are mutually exclusive views rather
-  // than combinable filters (type pills only apply to local results, which
-  // Spotify-only mode hides): turning Spotify on clears the type selection,
-  // and picking a type pill turns Spotify-only off.
+  // than combinable filters (type pills apply to the mixed library + Spotify
+  // results, which Spotify-only mode replaces with the grouped Spotify
+  // section): turning Spotify on clears the type selection, and picking a
+  // type pill turns Spotify-only off.
   const toggleSpotifyOnly = () => {
     if (!spotifyOnly) setActiveTypes(new Set());
     setSpotifyOnly(!spotifyOnly);
@@ -222,24 +235,37 @@ const Search = () => {
   }
 
   const allResults = results.results || [];
+  // Spotify items the library doesn't already have, mixed into the library
+  // results by score (utils/mergeSearchResults.js). spotify.data is only
+  // non-null when Spotify is configured and responded.
+  const visibleSpotify = visibleSpotifyResults(spotify.data);
+  const mergedResults = mergeRankedResults(allResults, visibleSpotify.artists, visibleSpotify.albums, { hasMore });
+  const mergedTracks = mergeTracks(results.tracks, visibleSpotify.tracks);
   const filteredResults = activeTypes.size === 0
-    ? allResults
-    : allResults.filter((r) => activeTypes.has(r.type));
+    ? mergedResults
+    : mergedResults.filter((r) => activeTypes.has(r.type));
+  // Counts include the mixed-in Spotify artists and albums, even any still
+  // waiting for a later library page, just as resultCounts includes library
+  // results not loaded yet.
+  const mixedCounts = {
+    ...resultCounts,
+    album: (resultCounts.album || 0) + visibleSpotify.albums.length,
+    artist: (resultCounts.artist || 0) + visibleSpotify.artists.length,
+  };
   // When a type filter is active, the heading must total only the active
   // types — otherwise it disagrees with what's actually visible in the grid
   // below it (a pre-existing, deliberate UX property: filtering to "Albums"
   // should make the heading read the album count, not the grand total).
   const totalResultCount = activeTypes.size === 0
-    ? Object.values(resultCounts).reduce((sum, n) => sum + n, 0)
-    : [...activeTypes].reduce((sum, type) => sum + (resultCounts[type] || 0), 0);
-  // spotify.data is only non-null when Spotify is configured and responded.
+    ? Object.values(mixedCounts).reduce((sum, n) => sum + n, 0)
+    : [...activeTypes].reduce((sum, type) => sum + (mixedCounts[type] || 0), 0);
   const spotifyCount = spotifyItemCount(spotify.data);
   const showLocal = !spotifyOnly;
 
   return (
     <div style={{ padding: '.5rem', maxWidth: '1400px', margin: '0 auto' }}>
       <SearchTypeFilterPills
-        counts={allResults.length > 0 ? resultCounts : EMPTY_COUNTS}
+        counts={mergedResults.length > 0 ? mixedCounts : EMPTY_COUNTS}
         activeTypes={activeTypes}
         onToggle={toggleType}
       >
@@ -256,12 +282,19 @@ const Search = () => {
       </SearchTypeFilterPills>
 
       {/* Ranked results: albums, artists, playlists, collections, interleaved by confidence */}
-      {showLocal && allResults.length > 0 && (
+      {showLocal && mergedResults.length > 0 && (
         <div className="search-section">
           <h2 className="search-section-title">Results ({totalResultCount})</h2>
           <div className="artist-grid" style={{ padding: '0' }}>
             <CardGrid>
-              {filteredResults.map((result) => (
+              {filteredResults.map((result, i) => (result.source === 'spotify' ? (
+                <SpotifyResultCard
+                  key={`spotify-${result.type}-${result.data.id ?? i}`}
+                  kind={result.type}
+                  item={result.data}
+                  canPlay={canPlay}
+                />
+              ) : (
                 <SearchResultCard
                   key={`${result.type}-${result.data.id}`}
                   type={result.type}
@@ -269,7 +302,7 @@ const Search = () => {
                   onNavigate={navigate}
                   getImageUrl={apiService.getImageUrl}
                 />
-              ))}
+              )))}
             </CardGrid>
           </div>
           {hasMore && <div ref={sentinelRef} style={{ height: '1px' }} />}
@@ -285,30 +318,59 @@ const Search = () => {
       )}
 
       {/* Tracks Section */}
-      {showLocal && results.tracks && results.tracks.length > 0 && (
+      {showLocal && mergedTracks.length > 0 && (
         <div className="search-section">
-          <h2 className="search-section-title">Tracks ({results.tracks.length})</h2>
+          <h2 className="search-section-title">Tracks ({mergedTracks.length})</h2>
           <div className="track-list">
-            {results.tracks.map((track, index) => (
-              <Track key={track.id} track={track} index={index} trackCount={results.tracks.length} includeMeta={true} showEdit={isAdmin}/>
-            ))}
+            {mergedTracks.map((entry, index) => {
+              if (entry.source === 'library') {
+                const track = entry.data;
+                return (
+                  <Track
+                    key={track.id}
+                    track={track}
+                    index={index}
+                    trackCount={mergedTracks.length}
+                    includeMeta={true}
+                    showEdit={isAdmin}
+                    layout="row"
+                    isPlaying={!isSpotifyTrack(currentTrack) && currentTrack?.id === track.id}
+                  />
+                );
+              }
+              // Mobile keeps today's Spotify row; so does an item that can't
+              // become a queue entry (no uri), which is link-out only anyway.
+              const queueEntry = isMobile ? null : toSpotifyQueueTrack(entry.data);
+              if (!queueEntry) {
+                return <SpotifyTrackRow key={`spotify-${entry.data.id ?? index}`} item={entry.data} canPlay={canPlay} />;
+              }
+              return (
+                <Track
+                  key={`spotify-${queueEntry.uri}`}
+                  track={queueEntry}
+                  index={index}
+                  trackCount={mergedTracks.length}
+                  layout="row"
+                  externalUrl={entry.data.externalUrl}
+                  playable={canPlay}
+                  isPlaying={isSpotifyTrack(currentTrack) && currentTrack.uri === queueEntry.uri}
+                />
+              );
+            })}
           </div>
         </div>
       )}
 
       {/* No results */}
-      {showLocal && results.results?.length === 0 && results.tracks?.length === 0 && (
+      {showLocal && mergedResults.length === 0 && mergedTracks.length === 0 && (
         <div style={{ textAlign: 'center', padding: '3rem' }}>
           <p style={{ color: 'var(--color-text-muted)' }}>No results found for "{query}"</p>
         </div>
       )}
 
-      {/* External Spotify results: by default minus anything the library
-          already has (server-matched localId); everything in Spotify-only mode */}
-      {spotify.loading ? (
-        <SpotifyResults loading />
-      ) : spotify.data && (
-        <SpotifyResults {...visibleSpotifyResults(spotify.data, { includeLibraryMatches: spotifyOnly })} canPlay={canPlay} />
+      {/* Spotify-only mode: the grouped Spotify section, library matches included */}
+      {spotifyOnly && spotify.data && (
+        <SpotifyResults {...visibleSpotifyResults(spotify.data, { includeLibraryMatches: true })} canPlay={canPlay} />
       )}
     </div>
   );

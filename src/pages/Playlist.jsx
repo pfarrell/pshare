@@ -159,6 +159,8 @@ export default function Playlist() {
               track={track}
               index={index}
               trackCount={tracks.length}
+              layout="row"
+              showNumber
               includeMeta={true}
               isPlaying={currentTrack?.id === track.id}
               showEdit={isAdmin}

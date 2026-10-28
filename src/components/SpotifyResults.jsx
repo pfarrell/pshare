@@ -10,8 +10,11 @@ import { toSpotifyQueueTrack } from '../utils/trackSource';
 import OpenInSpotify from './OpenInSpotify';
 import { albumQueueTracks } from '../player/spotify/albumQueue';
 
-// "From Spotify" section at the bottom of the Search page. These items are
-// not in the library. By default they only link out to Spotify; with
+// Spotify items on the Search page (#72). In the default view each item is
+// mixed into the library results (SpotifyResultCard in the results grid,
+// SpotifyTrackRow for tracks on mobile — desktop tracks use Track's row
+// layout); the "Spotify" pill shows SpotifyResults, the grouped "From
+// Spotify" section. These items are not in the library. By default they only link out to Spotify; with
 // `canPlay` tracks and albums also get play / add buttons that queue
 // Spotify entries through useQueueActions, and artists open the in-app
 // Spotify artist page. An artist the library has (localId, shown in the
@@ -55,10 +58,10 @@ const SpotifyActions = ({ source, name }) => {
 // Card on desktop card mode, compact row on mobile / desktop list mode —
 // same split EntityCard uses, built on the same .artist-card / .result-row
 // classes so it sits naturally in a CardGrid next to local results.
-const SpotifyItem = ({ title, subtitle, imageUrl, imageShape = 'square', glyph, externalUrl, asRow, actionsSource, to }) => {
+const SpotifyItem = ({ title, subtitle, imageUrl, imageShape = 'square', glyph, externalUrl, asRow, actionsSource, to, linkState }) => {
   const isMobile = useIsMobile();
   const viewMode = useViewModeStore((s) => s.mode);
-  const titleNode = to ? <Link to={to} className="spotify-result-link">{title}</Link> : title;
+  const titleNode = to ? <Link to={to} state={linkState} className="spotify-result-link">{title}</Link> : title;
 
   if (asRow || isMobile || viewMode === 'list') {
     return (
@@ -97,6 +100,53 @@ const artistPath = (artist, canPlay) => {
   return canPlay && typeof artist.id === 'string' && artist.id ? `/spotify/artist/${artist.id}` : null;
 };
 
+/** One Spotify artist or album, as a grid card (or a row on mobile / list mode). */
+export const SpotifyResultCard = ({ kind, item, canPlay = false }) => {
+  if (kind === 'artist') {
+    return (
+      <SpotifyItem
+        title={text(item.name)}
+        subtitle="Artist"
+        imageUrl={item.imageUrl}
+        imageShape="circle"
+        glyph="♫"
+        externalUrl={item.externalUrl}
+        to={artistPath(item, canPlay)}
+      />
+    );
+  }
+  const albumId = typeof item.id === 'string' && item.id ? item.id : null;
+  return (
+    <SpotifyItem
+      title={text(item.name)}
+      subtitle={[joinArtistNames(item.artists), text(item.releaseYear)].filter(Boolean).join(' · ')}
+      imageUrl={item.imageUrl}
+      glyph="♪"
+      externalUrl={item.externalUrl}
+      actionsSource={canPlay && albumId ? albumQueueTracks(item) : null}
+      to={canPlay && albumId ? `/spotify/album/${albumId}` : null}
+      linkState={{ year: text(item.releaseYear) || null }}
+    />
+  );
+};
+
+/** One Spotify track as a compact row. */
+export const SpotifyTrackRow = ({ item, canPlay = false }) => (
+  <SpotifyItem
+    asRow
+    title={text(item.name)}
+    subtitle={[
+      joinArtistNames(item.artists),
+      text(item.album?.name),
+      formatDuration(Number.isFinite(item.durationMs) ? Math.floor(item.durationMs / 1000) : 0),
+    ].filter(Boolean).join(' · ')}
+    imageUrl={item.album?.imageUrl}
+    glyph="♪"
+    externalUrl={item.externalUrl}
+    actionsSource={canPlay ? queueTracks(item) : null}
+  />
+);
+
 const SpotifyResults = ({ loading, tracks = [], albums = [], artists = [], canPlay = false }) => {
   if (loading) {
     return (
@@ -119,16 +169,7 @@ const SpotifyResults = ({ loading, tracks = [], albums = [], artists = [], canPl
           <h3 className="spotify-group-title">Artists</h3>
           <CardGrid>
             {artists.map((artist, i) => (
-              <SpotifyItem
-                key={artist.id ?? `artist-${i}`}
-                title={text(artist.name)}
-                subtitle="Artist"
-                imageUrl={artist.imageUrl}
-                imageShape="circle"
-                glyph="♫"
-                externalUrl={artist.externalUrl}
-                to={artistPath(artist, canPlay)}
-              />
+              <SpotifyResultCard key={artist.id ?? `artist-${i}`} kind="artist" item={artist} canPlay={canPlay} />
             ))}
           </CardGrid>
         </div>
@@ -139,15 +180,7 @@ const SpotifyResults = ({ loading, tracks = [], albums = [], artists = [], canPl
           <h3 className="spotify-group-title">Albums</h3>
           <CardGrid>
             {albums.map((album, i) => (
-              <SpotifyItem
-                key={album.id ?? `album-${i}`}
-                title={text(album.name)}
-                subtitle={[joinArtistNames(album.artists), text(album.releaseYear)].filter(Boolean).join(' · ')}
-                imageUrl={album.imageUrl}
-                glyph="♪"
-                externalUrl={album.externalUrl}
-                actionsSource={canPlay && album.id ? albumQueueTracks(album) : null}
-              />
+              <SpotifyResultCard key={album.id ?? `album-${i}`} kind="album" item={album} canPlay={canPlay} />
             ))}
           </CardGrid>
         </div>
@@ -158,20 +191,7 @@ const SpotifyResults = ({ loading, tracks = [], albums = [], artists = [], canPl
           <h3 className="spotify-group-title">Tracks</h3>
           <div className="spotify-track-list">
             {tracks.map((track, i) => (
-              <SpotifyItem
-                key={track.id ?? `track-${i}`}
-                asRow
-                title={text(track.name)}
-                subtitle={[
-                  joinArtistNames(track.artists),
-                  text(track.album?.name),
-                  formatDuration(Number.isFinite(track.durationMs) ? Math.floor(track.durationMs / 1000) : 0),
-                ].filter(Boolean).join(' · ')}
-                imageUrl={track.album?.imageUrl}
-                glyph="♪"
-                externalUrl={track.externalUrl}
-                actionsSource={canPlay ? (queueTracks(track)) : null}
-              />
+              <SpotifyTrackRow key={track.id ?? `track-${i}`} item={track} canPlay={canPlay} />
             ))}
           </div>
         </div>

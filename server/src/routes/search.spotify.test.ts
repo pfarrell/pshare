@@ -7,6 +7,7 @@ import { Hono } from 'hono'
 import search from './search.js'
 import { resetSpotifyTokenCache, type SpotifySearchResult } from '../services/spotify.js'
 import { spotifyLibraryMatcher, withNullLocalIds, type AnnotatedSpotifyResult } from '../services/spotifyLibraryMatch.js'
+import { spotifySearchScorer, withNullScores, type ScoredSpotifyResult } from '../services/spotifySearchScore.js'
 
 const realFetch = globalThis.fetch
 const realEnv = { id: process.env.SPOTIFY_CLIENT_ID, secret: process.env.SPOTIFY_CLIENT_SECRET }
@@ -15,6 +16,10 @@ let searchUrls: string[] = []
 // Default: nothing is in the library. Individual tests swap the implementation.
 let annotateImpl: (r: SpotifySearchResult) => Promise<AnnotatedSpotifyResult>
 mock.method(spotifyLibraryMatcher, 'annotate', (r: SpotifySearchResult) => annotateImpl(r))
+
+// Default: every item scores null. The scorer's SQL is covered by spotifySearchScore.db.test.ts.
+let scoreImpl: (r: AnnotatedSpotifyResult, query: string, exactOnly: boolean) => Promise<ScoredSpotifyResult>
+mock.method(spotifySearchScorer, 'score', (r: AnnotatedSpotifyResult, query: string, exactOnly: boolean) => scoreImpl(r, query, exactOnly))
 
 const app = new Hono()
 app.route('/search', search)
@@ -35,6 +40,7 @@ beforeEach(() => {
   resetSpotifyTokenCache()
   searchUrls = []
   annotateImpl = async (r) => withNullLocalIds(r)
+  scoreImpl = async (r) => withNullScores(r)
 })
 after(() => {
   mock.restoreAll()
@@ -69,7 +75,7 @@ test('GET /search/spotify returns mapped results and sends the raw (unquoted, un
   assert.equal(body.configured, true)
   assert.deepEqual(body.tracks, [])
   assert.deepEqual(body.albums, [])
-  assert.deepEqual(body.artists, [{ uri: 'spotify:artist:ar1', id: 'ar1', name: 'The The', imageUrl: null, externalUrl: null, localId: null }])
+  assert.deepEqual(body.artists, [{ uri: 'spotify:artist:ar1', id: 'ar1', name: 'The The', imageUrl: null, externalUrl: null, localId: null, score: null }])
   assert.equal(new URL(searchUrls[0]).searchParams.get('q'), 'The The')
 })
 
@@ -131,4 +137,39 @@ test('GET /search/spotify maps other upstream failures to 502', async () => {
   stubSpotify(() => new Response('', { status: 500 }))
   const res = await app.request('/search/spotify?q=x')
   assert.equal(res.status, 502)
+})
+
+test('GET /search/spotify passes the parsed query and exactOnly to the scorer and returns its scores', async () => {
+  stubSpotify(radioheadResponse)
+  let scorerArgs: [string, boolean] | null = null
+  scoreImpl = async (r, query, exactOnly) => {
+    scorerArgs = [query, exactOnly]
+    const out = withNullScores(r)
+    out.artists[0].score = 2
+    out.albums[1].score = 0.5
+    return out
+  }
+  const res = await app.request('/search/spotify?q=' + encodeURIComponent('"radiohead"'))
+  assert.equal(res.status, 200)
+  const body = await res.json()
+  assert.deepEqual(scorerArgs, ['radiohead', true])
+  assert.deepEqual(body.artists.map((a: any) => a.score), [2])
+  assert.deepEqual(body.albums.map((a: any) => a.score), [null, 0.5])
+  assert.deepEqual(body.tracks.map((t: any) => t.score), [null])
+})
+
+test('GET /search/spotify returns score: null on every item when scoring throws', async () => {
+  stubSpotify(radioheadResponse)
+  scoreImpl = async () => { throw new Error('db down') }
+  const realError = console.error
+  console.error = () => {}
+  try {
+    const res = await app.request('/search/spotify?q=radiohead')
+    assert.equal(res.status, 200)
+    const body = await res.json()
+    assert.equal(body.configured, true)
+    assert.deepEqual([...body.artists, ...body.albums, ...body.tracks].map((i: any) => i.score), [null, null, null, null])
+  } finally {
+    console.error = realError
+  }
 })

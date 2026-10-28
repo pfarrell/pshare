@@ -3,7 +3,7 @@ import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { Hono } from 'hono'
 import search from './search.js'
-import { createTag, createProfile, createArtist, createAlbum, createTrack, createPlaylist, tagAlbum, tagPlaylist, cleanupFixtures } from '../test/fixtures.js'
+import { fixtureName, createTag, createProfile, createArtist, createAlbum, createTrack, createPlaylist, tagAlbum, tagPlaylist, cleanupFixtures } from '../test/fixtures.js'
 
 after(cleanupFixtures)
 
@@ -84,4 +84,25 @@ test('GET /search?profileId= for a real profile returns only playlists carrying 
   assert.ok(body.results.some((r: any) => r.type === 'playlist' && r.data.id === tagged.id))
   assert.equal(body.results.some((r: any) => r.type === 'playlist' && r.data.id === untagged.id), false)
   assert.equal(body.resultCounts.playlist, 1)
+})
+
+test('GET /search returns score 2.0 on a contains match and a fractional score on a fuzzy match', async () => {
+  const albumArtist = await createArtist('search-route-score-album-artist')
+  const album = await createAlbum('zzscorealbum-live', albumArtist.id)
+  await createTrack('search-route-score-album-track', album.id, albumArtist.id)
+  const fuzzyArtist = await createArtist('zzscorealbun')
+  const fuzzyAlbum = await createAlbum('search-route-score-fuzzy-album', fuzzyArtist.id)
+  await createTrack('search-route-score-fuzzy-track', fuzzyAlbum.id, fuzzyArtist.id)
+
+  // Fixture names carry a long per-run prefix, so the query includes it —
+  // otherwise the prefix alone drags trigram similarity under the threshold.
+  const res = await appWithUser().request(`/search?q=${encodeURIComponent(fixtureName('zzscorealbum'))}`)
+
+  assert.equal(res.status, 200)
+  const body = await res.json()
+  const albumResult = body.results.find((r: any) => r.type === 'album' && r.data.id === album.id)
+  const artistResult = body.results.find((r: any) => r.type === 'artist' && r.data.id === fuzzyArtist.id)
+  assert.equal(albumResult?.score, 2)
+  assert.equal(typeof artistResult?.score, 'number')
+  assert.ok(artistResult.score >= 0.24 && artistResult.score < 1, `fuzzy score ${artistResult.score}`)
 })
