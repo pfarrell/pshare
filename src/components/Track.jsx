@@ -336,13 +336,14 @@ const Track = forwardRef(({ track, index, trackCount, includeMeta = false, showA
   return (
     <div
       ref={ref}
-      className={`track-item ${isPlaying ? 'currently-playing' : ''} ${scrollAnchor ? 'scroll-below-fixed-header' : ''}`}
+      className={`track-item ${isPlaying ? 'currently-playing' : ''} ${scrollAnchor ? 'scroll-below-fixed-header' : ''}${spotify ? ' track-item-spotify' : ''}`}
       style={{
         padding: '1rem',
         borderBottom: index < trackCount - 1 ? '1px solid var(--color-border)' : 'none',
         cursor: 'pointer',
         transition: 'background-color 0.2s ease',
-        backgroundColor: isPlaying ? '#dbeafe' : 'transparent',
+        // #72: a resting Spotify row's background comes from .track-item-spotify (the tinge).
+        backgroundColor: isPlaying ? '#dbeafe' : (spotify ? undefined : 'transparent'),
         borderLeft: isPlaying ? '4px solid #3b82f6' : '4px solid transparent',
         position: 'relative',
         WebkitUserSelect: 'none',
@@ -350,12 +351,12 @@ const Track = forwardRef(({ track, index, trackCount, includeMeta = false, showA
       }}
       {...ctxMenu.triggerProps}
       onMouseEnter={(e) => {
-        if (!isPlaying) {
+        if (!isPlaying && !spotify) {
           e.currentTarget.style.backgroundColor = 'var(--color-bg-surface)';
         }
       }}
       onMouseLeave={(e) => {
-        if (!isPlaying) {
+        if (!isPlaying && !spotify) {
           e.currentTarget.style.backgroundColor = 'transparent';
         }
       }}

@@ -932,3 +932,21 @@ describe('Track component — green play for Spotify rows (#72)', () => {
     expect(document.querySelector('.track-play-button')).not.toHaveClass('play-button-spotify');
   });
 });
+
+describe('Track component — Spotify tinge (#72)', () => {
+  const entry = { source: 'spotify', uri: 'spotify:track:tint', title: 'Tinted Song', artist: { name: 'A' }, album: { title: 'Al' }, duration: 60 };
+
+  test('a Spotify entry in the default layout carries the tinge class and keeps it through hover', () => {
+    const { container } = render(<MemoryRouter><Track track={entry} index={0} trackCount={1} /></MemoryRouter>);
+    const row = container.querySelector('.track-item');
+    expect(row).toHaveClass('track-item-spotify');
+    fireEvent.mouseEnter(row);
+    fireEvent.mouseLeave(row);
+    expect(row.style.backgroundColor).toBe('');
+  });
+
+  test('a library track in the default layout has no tinge class', () => {
+    const { container } = renderTrack();
+    expect(container.querySelector('.track-item')).not.toHaveClass('track-item-spotify');
+  });
+});

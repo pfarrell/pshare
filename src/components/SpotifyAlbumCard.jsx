@@ -36,6 +36,7 @@ const SpotifyAlbumCard = ({ album, localArtistId }) => {
       imageUrl={imageUrl}
       imageAlt={title}
       cardImageStyle={{ cursor: 'pointer' }}
+      className={localId === null ? 'spotify-tint' : undefined}
       imageBadge={localId === null ? <SpotifyLogo className="spotify-album-marker" /> : null}
       listSubtitle={['Album', year, localId === null ? 'Spotify' : ''].filter(Boolean).join(' · ')}
       onClick={() => (localId !== null

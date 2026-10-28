@@ -243,6 +243,13 @@
   overflow: hidden;
 }
 
+/* #72: Spotify album cards and rows carry a faint Spotify-green tinge,
+   mixed into the theme's own surface so it reads in light and dark. */
+.artist-card.spotify-tint,
+.result-row.spotify-tint {
+  background: color-mix(in srgb, var(--color-bg-surface) 90%, #1db954);
+}
+
 .artist-card:hover {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
   transform: translateY(-2px);
@@ -705,6 +712,15 @@
 .track-row.currently-playing .track-row-title {
   color: #1d4ed8;
 }
+.track-row-spotify,
+.track-item-spotify {
+  background-color: color-mix(in srgb, var(--color-bg-surface) 90%, #1db954);
+}
+.track-row-spotify:hover,
+.track-item-spotify:hover {
+  background-color: color-mix(in srgb, var(--color-bg-surface) 82%, #1db954);
+}
+
 .track-row-spotify.currently-playing {
   background-color: #dcfce7;
   border-left-color: #1db954;

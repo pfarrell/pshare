@@ -179,3 +179,8 @@ test('a Spotify play config makes the row play button green (#72)', () => {
   rerender(<ResultRow imageUrl="/x.jpg" title="T" onClick={vi.fn()} play={{ onPlay: vi.fn(), label: 'Play T' }} />);
   expect(screen.getByRole('button', { name: 'Play T' })).not.toHaveClass('play-button-spotify');
 });
+
+test('className is added to the row (#72 Spotify tinge)', () => {
+  const { container } = render(<ResultRow imageUrl="/x.jpg" title="T" onClick={vi.fn()} className="spotify-tint" />);
+  expect(container.querySelector('.result-row.spotify-tint')).toBeInTheDocument();
+});

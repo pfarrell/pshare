@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { apiService } from '../services/api';
 import { MemoryRouter } from 'react-router-dom';
-import SpotifyResults from './SpotifyResults';
+import SpotifyResults, { SpotifyResultCard, SpotifyTrackRow } from './SpotifyResults';
 import { usePlayerStore } from '../stores/playerStore';
 import { useViewModeStore } from '../stores/viewModeStore';
 
@@ -171,4 +171,21 @@ describe('SpotifyResults — green play (#72)', () => {
     expect(screen.getByRole('button', { name: 'Play Album G' })).toHaveClass('spotify-action-play');
     expect(screen.getByRole('button', { name: 'Add Album G to queue' })).not.toHaveClass('spotify-action-play');
   });
+});
+
+describe('SpotifyResultCard — green tinge (#72)', () => {
+  test('Spotify album results are tinted, artist results are not', () => {
+    const { container } = render(<MemoryRouter>
+      <SpotifyResultCard kind="album" item={{ id: 'al', name: 'Tinted', artists: [], imageUrl: null }} />
+      <SpotifyResultCard kind="artist" item={{ id: 'ar', name: 'Plain', imageUrl: null }} />
+    </MemoryRouter>);
+    const tinted = [...container.querySelectorAll('.spotify-tint')].map((el) => el.textContent);
+    expect(tinted).toHaveLength(1);
+    expect(tinted[0]).toContain('Tinted');
+  });
+});
+
+test('Spotify track rows are tinted too (#72)', () => {
+  const { container } = render(<SpotifyTrackRow item={{ id: 't', uri: 'spotify:track:t', name: 'Row Song', artists: [], album: { name: 'B' }, durationMs: 0 }} />);
+  expect(container.querySelector('.result-row.spotify-tint')).toBeInTheDocument();
 });
