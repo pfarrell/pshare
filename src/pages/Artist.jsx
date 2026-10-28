@@ -24,7 +24,9 @@ import { useEntityHeaderActions } from '../hooks/useEntityHeaderActions';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useQueueActions } from '../hooks/useQueueActions';
 import SpotifyAlbumCard from '../components/SpotifyAlbumCard';
-import { useSpotifyArtistAlbums } from '../player/spotify/useSpotifyArtistAlbums';
+import { SpotifyTrackRow } from '../components/SpotifyResults';
+import { useSpotifyArtistCatalog } from '../player/spotify/useSpotifyArtistAlbums';
+import { isSpotifyTrack, toSpotifyQueueTrack } from '../utils/trackSource';
 import { mergeArtistAlbums } from '../utils/mergeArtistAlbums';
 
 const Artist = () => {
@@ -45,8 +47,9 @@ const Artist = () => {
   const isMobile = useIsMobile();
   const [showArtistModal, setShowArtistModal] = useState(false);
   const { overflowAction: overtoneAction, modal: overtoneModal } = useOvertoneAction(artistData?.artist?.musicbrainz_id);
-  // #72: the artist's Spotify albums the library doesn't own ([] unless this session can play Spotify).
-  const spotifyAlbums = useSpotifyArtistAlbums(artistData?.artist?.id ?? null);
+  // #72: what Spotify has for this artist (empty unless this session can play Spotify):
+  // albums the library doesn't own, or, for an artist not on Spotify, the tracks they guest on.
+  const { albums: spotifyAlbums, hasOwnReleases: onSpotify, guestTracks } = useSpotifyArtistCatalog(artistData?.artist?.id ?? null);
   const { actions: headerActions, shouldIgnore } = useEntityHeaderActions({
     kind: 'artist',
     entity: artistData?.artist ?? null,
@@ -249,6 +252,41 @@ const Artist = () => {
               )
             })}
           </CardGrid>
+        </div>
+      )}
+
+      {/* #72: Spotify found the artist but lists nothing of their own (some artists have pulled their catalogue). */}
+      {onSpotify === false && (
+        <div className="spotify-not-on" style={{ marginTop: '1rem' }}>
+          <p style={{ color: 'var(--color-text-muted)', margin: '0 0 0.75rem 0' }}>
+            {artist.name}&apos;s own releases aren&apos;t on Spotify.
+          </p>
+          {guestTracks.length > 0 && (
+            <>
+              <h2 style={{ fontSize: '1.125rem', fontWeight: 'bold', margin: '0 0 0.75rem 0', color: 'var(--color-text-primary)' }}>
+                Appears on Spotify
+              </h2>
+              <div className="track-list">
+                {guestTracks.map((item, index) => {
+                  // Mobile keeps the Spotify link-out row; so does an item with no uri.
+                  const queueEntry = isMobile ? null : toSpotifyQueueTrack(item);
+                  if (!queueEntry) return <SpotifyTrackRow key={`spotify-${item.id ?? index}`} item={item} canPlay />;
+                  return (
+                    <Track
+                      key={`spotify-${queueEntry.uri}`}
+                      track={queueEntry}
+                      index={index}
+                      trackCount={guestTracks.length}
+                      layout="row"
+                      externalUrl={item.externalUrl}
+                      playable
+                      isPlaying={isSpotifyTrack(currentTrack) && currentTrack.uri === queueEntry.uri}
+                    />
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
       )}
 

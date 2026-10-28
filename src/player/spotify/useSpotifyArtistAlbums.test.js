@@ -6,7 +6,7 @@ vi.mock('./useCanPlaySpotify', () => ({ useCanPlaySpotify: () => canPlay.value }
 vi.mock('../../services/api', () => ({ apiService: { getSpotifyArtistAlbums: vi.fn() } }));
 
 import { apiService } from '../../services/api';
-import { useSpotifyArtistAlbums } from './useSpotifyArtistAlbums';
+import { useSpotifyArtistAlbums, useSpotifyArtistCatalog } from './useSpotifyArtistAlbums';
 
 beforeEach(() => {
   canPlay.value = true;
@@ -50,5 +50,49 @@ describe('useSpotifyArtistAlbums', () => {
     await waitFor(() => expect(warn).toHaveBeenCalled());
     expect(result.current).toEqual([]);
     warn.mockRestore();
+  });
+});
+
+describe('useSpotifyArtistCatalog', () => {
+  const empty = { albums: [], hasOwnReleases: null, guestTracks: [] };
+
+  test('is empty with unknown releases when the session cannot play Spotify', async () => {
+    canPlay.value = false;
+    const { result } = renderHook(() => useSpotifyArtistCatalog(5));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(result.current).toEqual(empty);
+  });
+
+  test('passes hasOwnReleases and guest tracks through', async () => {
+    apiService.getSpotifyArtistAlbums.mockResolvedValue({ data: {
+      configured: true, albums: [], hasOwnReleases: false, guestTracks: [{ id: 'g1', name: 'Guest Spot' }],
+    } });
+    const { result } = renderHook(() => useSpotifyArtistCatalog(5));
+    await waitFor(() => expect(result.current).toEqual({ albums: [], hasOwnReleases: false, guestTracks: [{ id: 'g1', name: 'Guest Spot' }] }));
+  });
+
+  test('an older backend without the new fields reads as unknown releases, no guest tracks', async () => {
+    apiService.getSpotifyArtistAlbums.mockResolvedValue({ data: { configured: true, albums: [{ id: 'a' }] } });
+    const { result } = renderHook(() => useSpotifyArtistCatalog(5));
+    await waitFor(() => expect(result.current.albums).toEqual([{ id: 'a' }]));
+    expect(result.current.hasOwnReleases).toBeNull();
+    expect(result.current.guestTracks).toEqual([]);
+  });
+
+  test('malformed fields never leak through', async () => {
+    apiService.getSpotifyArtistAlbums.mockResolvedValue({ data: {
+      configured: true, albums: [], hasOwnReleases: 'no', guestTracks: [null, 'junk', { id: 'g1' }],
+    } });
+    const { result } = renderHook(() => useSpotifyArtistCatalog(5));
+    await waitFor(() => expect(result.current.guestTracks).toEqual([{ id: 'g1' }]));
+    expect(result.current.hasOwnReleases).toBeNull();
+  });
+
+  test('configured:false is empty', async () => {
+    apiService.getSpotifyArtistAlbums.mockResolvedValue({ data: { configured: false, albums: [], hasOwnReleases: false, guestTracks: [{ id: 'g' }] } });
+    const { result } = renderHook(() => useSpotifyArtistCatalog(5));
+    await waitFor(() => expect(apiService.getSpotifyArtistAlbums).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(result.current).toEqual(empty);
   });
 });

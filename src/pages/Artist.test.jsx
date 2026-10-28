@@ -428,3 +428,55 @@ describe('Artist page — Spotify albums (#72)', () => {
     expect(document.querySelectorAll('.spotify-album-marker')).toHaveLength(0);
   });
 });
+
+describe('Artist page — not on Spotify (#72)', () => {
+  const guest = {
+    uri: 'spotify:track:g1', id: 'g1', name: 'Flower In A Hurricane',
+    artists: [{ id: 'jt', name: 'Justice' }, { id: 'kg', name: 'Test Artist' }],
+    album: { id: 'r1', name: 'Flower In A Hurricane', imageUrl: null },
+    durationMs: 238000, explicit: false, externalUrl: 'https://open.spotify.com/track/g1',
+  };
+  const spotifyReturns = (data) => apiService.getSpotifyArtistAlbums.mockResolvedValue({ data: { configured: true, albums: [], ...data } });
+
+  beforeEach(() => {
+    spotifyEligible.value = true;
+    apiService.getArtist.mockResolvedValue({ data: { ...artistData, albums: [] } });
+  });
+  afterEach(() => { spotifyEligible.value = false; });
+
+  test('says the artist\'s own releases aren\'t on Spotify and lists the tracks they guest on', async () => {
+    spotifyReturns({ hasOwnReleases: false, guestTracks: [guest] });
+    const { container } = renderArtist();
+    expect(await screen.findByText("Test Artist's own releases aren't on Spotify.")).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Appears on Spotify' })).toBeInTheDocument();
+    expect(screen.getAllByText(/Flower In A Hurricane/).length).toBeGreaterThan(0);
+    expect(container.querySelector('.track-row-spotify')).toBeInTheDocument();
+  });
+
+  test('with no guest tracks, shows only the note', async () => {
+    spotifyReturns({ hasOwnReleases: false, guestTracks: [] });
+    renderArtist();
+    await screen.findByText("Test Artist's own releases aren't on Spotify.");
+    expect(screen.queryByRole('heading', { name: 'Appears on Spotify' })).toBeNull();
+  });
+
+  test('no note when Spotify has the artist\'s releases, or couldn\'t find the artist', async () => {
+    for (const hasOwnReleases of [true, null]) {
+      spotifyReturns({ hasOwnReleases, guestTracks: [guest] });
+      const { unmount } = renderArtist();
+      await waitFor(() => expect(apiService.getSpotifyArtistAlbums).toHaveBeenCalled());
+      await new Promise((r) => setTimeout(r, 0));
+      expect(screen.queryByText(/aren't on Spotify/)).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Appears on Spotify' })).toBeNull();
+      unmount();
+    }
+  });
+
+  test('ineligible sessions see neither', async () => {
+    spotifyEligible.value = false;
+    spotifyReturns({ hasOwnReleases: false, guestTracks: [guest] });
+    renderArtist();
+    await screen.findByText('Test Artist');
+    expect(screen.queryByText(/aren't on Spotify/)).toBeNull();
+  });
+});

@@ -3,6 +3,7 @@ import { test, after, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   searchSpotify, getSpotifyAlbumTracks, findSpotifyArtistByName, getSpotifyArtistAlbums, dedupeAlbumsByTitle,
+  hasSpotifySinglesOrCompilations, getSpotifyGuestTracks, MAX_GUEST_RELEASES,
   releaseYearFrom, MAX_ARTIST_ALBUM_PAGES, type SpotifyArtistAlbum, mapSearchResponse, pickImageUrl, isSpotifyConfigured, resetSpotifyTokenCache,
   SpotifyNotConfiguredError, SpotifyRateLimitError, SpotifyApiError,
 } from './spotify.js'
@@ -373,4 +374,62 @@ test('artist albums map null images, null artists and a missing release_date wit
   assert.deepEqual(album.artists, [])
   assert.equal(album.releaseYear, null)
   assert.equal(album.releaseDate, null)
+})
+
+test('hasSpotifySinglesOrCompilations asks for singles and compilations, one item, and reads total', async () => {
+  stubFetch(() => json({ items: [rawAlbum('s1', 'Single')], total: 3, next: null }))
+  assert.equal(await hasSpotifySinglesOrCompilations('kg'), true)
+  const url = new URL(searchCalls()[0].url)
+  assert.equal(url.pathname, '/v1/artists/kg/albums')
+  assert.equal(url.searchParams.get('include_groups'), 'single,compilation')
+  assert.equal(url.searchParams.get('limit'), '1')
+
+  stubFetch(() => json({ items: [], total: 0, next: null }))
+  assert.equal(await hasSpotifySinglesOrCompilations('kg'), false)
+  stubFetch(() => json({ items: null }))
+  assert.equal(await hasSpotifySinglesOrCompilations('kg'), false)
+})
+
+test('getSpotifyGuestTracks keeps only tracks crediting the artist, across appears_on releases, once each', async () => {
+  const guest = { id: 'kg', name: 'King Gizzard & The Lizard Wizard' }
+  const other = { id: 'jt', name: 'Justice' }
+  stubFetch((call) => {
+    const url = new URL(call.url)
+    if (url.pathname === '/v1/artists/kg/albums') {
+      return json({ items: [rawAlbum('r1', 'Flower In A Hurricane'), rawAlbum('r2', '5AM')], next: null })
+    }
+    if (url.pathname === '/v1/albums/r1') {
+      return json({ id: 'r1', name: 'Flower In A Hurricane', images: [], tracks: { items: [
+        { id: 'f1', uri: 'spotify:track:f1', name: 'Flower In A Hurricane', artists: [other, guest], duration_ms: 1 },
+        { id: 'f2', uri: 'spotify:track:f2', name: 'Instrumental', artists: [other], duration_ms: 1 },
+      ], next: null } })
+    }
+    return json({ id: 'r2', name: '5AM', images: [], tracks: { items: [
+      { id: 'f1', uri: 'spotify:track:f1', name: 'Flower In A Hurricane', artists: [guest], duration_ms: 1 },
+      { id: 'a5', uri: 'spotify:track:a5', name: '5AM (LA LA LA)', artists: [guest], duration_ms: 1 },
+    ], next: null } })
+  })
+  const tracks = await getSpotifyGuestTracks('kg')
+  assert.deepEqual(tracks.map((t) => t.id), ['f1', 'a5'])
+  assert.equal(tracks[0].album.name, 'Flower In A Hurricane')
+  const first = new URL(searchCalls()[0].url)
+  assert.equal(first.searchParams.get('include_groups'), 'appears_on')
+  assert.equal(first.searchParams.get('limit'), String(MAX_GUEST_RELEASES))
+})
+
+test('getSpotifyGuestTracks opens at most MAX_GUEST_RELEASES releases and none when there are none', async () => {
+  stubFetch((call) => {
+    const url = new URL(call.url)
+    if (url.pathname.endsWith('/albums')) {
+      return json({ items: Array.from({ length: MAX_GUEST_RELEASES + 5 }, (_, i) => rawAlbum(`r${i}`, `R${i}`)), next: 'https://api.spotify.com/v1/more' })
+    }
+    return json({ id: url.pathname.split('/').pop(), name: 'R', images: [], tracks: { items: [], next: null } })
+  })
+  assert.deepEqual(await getSpotifyGuestTracks('kg'), [])
+  assert.equal(searchCalls().filter((c) => new URL(c.url).pathname.startsWith('/v1/albums/')).length, MAX_GUEST_RELEASES)
+
+  calls = []
+  stubFetch(() => json({ items: [], next: null }))
+  assert.deepEqual(await getSpotifyGuestTracks('kg'), [])
+  assert.equal(searchCalls().length, 1)
 })

@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import {
   getSpotifyAlbumTracks, findSpotifyArtistByName, getSpotifyArtist, getSpotifyArtistAlbums, isSpotifyConfigured,
+  hasSpotifySinglesOrCompilations, getSpotifyGuestTracks,
   SpotifyApiError, SpotifyRateLimitError,
 } from '../services/spotify.js'
 import type { SpotifyArtistAlbum } from '../services/spotify.js'
@@ -108,8 +109,11 @@ export function resetSpotifyArtistAlbumsCache() {
 }
 
 // GET /spotify/artists/:localArtistId/albums — the artist's Spotify albums the
-// library doesn't own, for the artist page grid. The Spotify list is cached
-// per artist; library matching re-runs every time so a fresh upload hides at once.
+// library doesn't own, for the artist page grid. hasOwnReleases: false means
+// Spotify lists nothing of theirs (some artists have pulled their catalogue);
+// guestTracks are then the tracks they appear on in other artists' releases.
+// The Spotify list is cached per artist; library matching re-runs every time
+// so a fresh upload hides at once.
 spotify.get('/artists/:localArtistId/albums', async (c) => {
   const localArtistId = parseIntParam(c.req.param('localArtistId'))
   if (localArtistId === null) return c.json({ error: 'Invalid artist id' }, 400)
@@ -122,7 +126,12 @@ spotify.get('/artists/:localArtistId/albums', async (c) => {
     try {
       const spotifyArtist = await findSpotifyArtistByName(name)
       const albums = spotifyArtist ? await getSpotifyArtistAlbums(spotifyArtist.id) : []
-      entry = { spotifyArtist, albums }
+      // No albums: check for singles/compilations before calling the artist
+      // "not on Spotify", and only then pay for the guest-track lookup.
+      const hasOwnReleases = !spotifyArtist ? null
+        : albums.length > 0 || await hasSpotifySinglesOrCompilations(spotifyArtist.id)
+      const guestTracks = spotifyArtist && hasOwnReleases === false ? await getSpotifyGuestTracks(spotifyArtist.id) : []
+      entry = { spotifyArtist, albums, hasOwnReleases, guestTracks }
       artistAlbumsCache.set(localArtistId, entry)
     } catch (err) {
       return upstreamFailure(c, err, 'Spotify artist albums failed')
@@ -130,7 +139,10 @@ spotify.get('/artists/:localArtistId/albums', async (c) => {
   }
 
   const albums = (await withLocalIds(entry.albums)).filter((a) => a.localId === null)
-  return c.json({ configured: true, spotifyArtist: entry.spotifyArtist, albums })
+  return c.json({
+    configured: true, spotifyArtist: entry.spotifyArtist, albums,
+    hasOwnReleases: entry.hasOwnReleases ?? null, guestTracks: entry.guestTracks ?? [],
+  })
 })
 
 // Library matching re-runs on every request (never cached) so a fresh upload

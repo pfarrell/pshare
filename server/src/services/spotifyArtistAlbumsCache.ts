@@ -3,11 +3,15 @@
 // local artist id or, for the in-app Spotify artist view, Spotify artist id:
 // Development Mode quotas are per developer account, so repeat visits must not
 // re-page the catalogue. Lost on restart, which is fine.
-import type { SpotifyArtistAlbum } from './spotify.js'
+import type { SpotifyArtistAlbum, SpotifyTrack } from './spotify.js'
 
 export interface CachedArtistAlbums {
   spotifyArtist: { id: string; name: string; imageUrl?: string | null; externalUrl?: string | null } | null
   albums: SpotifyArtistAlbum[]
+  // Local-artist route only: false when Spotify lists nothing of the artist's own
+  // (null when no Spotify artist matched), and then the tracks they guest on.
+  hasOwnReleases?: boolean | null
+  guestTracks?: SpotifyTrack[]
 }
 
 // Local artist ids are numbers, Spotify ids are strings, so the two never collide.
