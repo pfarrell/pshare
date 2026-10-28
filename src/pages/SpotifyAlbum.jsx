@@ -127,6 +127,7 @@ const SpotifyAlbum = () => {
                 onPlayNext={queue.playNext}
                 onAddToQueue={queue.addToQueue}
                 disabled={queue.loading || entries.length === 0}
+                spotify
               />
               <OpenInSpotify url={externalUrl} name={title} />
             </div>

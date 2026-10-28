@@ -656,6 +656,16 @@
   cursor: pointer;
 }
 
+.spotify-action-btn.spotify-action-play {
+  border-color: #1db954;
+  background: #1db954;
+  color: #fff;
+}
+
+.spotify-action-btn.spotify-action-play:hover:not(:disabled) {
+  background: #169c46;
+}
+
 .spotify-action-btn:hover:not(:disabled) {
   background: var(--color-border);
 }
@@ -768,13 +778,16 @@
   gap: 0.35rem;
   flex-shrink: 0;
 }
-.track-row-play-spotify {
+.track-row-play-spotify,
+.play-button-spotify {
   background: #1db954;
 }
-.track-row-play-spotify.play-button-active {
+.track-row-play-spotify.play-button-active,
+.play-button-spotify.play-button-active {
   background: #169c46;
 }
-.track-row-play-spotify:hover:not(:disabled) {
+.track-row-play-spotify:hover:not(:disabled),
+.play-button-spotify:hover:not(:disabled) {
   box-shadow: 0 2px 8px rgba(29, 185, 84, 0.45);
 }
 .track-row-add {
@@ -1054,6 +1067,11 @@
   overflow: hidden;
   background: #3b82f6;
   box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35);
+}
+
+.play-split-spotify {
+  background: #1db954;
+  box-shadow: 0 2px 8px rgba(29, 185, 84, 0.35);
 }
 
 .play-split-disabled {

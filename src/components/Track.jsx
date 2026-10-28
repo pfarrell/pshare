@@ -362,7 +362,7 @@ const Track = forwardRef(({ track, index, trackCount, includeMeta = false, showA
     >
       <PlayButton
         size={24}
-        className="track-play-button"
+        className={`track-play-button${spotify ? ' play-button-spotify' : ''}`}
         active={isPlaying}
         onClick={handleTrackClick}
         aria-label={isPlaying ? 'Now playing' : `Play ${track.title}`}

@@ -47,12 +47,14 @@ const SpotifyAlbumCard = ({ album, localArtistId }) => {
         onPlayNext: queue.playNext,
         onAddToQueue: queue.addToQueue,
         label: `Play ${title}`,
+        spotify: localId === null,
       }}
       cardFooter={(
         <div className="album-card-meta-row">
           {year && <span className="album-card-meta">{year}</span>}
           <PlayButton
             size={22}
+            className={localId === null ? 'play-button-spotify' : ''}
             data-result-row-play="true"
             onClick={(e) => { e.stopPropagation(); queue.play(); }}
             loading={queue.loading}

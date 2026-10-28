@@ -175,3 +175,10 @@ describe('SpotifyAlbum page — the user\'s own copies (#72)', () => {
     expect(addTracks.mock.calls[0][0].map((t) => t.uri)).toEqual(['spotify:track:1', 'spotify:track:2']);
   });
 });
+
+test('the header Play button is Spotify green (#72)', async () => {
+  apiService.getSpotifyAlbumDetails.mockResolvedValue({ data: payload });
+  const { container } = renderPage();
+  await screen.findByRole('heading', { name: 'Lover' });
+  expect(container.querySelector('.play-split-spotify, .play-button-spotify[aria-label="Play"]')).toBeInTheDocument();
+});

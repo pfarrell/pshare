@@ -39,7 +39,8 @@ const getMenuPosition = (toggleRef, menuWidth, menuHeight) => {
 // with a narrow "▾" tab attached to it) so they read as a single control
 // while keeping separate click targets — clicking the circle plays,
 // clicking the tab opens the menu.
-const PlayActionsMenu = ({ onPlay, onPlayNext, onAddToQueue, overflowActions = [], disabled = false }) => {
+// `spotify` (#72) colours the play control Spotify green for a Spotify album.
+const PlayActionsMenu = ({ onPlay, onPlayNext, onAddToQueue, overflowActions = [], disabled = false, spotify = false }) => {
   const [showMenu, setShowMenu] = useState(false);
   const toggleRef = useRef(null);
 
@@ -78,7 +79,7 @@ const PlayActionsMenu = ({ onPlay, onPlayNext, onAddToQueue, overflowActions = [
   return (
     <div className="play-actions-bar" style={{ display: 'flex', gap: '0.5rem' }}>
       {hasPlay && hasMenu && (
-        <div className={`play-split${disabled ? ' play-split-disabled' : ''}`}>
+        <div className={`play-split${spotify ? ' play-split-spotify' : ''}${disabled ? ' play-split-disabled' : ''}`}>
           <button
             onClick={onPlay}
             disabled={disabled}
@@ -103,6 +104,7 @@ const PlayActionsMenu = ({ onPlay, onPlayNext, onAddToQueue, overflowActions = [
       {hasPlay && !hasMenu && (
         <PlayButton
           size={56}
+          className={spotify ? 'play-button-spotify' : ''}
           onClick={onPlay}
           disabled={disabled}
           aria-label="Play"

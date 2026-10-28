@@ -172,3 +172,10 @@ describe('ResultRow — triggerProps', () => {
     expect(onContextMenu).toHaveBeenCalledTimes(1);
   });
 });
+
+test('a Spotify play config makes the row play button green (#72)', () => {
+  const { rerender } = render(<ResultRow imageUrl="/x.jpg" title="T" onClick={vi.fn()} play={{ onPlay: vi.fn(), label: 'Play T', spotify: true }} />);
+  expect(screen.getByRole('button', { name: 'Play T' })).toHaveClass('play-button-spotify');
+  rerender(<ResultRow imageUrl="/x.jpg" title="T" onClick={vi.fn()} play={{ onPlay: vi.fn(), label: 'Play T' }} />);
+  expect(screen.getByRole('button', { name: 'Play T' })).not.toHaveClass('play-button-spotify');
+});

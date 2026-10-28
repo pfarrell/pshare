@@ -77,3 +77,13 @@ describe('SpotifyAlbumCard', () => {
     expect(screen.getByTestId('where')).toHaveTextContent('/album/42|');
   });
 });
+
+describe('SpotifyAlbumCard — green play (#72)', () => {
+  test('an unowned Spotify album plays with a green button; an owned one stays library blue', () => {
+    const { unmount } = renderCard();
+    expect(screen.getByRole('button', { name: 'Play Lover' })).toHaveClass('play-button-spotify');
+    unmount();
+    renderCard({ ...album, localId: 9 });
+    expect(screen.getByRole('button', { name: 'Play Lover' })).not.toHaveClass('play-button-spotify');
+  });
+});
