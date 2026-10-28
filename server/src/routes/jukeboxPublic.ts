@@ -84,6 +84,7 @@ jukeboxPublic.post('/:token/queue', loadDeviceByToken, async (c: any) => {
   const device = c.get('jukeboxTokenDevice')
 
   const body = await c.req.json()
+  if (body && body.items !== undefined) return submitMixedItems(c, device, body)
   if (body && body.spotifyTracks !== undefined) return submitSpotifyTracks(c, device, body)
   const trackIds: number[] = Array.isArray(body.trackIds)
     ? body.trackIds.filter((id: unknown) => Number.isInteger(id))
@@ -140,6 +141,45 @@ async function submitSpotifyTracks(c: any, device: { id: number; enqueue_token: 
   const submissions = await Promise.all(
     (tracks as GuestSpotifyTrack[]).map((t) => jukeboxQueueService.submitSpotify(device.id, t, userId ? { userId } : { name }))
   )
+  submissions.forEach((submission) => sseBroadcaster.broadcastQueueItemAdded(device.id, submission))
+  return c.json(submissions, 201)
+}
+
+// POST /:token/queue with { items: [{ trackId } | { spotifyTrack }] } — an
+// ordered mix of library and Spotify tracks (#72: a library album filled from
+// Spotify, added whole). Same name, size and rate rules; refused (409) if any
+// item is Spotify while the kiosk can't play it. Stored one after another so
+// submitted_at keeps album order for a kiosk that reconnects.
+type MixedItem = { trackId: number } | { spotifyTrack: GuestSpotifyTrack }
+async function submitMixedItems(c: any, device: { id: number; enqueue_token: string }, body: any) {
+  const raw = Array.isArray(body.items) ? body.items : []
+  const items: (MixedItem | null)[] = raw.map((item: any): MixedItem | null => {
+    if (item && Number.isInteger(item.trackId)) return { trackId: item.trackId }
+    const spotifyTrack = item && item.spotifyTrack !== undefined ? parseGuestSpotifyTrack(item.spotifyTrack) : null
+    return spotifyTrack ? { spotifyTrack } : null
+  })
+  if (items.length === 0 || items.some((i) => i === null)) {
+    return c.json({ error: 'items must be a non-empty array of { trackId } or { spotifyTrack }' }, 400)
+  }
+  if (items.length > MAX_GUEST_QUEUE_IDS) return c.json({ error: `at most ${MAX_GUEST_QUEUE_IDS} tracks per request` }, 400)
+
+  const userId = userIdFromAuthCookie(c)
+  const name = typeof body.name === 'string' ? body.name.trim().slice(0, 50) : ''
+  if (!userId && !name) return c.json({ error: 'name is required' }, 400)
+  if (items.some((i) => i && 'spotifyTrack' in i) && !kioskPlaysSpotify(device.id)) {
+    return c.json({ error: "The jukebox can't play Spotify right now" }, 409)
+  }
+  if (!submissionsAllowed(device.enqueue_token, items.length)) {
+    return c.json({ error: 'Too many submissions, try again in a moment' }, 429)
+  }
+
+  const who = userId ? { userId } : { name }
+  const submissions = []
+  for (const item of items as MixedItem[]) {
+    submissions.push('trackId' in item
+      ? await jukeboxQueueService.submit(device.id, item.trackId, who)
+      : await jukeboxQueueService.submitSpotify(device.id, item.spotifyTrack, who))
+  }
   submissions.forEach((submission) => sseBroadcaster.broadcastQueueItemAdded(device.id, submission))
   return c.json(submissions, 201)
 }
@@ -262,8 +302,19 @@ jukeboxPublic.get('/:token/album/:id', loadDeviceForRead, async (c: any) => {
     },
     artist: pickPerson(data.artist),
     tracks: (data.tracks ?? []).map(pickTrack),
+    spotifyFill: await guestAlbumFill(c.get('jukeboxTokenDevice').id, id as number),
   })
 })
+
+// #72: the Spotify tracks for the album's missing positions (the same fill the
+// kiosk shows), only while the kiosk can play Spotify; null otherwise or on
+// any failure.
+async function guestAlbumFill(deviceId: number, albumId: number) {
+  if (!kioskPlaysSpotify(deviceId)) return null
+  const fill = await readThrough(spotify, `/library-albums/${albumId}/fill`).catch(() => null)
+  if (!fill?.configured || !fill.spotifyAlbum) return null
+  return { spotifyAlbum: fill.spotifyAlbum, tracks: fill.tracks ?? [], libraryPositions: fill.libraryPositions ?? {} }
+}
 
 jukeboxPublic.get('/:token/playlist/:id', loadDeviceForRead, async (c: any) => {
   const id = parseId(c.req.param('id'))

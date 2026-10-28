@@ -179,7 +179,8 @@ test('GET /jukebox/:token/album/:id returns a trimmed album with tracks', async 
   assert.equal(body.album.id, album.id)
   assert.equal(body.artist.id, artist.id)
   assert.equal(body.tracks[0].id, track.id)
-  assert.deepEqual(Object.keys(body).sort(), ['album', 'artist', 'tracks'])
+  assert.deepEqual(Object.keys(body).sort(), ['album', 'artist', 'spotifyFill', 'tracks'])
+  assert.equal(body.spotifyFill, null, 'no kiosk listening: no Spotify fill')
   assert.equal('url' in body.tracks[0], false, 'stream urls must not be exposed')
   assert.equal('download_url' in body.tracks[0], false)
 })
@@ -233,7 +234,7 @@ test('a logged-in cookie does not add notes or user fields to guest detail paylo
   const { body } = await getJson(`/jukebox/${device.enqueue_token}/album/${album.id}`, { cookie: `auth=${token}` })
 
   assert.equal('notes' in body, false)
-  assert.deepEqual(Object.keys(body).sort(), ['album', 'artist', 'tracks'])
+  assert.deepEqual(Object.keys(body).sort(), ['album', 'artist', 'spotifyFill', 'tracks'])
 })
 
 test('GET /jukebox/:token/home returns allowlisted artist and album cards', async () => {
@@ -742,4 +743,83 @@ test('#72: Spotify search and album read through to the Spotify routes when the 
     if (realEnv.secret === undefined) delete process.env.SPOTIFY_CLIENT_SECRET; else process.env.SPOTIFY_CLIENT_SECRET = realEnv.secret
     unsub()
   }
+})
+
+// --- #72: guest album fill and ordered mixed adds ---
+
+test('#72: a guest album carries the Spotify fill while the kiosk can play Spotify', async () => {
+  const device = await guestDevice('jpub-fill')
+  const artist = await createArtist('jpub-fill-artist')
+  const album = await createAlbum('jpub-fill-album', artist.id)
+  const track = await createTrack('jpub-fill-middle', album.id, artist.id)
+  await db.updateTable('tracks').set({ approved: true, track_number: '2' }).where('id', '=', track.id).execute()
+  const unsub = listeningKiosk(device.id, true)
+  const realFetch = globalThis.fetch
+  const realEnv = { id: process.env.SPOTIFY_CLIENT_ID, secret: process.env.SPOTIFY_CLIENT_SECRET }
+  process.env.SPOTIFY_CLIENT_ID = 'cid'
+  process.env.SPOTIFY_CLIENT_SECRET = 'csecret'
+  const spotifyArtist = { id: 'fa', name: artist.name }
+  globalThis.fetch = (async (url: any) => {
+    const u = String(url)
+    if (u.startsWith('https://accounts.spotify.com/')) return new Response(JSON.stringify({ access_token: 'tok', expires_in: 3600 }))
+    if (u.includes('/search?')) {
+      return new Response(JSON.stringify({ albums: { items: [{ id: 'fill1', name: album.title, artists: [spotifyArtist], images: [] }] } }))
+    }
+    return new Response(JSON.stringify({ id: 'fill1', name: album.title, images: [], artists: [spotifyArtist], tracks: { items: [
+      { id: 's1', uri: 'spotify:track:s1', name: 'Opener', artists: [spotifyArtist], duration_ms: 5, disc_number: 1, track_number: 1 },
+      { id: 's2', uri: 'spotify:track:s2', name: track.title, artists: [spotifyArtist], duration_ms: 5, disc_number: 1, track_number: 2 },
+      { id: 's3', uri: 'spotify:track:s3', name: 'Closer', artists: [spotifyArtist], duration_ms: 5, disc_number: 1, track_number: 3 },
+    ], next: null } }))
+  }) as any
+  try {
+    const { status, body } = await getJson(`/jukebox/${device.enqueue_token}/album/${album.id}`)
+    assert.equal(status, 200)
+    assert.equal(body.spotifyFill.spotifyAlbum.id, 'fill1')
+    assert.deepEqual(body.spotifyFill.tracks.map((t: any) => [t.position, t.uri]), [[1, 'spotify:track:s1'], [3, 'spotify:track:s3']])
+    assert.deepEqual(body.spotifyFill.libraryPositions, { [track.id]: 2 })
+  } finally {
+    globalThis.fetch = realFetch
+    if (realEnv.id === undefined) delete process.env.SPOTIFY_CLIENT_ID; else process.env.SPOTIFY_CLIENT_ID = realEnv.id
+    if (realEnv.secret === undefined) delete process.env.SPOTIFY_CLIENT_SECRET; else process.env.SPOTIFY_CLIENT_SECRET = realEnv.secret
+    unsub()
+  }
+})
+
+test('#72: POST queue with items stores library and Spotify tracks in order and broadcasts them in order', async () => {
+  const device = await guestDevice('jpub-mixed')
+  const artist = await createArtist('jpub-mixed-artist')
+  const album = await createAlbum('jpub-mixed-album', artist.id)
+  const a = await createTrack('jpub-mixed-a', album.id, artist.id)
+  const b = await createTrack('jpub-mixed-b', album.id, artist.id)
+  const unsub = listeningKiosk(device.id, true)
+  const added: any[] = []
+  const unsubAdded = sseBroadcaster.subscribeToDevice(device.id, (data) => added.push(data))
+
+  const res = await postQueue(device.enqueue_token, { items: [{ trackId: a.id }, { spotifyTrack: spotifyTrackBody(1) }, { trackId: b.id }], name: 'Riley' })
+  const body = await res.json()
+  assert.equal(res.status, 201)
+  assert.deepEqual(body.map((s: any) => s.track_id ?? s.spotify_track.uri), [a.id, 'spotify:track:t1', b.id])
+  assert.equal(added.length, 3)
+  const stored = await db.selectFrom('jukebox_queue_submissions').select(['track_id', 'spotify_track'])
+    .where('jukebox_device_id', '=', device.id).orderBy('submitted_at', 'asc').orderBy('id', 'asc').execute()
+  assert.deepEqual(stored.map((s: any) => s.track_id ?? s.spotify_track.uri), [a.id, 'spotify:track:t1', b.id])
+  unsub(); unsubAdded()
+})
+
+test('#72: POST queue with items: 409 for a Spotify item the kiosk cannot play, 400 on bad items, library-only items need no Spotify', async () => {
+  const device = await guestDevice('jpub-mixed-no')
+  const artist = await createArtist('jpub-mixed-no-artist')
+  const album = await createAlbum('jpub-mixed-no-album', artist.id)
+  const a = await createTrack('jpub-mixed-no-a', album.id, artist.id)
+  const unsub = listeningKiosk(device.id, false)
+  assert.equal((await postQueue(device.enqueue_token, { items: [{ trackId: a.id }, { spotifyTrack: spotifyTrackBody() }], name: 'Riley' })).status, 409)
+  for (const items of [[], 'nope', [{}], [{ trackId: 'x' }], [{ spotifyTrack: { uri: 'spotify:album:x' } }], [null]]) {
+    assert.equal((await postQueue(device.enqueue_token, { items, name: 'Riley' })).status, 400, JSON.stringify(items))
+  }
+  const tooMany = Array.from({ length: MAX_GUEST_QUEUE_IDS + 1 }, () => ({ trackId: a.id }))
+  assert.equal((await postQueue(device.enqueue_token, { items: tooMany, name: 'Riley' })).status, 400)
+  assert.equal((await postQueue(device.enqueue_token, { items: [{ trackId: a.id }] })).status, 400, 'name required')
+  assert.equal((await db.selectFrom('jukebox_queue_submissions').select('id').where('jukebox_device_id', '=', device.id).execute()).length, 0)
+  assert.equal((await postQueue(device.enqueue_token, { items: [{ trackId: a.id }], name: 'Riley' })).status, 201)
+  unsub()
 })
