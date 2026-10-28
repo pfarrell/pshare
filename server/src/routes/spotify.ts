@@ -6,7 +6,7 @@ import {
   hasSpotifySinglesOrCompilations, getSpotifyGuestTracks, searchSpotifyAlbums,
   SpotifyApiError, SpotifyRateLimitError,
 } from '../services/spotify.js'
-import type { SpotifyArtistAlbum } from '../services/spotify.js'
+import type { SpotifyArtistAlbum, SpotifyTrack } from '../services/spotify.js'
 import {
   createSpotifyArtistAlbumsCache, SPOTIFY_ARTIST_ALBUMS_TTL_MS, SPOTIFY_ARTIST_ALBUMS_MAX_ENTRIES,
 } from '../services/spotifyArtistAlbumsCache.js'
@@ -14,6 +14,7 @@ import { spotifyLibraryMatcher, normalizeForMatch } from '../services/spotifyLib
 import { candidateMatchesAlbum, matchAlbumFill, preferredCandidates, titleKey } from '../services/spotifyAlbumFill.js'
 import type { FillCandidate, LibraryAlbumForFill } from '../services/spotifyAlbumFill.js'
 import { db } from '../db/database.js'
+import { searchService } from '../services/searchService.js'
 import { parseIntParam } from '../utils/http.js'
 import { getAlbumSummary, getArtistSummary, withDeadline } from '../services/wikipedia.js'
 import { extractIpAddress } from '../utils/requestIp.js'
@@ -56,10 +57,41 @@ async function localArtistIdFor(artists: { id: string; name: string }[]): Promis
   }
 }
 
+// A library copy more than this far from Spotify's length is a different
+// recording (live, edit, extended), not the same song.
+const OWNED_TRACK_MAX_LENGTH_DIFF_SEC = 20
+
+// The user's own copies of a Spotify album's tracks, keyed by Spotify track id:
+// same title and artist as library search's ownership rule (approved tracks
+// only), and a similar length when both are known. {} on any failure.
+async function ownedLibraryTracks(tracks: SpotifyTrack[], c: Context): Promise<Record<string, unknown>> {
+  try {
+    const annotated = await spotifyLibraryMatcher.annotate({ tracks, albums: [], artists: [] })
+    const owned = annotated.tracks.filter((t) => t.localId !== null)
+    if (owned.length === 0) return {}
+    const library = await searchService.fetchTracksByIds(owned.map((t) => t.localId as number), c)
+    const byId = new Map(library.map((t) => [t.id, t]))
+    const result: Record<string, unknown> = {}
+    for (const t of owned) {
+      const mine = byId.get(t.localId as number)
+      if (!mine) continue
+      const libSec = typeof mine.duration === 'number' ? mine.duration : null
+      if (libSec !== null && t.durationMs > 0 && Math.abs(libSec - t.durationMs / 1000) > OWNED_TRACK_MAX_LENGTH_DIFF_SEC) continue
+      result[t.id] = mine
+    }
+    return result
+  } catch (err) {
+    console.error('Spotify album owned-track match failed:', err)
+    return {}
+  }
+}
+
 // GET /spotify/albums/:id/tracks — every track of a Spotify album (all pages),
 // for enqueueing a whole album. Unconfigured is a normal 200, like /search/spotify.
 // ?details=1 (the Spotify album page) adds a Wikipedia `summary` and the
-// library artist's `localArtistId`; enqueue callers skip both.
+// library artist's `localArtistId`, plus `libraryTracks` (the user's own copies
+// of its tracks, by Spotify track id, played in their place); enqueue callers
+// skip all three.
 spotify.get('/albums/:id/tracks', async (c) => {
   const id = c.req.param('id')
   if (!SPOTIFY_ID.test(id)) return c.json({ error: 'Invalid album id' }, 400)
@@ -69,13 +101,14 @@ spotify.get('/albums/:id/tracks', async (c) => {
     const { album, tracks } = await getSpotifyAlbumTracks(id)
     if (c.req.query('details') !== '1') return c.json({ configured: true, album, tracks })
     const primary = album.artists[0]?.name ?? ''
-    const [summary, localArtistId] = await Promise.all([
+    const [summary, localArtistId, libraryTracks] = await Promise.all([
       primary && album.name
         ? withDeadline(getAlbumSummary(primary, wikiAlbumTitle(album.name)), SUMMARY_DEADLINE_MS)
         : Promise.resolve(null),
       localArtistIdFor(album.artists),
+      ownedLibraryTracks(tracks, c),
     ])
-    return c.json({ configured: true, album, tracks, summary, localArtistId })
+    return c.json({ configured: true, album, tracks, summary, localArtistId, libraryTracks })
   } catch (err) {
     if (err instanceof SpotifyApiError && err.status === 404) return c.json({ error: 'Spotify album not found' }, 404)
     return upstreamFailure(c, err, 'Spotify album tracks failed')
