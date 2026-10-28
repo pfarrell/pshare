@@ -45,12 +45,17 @@ beforeEach(async () => {
   scripted = []
 })
 
+// Close the fake server and restore env before touching the DB: if cleanup throws
+// (no database), a still-listening server would keep the process alive forever.
 after(async () => {
-  await cleanupFixtures()
   server.close()
   if (saved.base === undefined) delete process.env.ANTHROPIC_BASE_URL; else process.env.ANTHROPIC_BASE_URL = saved.base
   if (saved.key === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = saved.key
-  await db.destroy()
+  try {
+    await cleanupFixtures()
+  } finally {
+    await db.destroy()
+  }
 })
 
 const message = (content: Json[], stop_reason: string) => ({
