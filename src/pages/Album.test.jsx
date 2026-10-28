@@ -509,6 +509,33 @@ describe('Album page — Spotify fill (#72)', () => {
     usePlayerStore.setState({ currentTrack: null });
   });
 
+  test('Make Single asks for a fresh fill so the emptied position fills', async () => {
+    useAuthStore.setState({ isAdmin: true, isAuthenticated: true });
+    window.confirm = vi.fn(() => true);
+    apiService.makeTrackSingle.mockResolvedValue({ data: {} });
+    apiService.getAlbum.mockResolvedValue({ data: { ...albumData, tracks: [libTrack(2, 'Library Three', '3'), libTrack(1, 'Library Ten', '10')] } });
+    apiService.getSpotifyAlbumFill
+      .mockResolvedValueOnce({ data: { ...fill, libraryPositions: { 1: 10, 2: 3 } } })
+      .mockResolvedValueOnce({ data: { ...fill, tracks: [...fill.tracks, fillTrack(3, 'Spot Three')], libraryPositions: { 1: 10 } } });
+    renderAlbum();
+    await screen.findByText(/Spot Eleven/);
+    fireEvent.contextMenu(screen.getByText(/Library Three/).closest('.track-item'));
+    fireEvent.click(screen.getByText('🎵 Make Single'));
+    await screen.findByText(/Spot Three/);
+    expect(screen.queryByText(/Library Three/)).toBeNull();
+    expect(apiService.getSpotifyAlbumFill).toHaveBeenCalledTimes(2);
+  });
+
+  test('scroll-to-track scrolls again once when the fill arrives after it', async () => {
+    let resolveFill;
+    apiService.getSpotifyAlbumFill.mockReturnValue(new Promise((r) => { resolveFill = r; }));
+    renderAlbum([{ pathname: '/album/10', state: { scrollToTrackId: 1 } }]);
+    await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1));
+    resolveFill({ data: fill });
+    await screen.findByText(/Spot Eleven/);
+    await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(2));
+  });
+
   test('ineligible or mobile: no fill request, tracks unchanged', async () => {
     spotifyEligible.value = false;
     const { unmount } = renderAlbum();

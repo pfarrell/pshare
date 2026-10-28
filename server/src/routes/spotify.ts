@@ -10,8 +10,8 @@ import type { SpotifyArtistAlbum } from '../services/spotify.js'
 import {
   createSpotifyArtistAlbumsCache, SPOTIFY_ARTIST_ALBUMS_TTL_MS, SPOTIFY_ARTIST_ALBUMS_MAX_ENTRIES,
 } from '../services/spotifyArtistAlbumsCache.js'
-import { spotifyLibraryMatcher } from '../services/spotifyLibraryMatch.js'
-import { candidateMatchesAlbum, matchAlbumFill } from '../services/spotifyAlbumFill.js'
+import { spotifyLibraryMatcher, normalizeForMatch } from '../services/spotifyLibraryMatch.js'
+import { candidateMatchesAlbum, matchAlbumFill, narrowByYear, titleKey } from '../services/spotifyAlbumFill.js'
 import type { FillCandidate, LibraryAlbumForFill } from '../services/spotifyAlbumFill.js'
 import { db } from '../db/database.js'
 import { parseIntParam } from '../utils/http.js'
@@ -171,23 +171,47 @@ export const libraryAlbumLookup = {
 
 // Search results opened per album: each costs one Spotify call.
 const MAX_FILL_CANDIDATES = 5
+// After a failed lookup, revisits get "no fill" without calling Spotify for this
+// long (or Spotify's Retry-After, if longer).
+const FILL_FAILURE_TTL_MS = 5 * 60 * 1000
 
-let albumFillCache = createSpotifyArtistAlbumsCache<FillCandidate[]>({
+const newFillCache = () => createSpotifyArtistAlbumsCache<FillCandidate[]>({
   ttlMs: SPOTIFY_ARTIST_ALBUMS_TTL_MS,
   maxEntries: SPOTIFY_ARTIST_ALBUMS_MAX_ENTRIES,
 })
+let albumFillCache = newFillCache()
+const fillFailedUntil = new Map<string, number>()
+const fillInFlight = new Map<string, Promise<FillCandidate[]>>()
 export function resetAlbumFillCache() {
-  albumFillCache = createSpotifyArtistAlbumsCache<FillCandidate[]>({
-    ttlMs: SPOTIFY_ARTIST_ALBUMS_TTL_MS,
-    maxEntries: SPOTIFY_ARTIST_ALBUMS_MAX_ENTRIES,
-  })
+  albumFillCache = newFillCache()
+  fillFailedUntil.clear()
+  fillInFlight.clear()
+}
+
+// What the Spotify side depends on, so a renamed album looks again.
+const fillCacheKey = (albumId: number, library: LibraryAlbumForFill) =>
+  [albumId, titleKey(library.title), normalizeForMatch(library.artistName), (library.releaseYear ?? '').slice(0, 4)].join('|')
+
+// The candidates worth matching against: search, keep same title/artist
+// (same year first), then open at most MAX_FILL_CANDIDATES. Any failed fetch
+// fails the whole lookup: a missing candidate might have disagreed.
+async function findFillCandidates(library: LibraryAlbumForFill): Promise<FillCandidate[]> {
+  const found = await searchSpotifyAlbums(library.title, library.artistName)
+  const matching = found.filter((album) => candidateMatchesAlbum(library, album))
+  const opened = await Promise.allSettled(narrowByYear(library.releaseYear, matching, (a) => a.releaseYear)
+    .slice(0, MAX_FILL_CANDIDATES)
+    .map(async (album) => ({ album, tracks: (await getSpotifyAlbumTracks(album.id)).tracks })))
+  const failed = opened.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+  if (failed) throw failed.reason
+  return opened.map((r) => (r as PromiseFulfilledResult<FillCandidate>).value)
 }
 
 // GET /spotify/library-albums/:albumId/fill — the Spotify tracks that fill a
 // library album's missing positions, when one Spotify release confidently
 // matches it (services/spotifyAlbumFill.ts), else spotifyAlbum: null. Only the
-// Spotify candidates are cached; the match re-runs against the current library
-// tracks every time, so a fresh upload takes its slot at once.
+// Spotify candidates are cached (by album and its title/artist/year);
+// the match re-runs against the current library tracks every time, so a fresh
+// upload takes its slot at once. Concurrent requests share one lookup.
 spotify.get('/library-albums/:albumId/fill', async (c) => {
   const albumId = parseIntParam(c.req.param('albumId'))
   if (albumId === null) return c.json({ error: 'Invalid album id' }, 400)
@@ -195,18 +219,25 @@ spotify.get('/library-albums/:albumId/fill', async (c) => {
   if (library === null) return c.json({ error: 'Album not found' }, 404)
   const none = { spotifyAlbum: null, tracks: [], libraryPositions: {} }
   if (!isSpotifyConfigured()) return c.json({ configured: false, ...none })
+  if (library.tracks.length === 0 || !library.title || !library.artistName) return c.json({ configured: true, ...none })
 
-  let candidates = albumFillCache.get(albumId)
+  const key = fillCacheKey(albumId, library)
+  let candidates = albumFillCache.get(key)
   if (!candidates) {
+    if ((fillFailedUntil.get(key) ?? 0) > Date.now()) return c.json({ configured: true, ...none })
+    let lookup = fillInFlight.get(key)
+    if (!lookup) {
+      lookup = findFillCandidates(library).finally(() => fillInFlight.delete(key))
+      fillInFlight.set(key, lookup)
+    }
     try {
-      const found = library.title && library.artistName ? await searchSpotifyAlbums(library.title, library.artistName) : []
-      const opened = await Promise.all(found
-        .filter((album) => candidateMatchesAlbum(library, album))
-        .slice(0, MAX_FILL_CANDIDATES)
-        .map(async (album) => ({ album, tracks: (await getSpotifyAlbumTracks(album.id)).tracks })))
-      candidates = opened
-      albumFillCache.set(albumId, candidates)
+      candidates = await lookup
+      albumFillCache.set(key, candidates)
     } catch (err) {
+      const retryMs = err instanceof SpotifyRateLimitError && err.retryAfter !== null ? err.retryAfter * 1000 : 0
+      fillFailedUntil.delete(key)
+      fillFailedUntil.set(key, Date.now() + Math.max(FILL_FAILURE_TTL_MS, retryMs))
+      while (fillFailedUntil.size > SPOTIFY_ARTIST_ALBUMS_MAX_ENTRIES) fillFailedUntil.delete(fillFailedUntil.keys().next().value as string)
       return upstreamFailure(c, err, 'Spotify album fill failed')
     }
   }

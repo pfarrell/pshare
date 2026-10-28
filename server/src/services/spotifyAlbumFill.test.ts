@@ -1,7 +1,7 @@
 // Pure matching: no network, no database.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { titlesAgree, candidateMatchesAlbum, matchAlbumFill, type LibraryAlbumForFill, type FillCandidate } from './spotifyAlbumFill.js'
+import { titlesAgree, candidateMatchesAlbum, matchAlbumFill, narrowByYear, type LibraryAlbumForFill, type FillCandidate } from './spotifyAlbumFill.js'
 import type { SpotifyAlbum, SpotifyTrack } from './spotify.js'
 
 const JAMES_GANG = [
@@ -128,4 +128,18 @@ test('an unnumbered library track needs an equal title, not a prefix', () => {
   assert.equal(matchAlbumFill(library([{ id: 7, title: 'Live', trackNumber: null }]), [candidate('gh', ['Intro', 'Live Forever', 'Outro'])]), null)
   const fill = matchAlbumFill(library([{ id: 7, title: 'Live Forever (Remastered)', trackNumber: null }]), [candidate('gh', ['Intro', 'Live Forever', 'Outro'])])
   assert.deepEqual(fill?.libraryPositions, { 7: 2 })
+})
+
+test("a stored year like '1973-01-01' narrows like '1973'", () => {
+  const lib = library([{ id: 1, title: 'the bomber', trackNumber: '10' }], { releaseYear: '1973-01-01' })
+  const failing1973 = candidate('old', JAMES_GANG.map((n, i) => (i === 9 ? 'Nope' : n)), { year: '1973' })
+  const passing1990 = candidate('new', JAMES_GANG, { year: '1990' })
+  assert.equal(matchAlbumFill(lib, [failing1973, passing1990]), null)
+})
+
+test('narrowByYear keeps same-year items only when there are some', () => {
+  const items = [{ y: '1990' }, { y: '1973' }, { y: null }]
+  assert.deepEqual(narrowByYear('1973-05-01', items, (i) => i.y), [{ y: '1973' }])
+  assert.deepEqual(narrowByYear('1980', items, (i) => i.y), items)
+  assert.deepEqual(narrowByYear(null, items, (i) => i.y), items)
 })

@@ -57,6 +57,15 @@ export function candidateMatchesAlbum(library: LibraryAlbumForFill, album: Spoti
     && album.artists.some((a) => normalizeForMatch(a.name) === artist)
 }
 
+// Items released in the library album's year, when there are any; otherwise
+// all of them. The library stores years as text, sometimes as a full date.
+export function narrowByYear<T>(releaseYear: string | null, items: T[], yearOf: (item: T) => string | null): T[] {
+  const year = typeof releaseYear === 'string' ? releaseYear.slice(0, 4) : ''
+  if (!/^\d{4}$/.test(year)) return items
+  const same = items.filter((item) => yearOf(item) === year)
+  return same.length > 0 ? same : items
+}
+
 const positionOf = (trackNumber: string | null): number | null => {
   const n = parseInt(trackNumber ?? '', 10)
   return Number.isInteger(n) && n > 0 ? n : null
@@ -101,8 +110,7 @@ const sameTrackList = (a: Map<number, SpotifyTrack>, b: Map<number, SpotifyTrack
 
 export function matchAlbumFill(library: LibraryAlbumForFill, candidates: FillCandidate[]): AlbumFill | null {
   if (library.tracks.length === 0 || candidates.length === 0) return null
-  const sameYear = library.releaseYear ? candidates.filter((c) => c.album.releaseYear === library.releaseYear) : []
-  const pool = sameYear.length > 0 ? sameYear : candidates
+  const pool = narrowByYear(library.releaseYear, candidates, (c) => c.album.releaseYear)
   const disc = library.discNumber ?? 1
 
   const passing = pool

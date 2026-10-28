@@ -449,6 +449,54 @@ describe('album fill', () => {
     assert.equal(body.spotifyAlbum.id, 'c0')
   })
 
+  test('album fill: one failing candidate fetch fails the fill, and the failure is remembered briefly', async () => {
+    const ok = fillApi({ searchAlbums: [fillAlbumRaw('c0'), fillAlbumRaw('c1')] })
+    stubArtistSpotify((url) => (url.endsWith('/v1/albums/c1') ? new Response('{}', { status: 500 }) : ok(url)))
+    assert.equal((await app.request('/spotify/library-albums/20807/fill')).status, 502)
+    const callsAfterFirst = apiCalls.length
+    const res = await app.request('/spotify/library-albums/20807/fill')
+    assert.equal(res.status, 200)
+    assert.deepEqual(await res.json(), { configured: true, spotifyAlbum: null, tracks: [], libraryPositions: {} })
+    assert.equal(apiCalls.length, callsAfterFirst)
+  })
+
+  test('album fill: concurrent requests share one Spotify lookup', async () => {
+    stubArtistSpotify(fillApi())
+    const [a, b] = await Promise.all([app.request('/spotify/library-albums/20807/fill'), app.request('/spotify/library-albums/20807/fill')])
+    assert.equal((await a.json()).spotifyAlbum.id, 'gh')
+    assert.equal((await b.json()).spotifyAlbum.id, 'gh')
+    assert.equal(apiCalls.filter((u) => u.includes('/v1/search')).length, 1)
+  })
+
+  test('album fill: an album with no library tracks makes no Spotify calls', async () => {
+    fillLibrary!.tracks = []
+    stubArtistSpotify(fillApi())
+    const body = await (await app.request('/spotify/library-albums/20807/fill')).json()
+    assert.equal(body.spotifyAlbum, null)
+    assert.equal(apiCalls.length, 0)
+  })
+
+  test('album fill: the candidate cap applies after the year filter', async () => {
+    const raw = Array.from({ length: 6 }, (_, i) => ({ ...fillAlbumRaw(`y${i}`), release_date: i === 5 ? '1973-03-12' : '1990-01-01' }))
+    stubArtistSpotify(fillApi({ searchAlbums: raw }))
+    const body = await (await app.request('/spotify/library-albums/20807/fill')).json()
+    assert.deepEqual(albumOpens().map((u) => new URL(u).pathname), ['/v1/albums/y5'])
+    assert.equal(body.spotifyAlbum.id, 'y5')
+  })
+
+  test('album fill: a renamed album gets fresh candidates', async () => {
+    stubArtistSpotify(fillApi())
+    await app.request('/spotify/library-albums/20807/fill')
+    const searches = () => apiCalls.filter((u) => u.includes('/v1/search')).length
+    assert.equal(searches(), 1)
+    fillLibrary!.title = 'Greatest Hits!'
+    await app.request('/spotify/library-albums/20807/fill')
+    assert.equal(searches(), 1)
+    fillLibrary!.title = 'Best Of'
+    await app.request('/spotify/library-albums/20807/fill')
+    assert.equal(searches(), 2)
+  })
+
   test('album fill: 429 passes through with Retry-After', async () => {
     stubArtistSpotify(fillApi({ status: 429 }))
     const res = await app.request('/spotify/library-albums/20807/fill')
