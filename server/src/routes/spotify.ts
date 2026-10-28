@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import {
   getSpotifyAlbumTracks, findSpotifyArtistByName, getSpotifyArtist, getSpotifyArtistAlbums, isSpotifyConfigured,
-  hasSpotifySinglesOrCompilations, getSpotifyGuestTracks,
+  hasSpotifySinglesOrCompilations, getSpotifyGuestTracks, searchSpotifyAlbums,
   SpotifyApiError, SpotifyRateLimitError,
 } from '../services/spotify.js'
 import type { SpotifyArtistAlbum } from '../services/spotify.js'
@@ -11,6 +11,8 @@ import {
   createSpotifyArtistAlbumsCache, SPOTIFY_ARTIST_ALBUMS_TTL_MS, SPOTIFY_ARTIST_ALBUMS_MAX_ENTRIES,
 } from '../services/spotifyArtistAlbumsCache.js'
 import { spotifyLibraryMatcher } from '../services/spotifyLibraryMatch.js'
+import { candidateMatchesAlbum, matchAlbumFill } from '../services/spotifyAlbumFill.js'
+import type { FillCandidate, LibraryAlbumForFill } from '../services/spotifyAlbumFill.js'
 import { db } from '../db/database.js'
 import { parseIntParam } from '../utils/http.js'
 import { getAlbumSummary, getArtistSummary, withDeadline } from '../services/wikipedia.js'
@@ -143,6 +145,74 @@ spotify.get('/artists/:localArtistId/albums', async (c) => {
     configured: true, spotifyArtist: entry.spotifyArtist, albums,
     hasOwnReleases: entry.hasOwnReleases ?? null, guestTracks: entry.guestTracks ?? [],
   })
+})
+
+// The library album a fill is matched against: its title, year, disc, artist
+// name and every track with its album_id (what GET /album/:id lists). An object
+// so route tests can stub it without a database.
+export const libraryAlbumLookup = {
+  async find(id: number): Promise<LibraryAlbumForFill | null> {
+    const album = await db.selectFrom('albums')
+      .leftJoin('artists', 'artists.id', 'albums.artist_id')
+      .select(['albums.title', 'albums.release_year', 'albums.disc_number', 'artists.name as artist_name'])
+      .where('albums.id', '=', id)
+      .executeTakeFirst()
+    if (!album) return null
+    const tracks = await db.selectFrom('tracks').select(['id', 'title', 'track_number']).where('album_id', '=', id).execute()
+    return {
+      title: album.title ?? '',
+      artistName: album.artist_name ?? '',
+      releaseYear: album.release_year ?? null,
+      discNumber: album.disc_number ?? null,
+      tracks: tracks.map((t) => ({ id: t.id, title: t.title ?? '', trackNumber: t.track_number ?? null })),
+    }
+  },
+}
+
+// Search results opened per album: each costs one Spotify call.
+const MAX_FILL_CANDIDATES = 5
+
+let albumFillCache = createSpotifyArtistAlbumsCache<FillCandidate[]>({
+  ttlMs: SPOTIFY_ARTIST_ALBUMS_TTL_MS,
+  maxEntries: SPOTIFY_ARTIST_ALBUMS_MAX_ENTRIES,
+})
+export function resetAlbumFillCache() {
+  albumFillCache = createSpotifyArtistAlbumsCache<FillCandidate[]>({
+    ttlMs: SPOTIFY_ARTIST_ALBUMS_TTL_MS,
+    maxEntries: SPOTIFY_ARTIST_ALBUMS_MAX_ENTRIES,
+  })
+}
+
+// GET /spotify/library-albums/:albumId/fill — the Spotify tracks that fill a
+// library album's missing positions, when one Spotify release confidently
+// matches it (services/spotifyAlbumFill.ts), else spotifyAlbum: null. Only the
+// Spotify candidates are cached; the match re-runs against the current library
+// tracks every time, so a fresh upload takes its slot at once.
+spotify.get('/library-albums/:albumId/fill', async (c) => {
+  const albumId = parseIntParam(c.req.param('albumId'))
+  if (albumId === null) return c.json({ error: 'Invalid album id' }, 400)
+  const library = await libraryAlbumLookup.find(albumId)
+  if (library === null) return c.json({ error: 'Album not found' }, 404)
+  const none = { spotifyAlbum: null, tracks: [], libraryPositions: {} }
+  if (!isSpotifyConfigured()) return c.json({ configured: false, ...none })
+
+  let candidates = albumFillCache.get(albumId)
+  if (!candidates) {
+    try {
+      const found = library.title && library.artistName ? await searchSpotifyAlbums(library.title, library.artistName) : []
+      const opened = await Promise.all(found
+        .filter((album) => candidateMatchesAlbum(library, album))
+        .slice(0, MAX_FILL_CANDIDATES)
+        .map(async (album) => ({ album, tracks: (await getSpotifyAlbumTracks(album.id)).tracks })))
+      candidates = opened
+      albumFillCache.set(albumId, candidates)
+    } catch (err) {
+      return upstreamFailure(c, err, 'Spotify album fill failed')
+    }
+  }
+
+  const fill = matchAlbumFill(library, candidates)
+  return c.json({ configured: true, ...(fill ?? none) })
 })
 
 // Library matching re-runs on every request (never cached) so a fresh upload

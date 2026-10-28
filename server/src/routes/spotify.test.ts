@@ -1,5 +1,5 @@
 // GET /spotify/albums/:id/tracks — no database; fetch is stubbed, no real credentials.
-import { test, after, beforeEach } from 'node:test'
+import { test, after, beforeEach, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { Hono } from 'hono'
 import spotify from './spotify.js'
@@ -369,4 +369,90 @@ test('catalog artist details: adds a Wikipedia summary; plain requests skip it',
   assert.equal('summary' in plain, false)
   const body = await (await app.request('/spotify/catalog/artists/zz1/albums?details=1')).json()
   assert.match(body.summary.summary, /American singer/)
+})
+
+// --- GET /spotify/library-albums/:albumId/fill (library album lookup stubbed) ---
+import { libraryAlbumLookup, resetAlbumFillCache } from './spotify.js'
+import type { LibraryAlbumForFill } from '../services/spotifyAlbumFill.js'
+
+const GH_TRACKS = ['Walk Away', "I Don't Have The Time", 'Take A Look Around', 'Funk #48', 'Funk #49', 'Collage', 'Asshtonpark',
+  'Woman', 'Tend My Garden', 'The Bomber A: Closet Queen - Medley', 'Laguna Salada', 'Country Fever']
+let fillLibrary: LibraryAlbumForFill | null = null
+mock.method(libraryAlbumLookup, 'find', async (id: number) => (id === 20807 ? fillLibrary : null))
+
+const fillAlbumRaw = (id: string, artist = 'James Gang') => ({
+  id, name: 'Greatest Hits', uri: `spotify:album:${id}`, release_date: '1973-03-12', images: [], artists: [{ id: 'jg', name: artist }],
+})
+const fillApi = (opts: { searchAlbums?: unknown[]; status?: number } = {}) => (url: string) => {
+  if (opts.status) return new Response('{}', { status: opts.status, headers: { 'Retry-After': '5' } })
+  const u = new URL(url)
+  if (u.pathname === '/v1/search') {
+    return new Response(JSON.stringify({ albums: { items: opts.searchAlbums ?? [fillAlbumRaw('gh'), fillAlbumRaw('jw', 'Joe Walsh')] } }))
+  }
+  const id = u.pathname.split('/').pop() as string
+  return new Response(JSON.stringify({
+    id, name: 'Greatest Hits', images: [], artists: [{ id: 'jg', name: 'James Gang' }],
+    tracks: { items: GH_TRACKS.map((name, i) => ({ id: `${id}${i}`, uri: `spotify:track:${id}${i}`, name, artists: [{ id: 'jg', name: 'James Gang' }], duration_ms: 1, disc_number: 1, track_number: i + 1 })), next: null },
+  }))
+}
+const albumOpens = () => apiCalls.filter((u) => new URL(u).pathname.startsWith('/v1/albums/'))
+
+describe('album fill', () => {
+  beforeEach(() => {
+    resetAlbumFillCache()
+    fillLibrary = { title: 'Greatest Hits', artistName: 'James Gang', releaseYear: '1973', discNumber: null, tracks: [{ id: 1, title: 'the bomber', trackNumber: '10' }] }
+  })
+
+  test('album fill: 400 bad id, 404 unknown album, configured:false makes no Spotify calls', async () => {
+    stubArtistSpotify(fillApi())
+    assert.equal((await app.request('/spotify/library-albums/abc/fill')).status, 400)
+    assert.equal((await app.request('/spotify/library-albums/1/fill')).status, 404)
+    delete process.env.SPOTIFY_CLIENT_ID
+    const res = await app.request('/spotify/library-albums/20807/fill')
+    assert.equal(res.status, 200)
+    assert.deepEqual(await res.json(), { configured: false, spotifyAlbum: null, tracks: [], libraryPositions: {} })
+    assert.equal(apiCalls.length, 0)
+  })
+
+  test('album fill: James Gang shape fills the missing positions', async () => {
+    stubArtistSpotify(fillApi())
+    const body = await (await app.request('/spotify/library-albums/20807/fill')).json()
+    assert.equal(body.configured, true)
+    assert.equal(body.spotifyAlbum.id, 'gh')
+    assert.deepEqual(body.tracks.map((t: any) => t.position), [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12])
+    assert.deepEqual(body.libraryPositions, { 1: 10 })
+    assert.deepEqual(albumOpens().map((u) => new URL(u).pathname), ['/v1/albums/gh'])
+  })
+
+  test('album fill: no matching candidate gives a null spotifyAlbum and empty tracks', async () => {
+    stubArtistSpotify(fillApi({ searchAlbums: [fillAlbumRaw('jw', 'Joe Walsh')] }))
+    const body = await (await app.request('/spotify/library-albums/20807/fill')).json()
+    assert.deepEqual(body, { configured: true, spotifyAlbum: null, tracks: [], libraryPositions: {} })
+    assert.deepEqual(albumOpens(), [])
+  })
+
+  test('album fill: candidates are cached, but a newly uploaded library track takes its slot at once', async () => {
+    stubArtistSpotify(fillApi())
+    await app.request('/spotify/library-albums/20807/fill')
+    const callsAfterFirst = apiCalls.length
+    fillLibrary!.tracks.push({ id: 2, title: 'Take A Look Around', trackNumber: '3' })
+    const body = await (await app.request('/spotify/library-albums/20807/fill')).json()
+    assert.equal(apiCalls.length, callsAfterFirst)
+    assert.ok(!body.tracks.some((t: any) => t.position === 3))
+    assert.deepEqual(body.libraryPositions, { 1: 10, 2: 3 })
+  })
+
+  test('album fill: at most 5 candidates are opened', async () => {
+    stubArtistSpotify(fillApi({ searchAlbums: Array.from({ length: 8 }, (_, i) => fillAlbumRaw(`c${i}`)) }))
+    const body = await (await app.request('/spotify/library-albums/20807/fill')).json()
+    assert.equal(albumOpens().length, 5)
+    assert.equal(body.spotifyAlbum.id, 'c0')
+  })
+
+  test('album fill: 429 passes through with Retry-After', async () => {
+    stubArtistSpotify(fillApi({ status: 429 }))
+    const res = await app.request('/spotify/library-albums/20807/fill')
+    assert.equal(res.status, 429)
+    assert.equal(res.headers.get('Retry-After'), '5')
+  })
 })
