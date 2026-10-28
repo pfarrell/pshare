@@ -151,6 +151,7 @@ export const apiService = {
   searchSpotify: (query) => api.get(`/search/spotify${qs({ q: query })}`), // Returns { configured, tracks, albums, artists }
   getSpotifyAlbumTracks: (id) => api.get(`/spotify/albums/${id}/tracks`), // Returns { configured, album, tracks }
   getSpotifyAlbumDetails: (id) => api.get(`/spotify/albums/${id}/tracks${qs({ details: 1 })}`), // #72: + { summary, localArtistId } for the album page
+  getSpotifyAlbumFill: (albumId) => api.get(`/spotify/library-albums/${albumId}/fill`), // #72: { configured, spotifyAlbum, tracks: [{ position, ... }], libraryPositions }
   getSpotifyArtistAlbums: (localArtistId) => api.get(`/spotify/artists/${localArtistId}/albums`), // #72: { configured, spotifyArtist, albums } (unowned only)
   getSpotifyCatalogArtistAlbums: (spotifyId, { details = false } = {}) => api.get(`/spotify/catalog/artists/${spotifyId}/albums${qs({ details: details ? 1 : undefined })}`), // #72: { configured, spotifyArtist, albums } (all, owned ones with localId)
   logSpotifyPlay: (play) => api.post('/spotify/plays', play), // #72: the Spotify counterpart of log(id)
