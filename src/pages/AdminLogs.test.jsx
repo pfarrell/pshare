@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import AdminLogs from './AdminLogs';
 import { apiService } from '../services/api';
@@ -66,5 +66,53 @@ describe('AdminLogs — search entries', () => {
     const searchBadge = screen.getByText('search');
     const streamBadge = screen.getByText('stream');
     expect(searchBadge.style.backgroundColor).not.toBe(streamBadge.style.backgroundColor);
+  });
+});
+
+const spotifyRow = {
+  source: 'spotify', id: 2, action: 'spotify', query: null,
+  track_id: null, track_title: 'Flower In A Hurricane',
+  artist_id: null, artist_name: 'Justice',
+  album_id: null, album_title: 'Flower In A Hurricane EP', album_spotify_id: 'r1',
+  ip_address: '1.2.3.4', created_at: '2026-08-13T00:10:00Z',
+};
+const page = (logs) => ({ data: { logs, pagination: { page: 1, limit: 25, total: logs.length, totalPages: 1 } } });
+
+describe('AdminLogs — Spotify plays (#72)', () => {
+  beforeEach(() => apiService.getLogs.mockReset());
+
+  test('a Spotify play shows a spotify badge, its names, and links the album to its Spotify page', async () => {
+    apiService.getLogs.mockResolvedValue(page([spotifyRow, { ...streamRow, source: 'library' }]));
+    renderLogs();
+
+    await screen.findByText('Flower In A Hurricane');
+    const badge = screen.getByText('spotify');
+    expect(badge.style.backgroundColor).not.toBe(screen.getByText('stream').style.backgroundColor);
+    const row = badge.closest('tr');
+    expect(within(row).getByText('Justice').closest('a')).toBeNull();
+    expect(within(row).getByRole('link', { name: 'Flower In A Hurricane EP' })).toHaveAttribute('href', '/spotify/album/r1');
+  });
+
+  test('a library row and a Spotify play with the same id both render', async () => {
+    apiService.getLogs.mockResolvedValue(page([spotifyRow, { ...streamRow, source: 'library' }]));
+    renderLogs();
+    await screen.findByText('Airbag');
+    expect(screen.getByText('Flower In A Hurricane')).toBeInTheDocument();
+  });
+
+  test('asks for all sources first, and the filter refetches page 1 for the chosen source', async () => {
+    apiService.getLogs.mockResolvedValue(page([streamRow]));
+    renderLogs();
+    await screen.findByText('Airbag');
+    expect(apiService.getLogs).toHaveBeenLastCalledWith(1, 25, 'all');
+
+    apiService.getLogs.mockResolvedValue(page([spotifyRow]));
+    fireEvent.click(screen.getByRole('button', { name: 'Spotify' }));
+    await screen.findByText('Flower In A Hurricane');
+    expect(apiService.getLogs).toHaveBeenLastCalledWith(1, 25, 'spotify');
+    expect(screen.getByRole('button', { name: 'Spotify' })).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'P·Share' }));
+    await waitFor(() => expect(apiService.getLogs).toHaveBeenLastCalledWith(1, 25, 'library'));
   });
 });

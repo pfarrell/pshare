@@ -97,7 +97,7 @@ Images are served externally: `https://patf.net/images/` in production, `/images
 - `AdminArtist`, `AdminAlbum` — edit metadata, manage images and artist relations
 - `AdminCollection`, `AdminPlaylist` — edit collection or playlist metadata and contents
 - `AdminUpload` — upload audio files; polls upload queue status
-- `AdminLogs` — paginated playback log viewer
+- `AdminLogs` — paginated playback log viewer: P·Share `logs` rows and Spotify plays (`spotify_plays`, #72) in one list newest first, with an All / P·Share / Spotify filter (`GET /log/admin?source=`)
 - `AdminNew` — create new artist or album records
 
 **Key components** (`src/components/`):
@@ -156,7 +156,7 @@ Images are served externally: `https://patf.net/images/` in production, `/images
 - `upload_queue` — pending/processing/completed/failed upload jobs with full file and metadata fields
 - `users` — username, email, bcrypt password, admin flag, default_tag
 - `spotify_connections` — experimental (#72): per-user (or jukebox-device) Spotify OAuth tokens (encrypted refresh/access token, expiry, scopes); dropping the table is the removal path
-- `spotify_plays` — experimental (#72): one row per Spotify track played past 5s (track uri/name, artist name, Spotify album id/name/image, user, IP); feeds the kiosk Recent drawer only (top/newborns/admin stats stay local-only); dropping the table is the removal path
+- `spotify_plays` — experimental (#72): one row per Spotify track played past 5s (track uri/name, artist name, Spotify album id/name/image, user, IP); feeds the kiosk Recent drawer and the admin log viewer (top/newborns stay local-only); dropping the table is the removal path
 - `jukebox_queue_submissions.spotify_track` — experimental (#72, migration 067): a guest's Spotify track (JSONB, validated by `services/jukeboxSpotifyTrack.ts`); each submission has exactly one of `track_id` / `spotify_track`
 - `user_playlists` — user ↔ playlist with role
 - `artist_albums` — many-to-many artist ↔ album with role (primary/compilation/featured/guest/collaborator) and order

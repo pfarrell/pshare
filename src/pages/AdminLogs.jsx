@@ -1,4 +1,5 @@
 // src/pages/AdminLogs.jsx
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiService } from '../services/api';
 import Loading from '../components/Loading';
@@ -6,9 +7,59 @@ import Retry from '../components/Retry';
 import { usePaginatedList } from '../hooks/usePaginatedList';
 import Pagination from '../components/admin/Pagination';
 
+// #72: P·Share logs and Spotify plays share one list; the filter narrows it.
+const SOURCES = [
+  { value: 'all', label: 'All' },
+  { value: 'library', label: 'P·Share' },
+  { value: 'spotify', label: 'Spotify' },
+];
+
+const ACTION_COLORS = {
+  stream: { bg: '#dbeafe', color: '#1e40af' },
+  search: { bg: '#ede9fe', color: '#5b21b6' },
+  spotify: { bg: '#dcfce7', color: '#15803d' },
+};
+
+const getActionColors = (action) => ACTION_COLORS[action] || { bg: 'var(--color-border)', color: 'var(--color-text-secondary)' };
+
 export default function AdminLogs() {
+  const [source, setSource] = useState('all');
+
+  return (
+    <div style={{ padding: '2rem', backgroundColor: 'var(--color-bg-surface-muted)', minHeight: '100%' }}>
+      <h1 style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>
+        Activity Logs
+      </h1>
+      <div role="group" aria-label="Source" style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+        {SOURCES.map(({ value, label }) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={source === value}
+            onClick={() => setSource(value)}
+            style={{
+              padding: '0.25rem 0.75rem',
+              borderRadius: '9999px',
+              border: '1px solid var(--color-border)',
+              backgroundColor: source === value ? '#3b82f6' : 'var(--color-bg-surface)',
+              color: source === value ? '#fff' : 'var(--color-text-primary)',
+              fontSize: '0.875rem',
+              cursor: 'pointer',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {/* Keyed by source so a new filter starts again at page 1. */}
+      <LogList key={source} source={source} />
+    </div>
+  );
+}
+
+function LogList({ source }) {
   const { items: logs, pagination, page: currentPage, goToPage, loading, error, reload } = usePaginatedList(
-    (page) => apiService.getLogs(page, 25).then((response) => ({ items: response.data.logs, pagination: response.data.pagination }))
+    (page) => apiService.getLogs(page, 25, source).then((response) => ({ items: response.data.logs, pagination: response.data.pagination }))
   );
 
   const formatDate = (dateString) => {
@@ -23,23 +74,13 @@ export default function AdminLogs() {
     });
   };
 
-  const ACTION_COLORS = {
-    stream: { bg: '#dbeafe', color: '#1e40af' },
-    search: { bg: '#ede9fe', color: '#5b21b6' },
-  };
-
-  const getActionColors = (action) => ACTION_COLORS[action] || { bg: 'var(--color-border)', color: 'var(--color-text-secondary)' };
-
 
   if (loading && !logs.length) return <Loading />;
   if (error) return <Retry message={error.message} onRetry={reload} />;
 
   return (
-    <div style={{ padding: '2rem', backgroundColor: 'var(--color-bg-surface-muted)', minHeight: '100%' }}>
+    <>
       <div style={{ marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>
-          Activity Logs
-        </h1>
         {pagination && (
           <p style={{ color: 'var(--color-text-muted)', marginTop: '0.5rem' }}>
             Showing {((pagination.page - 1) * pagination.limit) + 1} - {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total.toLocaleString()} entries
@@ -95,7 +136,7 @@ export default function AdminLogs() {
                 logs.map((log) => {
                   const actionColors = getActionColors(log.action);
                   return (
-                  <tr key={log.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  <tr key={`${log.source ?? 'library'}-${log.id}`} style={{ borderBottom: '1px solid var(--color-border)' }}>
                     <td style={{ padding: '0.75rem 1rem', fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
                       {log.id}
                     </td>
@@ -134,6 +175,10 @@ export default function AdminLogs() {
                         <Link to={`/album/${log.album_id}`} style={{ color: '#3b82f6', textDecoration: 'none' }}>
                           {log.album_title || '-'}
                         </Link>
+                      ) : log.album_spotify_id ? (
+                        <Link to={`/spotify/album/${log.album_spotify_id}`} style={{ color: '#3b82f6', textDecoration: 'none' }}>
+                          {log.album_title || '-'}
+                        </Link>
                       ) : (
                         log.album_title || '-'
                       )}
@@ -151,6 +196,6 @@ export default function AdminLogs() {
       </div>
 
       <Pagination page={currentPage} totalPages={pagination?.totalPages} onPageChange={goToPage} />
-    </div>
+    </>
   );
 }

@@ -186,7 +186,7 @@ export const apiService = {
 
   // log
   log: (id, playlistId = null, collectionId = null) => api.get(`/log/${id}${qs({ playlist: playlistId, collection: collectionId })}`),
-  getLogs: (page = 1, limit = 25) => api.get(`/log/admin${qs({ page, limit })}`),
+  getLogs: (page = 1, limit = 25, source = 'all') => api.get(`/log/admin${qs({ page, limit, source })}`), // source: all | library | spotify (#72)
 
   // Admin
   createArtist: (name) => api.post('/admin/artist', { name }),
