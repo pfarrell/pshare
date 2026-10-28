@@ -20,8 +20,9 @@ function readFill(data) {
 // sessions that can play Spotify: { spotifyAlbum, tracks: [{ position, ... }],
 // libraryPositions }. EMPTY while loading, when ineligible or disabled, when
 // nothing confidently matches, and on any failure; a response for a previous
-// album is dropped.
-export const useSpotifyAlbumFill = (albumId, { enabled = true } = {}) => {
+// album is dropped. A new refreshKey (e.g. the library track count) refetches,
+// keeping the previous fill on screen until the new one arrives.
+export const useSpotifyAlbumFill = (albumId, { enabled = true, refreshKey = null } = {}) => {
   const canPlay = useCanPlaySpotify();
   const active = canPlay && enabled && albumId != null;
   const [result, setResult] = useState({ albumId: null, fill: EMPTY });
@@ -38,7 +39,7 @@ export const useSpotifyAlbumFill = (albumId, { enabled = true } = {}) => {
         if (!cancelled) console.warn('Spotify album fill unavailable:', albumId, err);
       });
     return () => { cancelled = true; };
-  }, [active, albumId]);
+  }, [active, albumId, refreshKey]);
 
   return active && result.albumId === albumId ? result.fill : EMPTY;
 };

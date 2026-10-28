@@ -84,3 +84,18 @@ describe('useSpotifyAlbumFill', () => {
     expect(result.current).toEqual(EMPTY);
   });
 });
+
+describe('useSpotifyAlbumFill — refreshKey', () => {
+  test('a new refreshKey refetches and keeps the previous fill meanwhile', async () => {
+    apiService.getSpotifyAlbumFill.mockResolvedValueOnce({ data: fill });
+    let resolveSecond;
+    apiService.getSpotifyAlbumFill.mockReturnValueOnce(new Promise((r) => { resolveSecond = r; }));
+    const { result, rerender } = renderHook(({ k }) => useSpotifyAlbumFill(5, { refreshKey: k }), { initialProps: { k: 2 } });
+    await waitFor(() => expect(result.current.tracks).toHaveLength(1));
+    rerender({ k: 1 });
+    await waitFor(() => expect(apiService.getSpotifyAlbumFill).toHaveBeenCalledTimes(2));
+    expect(result.current.tracks).toHaveLength(1);
+    resolveSecond({ data: { ...fill, tracks: [...fill.tracks, { position: 3, uri: 'spotify:track:c' }] } });
+    await waitFor(() => expect(result.current.tracks).toHaveLength(2));
+  });
+});

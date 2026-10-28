@@ -35,6 +35,9 @@ const Album = () => {
   // now-playing bar's "go to album" tap sets this so the page can land on
   // the track that's actually playing instead of the top of the album.
   const scrollToTrackIdRef = useRef(location.state?.scrollToTrackId ?? null);
+  // 'pending' → 'scrolled' (library tracks rendered) → 'done' (re-scrolled
+  // once after Spotify fill rows arrived above it and pushed it down).
+  const scrollStateRef = useRef('pending');
   const activeTrackRef = useRef(null);
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const setPageTracks = usePlayerStore((s) => s.setPageTracks);
@@ -46,7 +49,9 @@ const Album = () => {
   // #72: Spotify tracks for the positions this library album is missing
   // (desktop sessions that can play Spotify only; otherwise the library list as-is).
   const isMobile = useIsMobile();
-  const fill = useSpotifyAlbumFill(albumData?.album?.id ?? null, { enabled: !isMobile });
+  // Keyed on the library track count so Make Single refetches and the emptied
+  // position can fill.
+  const fill = useSpotifyAlbumFill(albumData?.album?.id ?? null, { enabled: !isMobile, refreshKey: albumData?.tracks?.length ?? null });
   const tracks = useMemo(() => mergeAlbumFill(albumData?.tracks, fill), [albumData?.tracks, fill]);
   const [showAlbumModal, setShowAlbumModal] = useState(false);
   const [showCollectionModal, setShowCollectionModal] = useState(false);
@@ -89,10 +94,16 @@ const Album = () => {
   }, [tracks, setPageTracks]);
 
   useEffect(() => {
-    if (!scrollToTrackIdRef.current || !activeTrackRef.current) return;
+    if (scrollStateRef.current !== 'pending' || !scrollToTrackIdRef.current || !activeTrackRef.current) return;
     activeTrackRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    scrollToTrackIdRef.current = null; // one-shot: only on the arrival that requested it
+    scrollStateRef.current = 'scrolled'; // one-shot: only on the arrival that requested it
   }, [albumData]);
+
+  useEffect(() => {
+    if (scrollStateRef.current !== 'scrolled' || tracks === albumData?.tracks || !activeTrackRef.current) return;
+    activeTrackRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    scrollStateRef.current = 'done';
+  }, [tracks, albumData]);
 
   const queue = useQueueActions(tracks, { queueSource: albumData?.album ? { type: 'album', id: albumData.album.id } : undefined });
 
