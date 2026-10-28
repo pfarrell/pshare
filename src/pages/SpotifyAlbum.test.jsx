@@ -136,3 +136,42 @@ describe('SpotifyAlbum page', () => {
     expect(await screen.findByText(/Silent/)).toBeInTheDocument();
   });
 });
+
+describe('SpotifyAlbum page — the user\'s own copies (#72)', () => {
+  const mine = { id: 50, title: 'Cruel Summer', duration: 178, url: '/stream/50', artist: { id: 3, name: 'Taylor Swift' }, album: { id: 9, title: 'Lover (Library)' } };
+  const titles = () => [...document.querySelectorAll('.track-title')].map((el) => el.textContent);
+  const highlighted = () => [...document.querySelectorAll('.track-title')].filter((el) => el.style.color === 'rgb(29, 78, 216)').map((el) => el.textContent);
+
+  test('owned tracks play from the library in their place', async () => {
+    apiService.getSpotifyAlbumDetails.mockResolvedValue({ data: { ...payload, libraryTracks: { 2: mine } } });
+    renderPage();
+    await screen.findByRole('heading', { name: 'Lover' });
+    expect(titles()[1]).toContain('Cruel Summer');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Play' })[0]);
+    await waitFor(() => expect(addTracks).toHaveBeenCalledTimes(1));
+    expect(addTracks.mock.calls[0][0].map((t) => t.uri ?? t.id)).toEqual(['spotify:track:1', 50]);
+  });
+
+  test('the playing highlight never crosses between library and Spotify rows', async () => {
+    apiService.getSpotifyAlbumDetails.mockResolvedValue({ data: { ...payload, libraryTracks: { 2: mine } } });
+    usePlayerStore.setState({ currentTrack: { ...mine } });
+    const { unmount } = renderPage();
+    await screen.findByRole('heading', { name: 'Lover' });
+    expect(highlighted()).toEqual([expect.stringContaining('Cruel Summer')]);
+    unmount();
+    usePlayerStore.setState({ currentTrack: { source: 'spotify', uri: 'spotify:track:1', title: 'x', artist: { name: 'Taylor Swift' } } });
+    renderPage();
+    await screen.findByRole('heading', { name: 'Lover' });
+    expect(highlighted()).toEqual([expect.stringContaining('I Forgot That You Existed')]);
+    usePlayerStore.setState({ currentTrack: null });
+  });
+
+  test('malformed libraryTracks entries fall back to the Spotify track', async () => {
+    apiService.getSpotifyAlbumDetails.mockResolvedValue({ data: { ...payload, libraryTracks: { 1: 'junk', 2: { id: 'x', url: 5 } } } });
+    renderPage();
+    await screen.findByRole('heading', { name: 'Lover' });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Play' })[0]);
+    await waitFor(() => expect(addTracks).toHaveBeenCalledTimes(1));
+    expect(addTracks.mock.calls[0][0].map((t) => t.uri)).toEqual(['spotify:track:1', 'spotify:track:2']);
+  });
+});

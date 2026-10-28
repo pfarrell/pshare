@@ -89,10 +89,11 @@ import type { SpotifySearchResult } from '../services/spotify.js'
 
 let matcherCalls = 0
 let ownedAlbumIds = new Set<string>()
+let ownedTrackIds = new Map<string, number>()
 mock.method(spotifyLibraryMatcher, 'annotate', async (r: SpotifySearchResult) => {
   matcherCalls++
   return {
-    tracks: [],
+    tracks: r.tracks.map((t) => ({ ...t, localId: ownedTrackIds.get(t.id) ?? null })),
     artists: r.artists.map((a) => ({ ...a, localId: a.name === 'Owned Artist' ? 55 : null })),
     albums: r.albums.map((a) => ({ ...a, localId: ownedAlbumIds.has(a.id) ? 77 : null })),
   }
@@ -503,4 +504,58 @@ describe('album fill', () => {
     assert.equal(res.status, 429)
     assert.equal(res.headers.get('Retry-After'), '5')
   })
+})
+
+// --- ?details=1: the library tracks the user owns on a Spotify album ---
+import { searchService } from '../services/searchService.js'
+
+const libraryTrack = (id: number, duration: number | null) => ({ id, title: `Lib ${id}`, duration, url: `/stream/${id}`, artist: { id: 1, name: 'Miles Davis' }, album: { id: 9, title: 'Elsewhere' } })
+mock.method(searchService, 'fetchTracksByIds', async (ids: number[]) =>
+  ids.filter((id) => id !== 999).map((id) => libraryTrack(id, id === 102 ? 200 : 546)))
+
+const ownedAlbumApi = (url: string) => {
+  if (url.startsWith('https://en.wikipedia.org/')) return new Response('', { status: 404 })
+  return new Response(JSON.stringify({
+    id: 'owned1', name: 'Owned Songs Album', release_date: '1959-08-17', images: [], artists: [{ id: 'md', name: 'Miles Davis' }],
+    tracks: { items: [
+      { id: 'o1', uri: 'spotify:track:o1', name: 'So What', duration_ms: 545000, artists: [{ id: 'md', name: 'Miles Davis' }] },
+      { id: 'o2', uri: 'spotify:track:o2', name: 'Freddie Freeloader', duration_ms: 300000, artists: [{ id: 'md', name: 'Miles Davis' }] },
+      { id: 'o3', uri: 'spotify:track:o3', name: 'Blue in Green', duration_ms: 330000, artists: [{ id: 'md', name: 'Miles Davis' }] },
+      { id: 'o4', uri: 'spotify:track:o4', name: 'Gone', duration_ms: 330000, artists: [{ id: 'md', name: 'Miles Davis' }] },
+    ], next: null },
+  }))
+}
+
+test('album details: libraryTracks maps owned Spotify tracks to playable library tracks, skipping different-length recordings', async () => {
+  ownedTrackIds = new Map([['o1', 101], ['o2', 102], ['o4', 999]])
+  stubArtistSpotify(ownedAlbumApi)
+  try {
+    const body = await (await app.request('/spotify/albums/owned1/tracks?details=1')).json()
+    assert.deepEqual(Object.keys(body.libraryTracks), ['o1'])
+    assert.equal(body.libraryTracks.o1.id, 101)
+    assert.equal(body.libraryTracks.o1.url, '/stream/101')
+    apiCalls = []
+    const plain = await (await app.request('/spotify/albums/owned1/tracks')).json()
+    assert.equal('libraryTracks' in plain, false)
+  } finally {
+    ownedTrackIds = new Map()
+  }
+})
+
+test('album details: a failed library lookup gives empty libraryTracks, not an error', async () => {
+  ownedTrackIds = new Map([['o1', 101]])
+  const original = searchService.fetchTracksByIds
+  ;(searchService as any).fetchTracksByIds = async () => { throw new Error('db down') }
+  const quiet = console.error
+  console.error = () => {}
+  stubArtistSpotify(ownedAlbumApi)
+  try {
+    const res = await app.request('/spotify/albums/owned1/tracks?details=1')
+    assert.equal(res.status, 200)
+    assert.deepEqual((await res.json()).libraryTracks, {})
+  } finally {
+    ;(searchService as any).fetchTracksByIds = original
+    console.error = quiet
+    ownedTrackIds = new Map()
+  }
 })
