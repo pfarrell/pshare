@@ -8,8 +8,13 @@ vi.mock('../services/api', () => ({
   apiService: {
     getAlbum: vi.fn(),
     getImageUrl: vi.fn(() => '/img/sm/x.jpg'),
+    getSpotifyAlbumFill: vi.fn(),
   },
 }));
+
+// #72 album fill: the kiosk's Spotify eligibility is stubbed; ineligible by default.
+const spotifyEligible = { value: false };
+vi.mock('../player/spotify/useCanPlaySpotify', () => ({ useCanPlaySpotify: () => spotifyEligible.value }));
 
 const queue = { loading: false, play: vi.fn(), playNext: vi.fn(), addToQueue: vi.fn() };
 vi.mock('../hooks/useQueueActions', () => ({ useQueueActions: vi.fn(() => queue) }));
@@ -242,4 +247,35 @@ test('shows an error with a working retry when the album fails to load', async (
   fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
   await waitFor(() => expect(screen.getByText(/Track One/)).toBeInTheDocument());
+});
+
+describe('album fill on the kiosk (#72)', () => {
+  const fill = {
+    configured: true, spotifyAlbum: { id: 'sp', name: 'Test Album', imageUrl: null },
+    tracks: [{ position: 2, uri: 'spotify:track:mid', id: 'mid', name: 'Spotify Middle', artists: [{ name: 'Test Artist' }], album: { id: 'sp', name: 'Test Album' }, durationMs: 1000 }],
+    libraryPositions: { 1: 1, 2: 3 },
+  };
+  afterEach(() => { spotifyEligible.value = false; });
+
+  test('kiosk that can play Spotify: filled tracks appear in order and Play album queues them all', async () => {
+    spotifyEligible.value = true;
+    apiService.getSpotifyAlbumFill.mockResolvedValue({ data: fill });
+    renderPanel();
+    await screen.findByText(/Spotify Middle/);
+    const titles = [...document.querySelectorAll('.track-title')].map((el) => el.textContent);
+    expect(titles[0]).toContain('Track One');
+    expect(titles[1]).toContain('Spotify Middle');
+    expect(titles[2]).toContain('Track Two');
+    const listed = useQueueActions.mock.calls.at(-1)[0];
+    expect(listed.map((t) => t.uri ?? t.id)).toEqual([1, 'spotify:track:mid', 2]);
+    expect(apiService.getSpotifyAlbumFill).toHaveBeenCalledWith(7);
+  });
+
+  test("kiosk that can't: unchanged, no fill request", async () => {
+    renderPanel();
+    await screen.findByText(/Track Two/);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(apiService.getSpotifyAlbumFill).not.toHaveBeenCalled();
+    expect(useQueueActions.mock.calls.at(-1)[0].map((t) => t.id)).toEqual([1, 2]);
+  });
 });
