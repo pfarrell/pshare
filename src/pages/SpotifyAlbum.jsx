@@ -72,8 +72,15 @@ const SpotifyAlbum = () => {
 
   const ready = state.id === spotifyId && state.status === 'ready';
   const album = ready ? state.data.album : null;
+  // #72: where the user owns a track (libraryTracks, by Spotify track id), their
+  // own file plays in its place; anything malformed falls back to Spotify.
+  const owned = ready && state.data.libraryTracks && typeof state.data.libraryTracks === 'object' ? state.data.libraryTracks : {};
+  const ownCopy = (t) => {
+    const mine = owned[t?.id];
+    return mine && typeof mine === 'object' && Number.isInteger(mine.id) && typeof mine.url === 'string' ? mine : null;
+  };
   const entries = ready
-    ? state.data.tracks.map((t) => toSpotifyQueueTrack(t, album)).filter(Boolean)
+    ? state.data.tracks.map((t) => ownCopy(t) ?? toSpotifyQueueTrack(t, album)).filter(Boolean)
     : [];
   const queue = useQueueActions(entries, { errorLabel: 'Failed to queue Spotify tracks' });
 
@@ -90,7 +97,10 @@ const SpotifyAlbum = () => {
   const year = text(album.releaseYear) || text(location.state?.year);
   const meta = [year, text(album.label)].filter(Boolean).join(' · ');
   const externalUrl = album.id ? `https://open.spotify.com/album/${album.id}` : null;
-  const playing = (entry) => isSpotifyTrack(currentTrack) && currentTrack.uri === entry.uri;
+  // Spotify rows compare uri, library rows id; the two kinds never match.
+  const playing = (entry) => (isSpotifyTrack(entry)
+    ? isSpotifyTrack(currentTrack) && currentTrack.uri === entry.uri
+    : !!currentTrack && !isSpotifyTrack(currentTrack) && currentTrack.id === entry.id);
 
   return (
     <div style={{ padding: '.5rem', maxWidth: '1400px', margin: '0 auto' }}>
@@ -140,7 +150,7 @@ const SpotifyAlbum = () => {
       }}>
         {entries.map((entry, index) => (
           <Track
-            key={entry.uri || index}
+            key={isSpotifyTrack(entry) ? (entry.uri || index) : `lib-${entry.id}`}
             track={entry}
             index={index}
             trackCount={entries.length}
