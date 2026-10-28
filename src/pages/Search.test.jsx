@@ -508,7 +508,7 @@ test('a failed loadMore keeps existing results in place and shows an inline erro
 });
 
 // ---------------------------------------------------------------------------
-// "From Spotify" section
+// Spotify results mixed into the local results (#72)
 // ---------------------------------------------------------------------------
 
 const LOCAL_WITH_TRACK = {
@@ -533,23 +533,28 @@ const spotifyResponse = (overrides = {}) => ({
 
 const httpError = (status, data = {}) => Object.assign(new Error(`HTTP ${status}`), { response: { status, data } });
 
-test('renders a From Spotify section below the local results when configured', async () => {
+const follows = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+test('Spotify album and track render inside the results grid and Tracks list, not a "From Spotify" section', async () => {
   apiService.search.mockResolvedValue(LOCAL_WITH_TRACK);
   apiService.searchSpotify.mockResolvedValue(spotifyResponse());
 
-  renderSearch('spot');
+  const { container } = renderSearch('spot');
 
-  const heading = await screen.findByText('From Spotify');
+  await screen.findByText('Spotify Artist');
   expect(apiService.searchSpotify).toHaveBeenCalledWith('spot');
-  expect(screen.getByText('Spotify Artist')).toBeInTheDocument();
+  expect(screen.queryByText('From Spotify')).toBeNull();
   expect(screen.getByText('Spotify Album')).toBeInTheDocument();
   expect(screen.getByText('Album Artist, Guest · 1999')).toBeInTheDocument();
-  expect(screen.getByText('Spotify Track')).toBeInTheDocument();
-  expect(screen.getByText('Track Artist · Spotify Album · 3:05')).toBeInTheDocument();
+  expect(screen.getByText('Results (3)')).toBeInTheDocument();
 
-  // Below every local section, including the local Tracks list.
-  const localTracksHeading = screen.getByText('Tracks (1)');
-  expect(localTracksHeading.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  // Spotify artist/album sit in the results grid, before the Tracks section...
+  const tracksHeading = screen.getByText('Tracks (2)');
+  expect(follows(screen.getByText('Spotify Album'), tracksHeading)).toBe(true);
+  // ...and the Spotify track is a row in the Tracks list, after the library track.
+  const rows = [...container.querySelectorAll('.track-row')];
+  expect(rows.map((r) => r.querySelector('.track-row-title').textContent)).toEqual(['Dreams', 'Spotify Track']);
+  expect(rows[1].querySelector('.track-row-subtitle')).toHaveTextContent('Track Artist · Spotify Album · 3:05');
 
   const link = screen.getByRole('link', { name: 'Open Spotify Track in Spotify' });
   expect(link).toHaveAttribute('href', 'https://open.spotify.com/track/t1');
@@ -580,7 +585,7 @@ test('shows Spotify play buttons only when the session can play Spotify and a so
   }
 });
 
-test('renders local results while Spotify is still pending, with a loading indicator', async () => {
+test('renders local results while Spotify is still pending, then mixes Spotify in when it arrives', async () => {
   apiService.search.mockResolvedValue(LOCAL_WITH_TRACK);
   let resolveSpotify;
   apiService.searchSpotify.mockReturnValue(new Promise((resolve) => { resolveSpotify = resolve; }));
@@ -588,13 +593,12 @@ test('renders local results while Spotify is still pending, with a loading indic
   renderSearch('slow');
 
   expect(await screen.findByText('Local Artist')).toBeInTheDocument();
-  expect(screen.getByTestId('spotify-loading')).toBeInTheDocument();
-  expect(screen.queryByText('From Spotify')).toBeNull();
+  expect(screen.queryByTestId('spotify-loading')).toBeNull();
+  expect(screen.queryByText('Spotify Artist')).toBeNull();
 
   await act(async () => { resolveSpotify(spotifyResponse()); });
 
-  expect(await screen.findByText('From Spotify')).toBeInTheDocument();
-  expect(screen.queryByTestId('spotify-loading')).toBeNull();
+  expect(await screen.findByText('Spotify Artist')).toBeInTheDocument();
 });
 
 test('renders no Spotify section when Spotify is not configured', async () => {
@@ -659,8 +663,7 @@ test('hides Spotify items the library already has (non-null localId) by default'
 
   renderSearch('radiohead');
 
-  await screen.findByText('From Spotify');
-  expect(screen.getByText('Hail to the Thief (Live)')).toBeInTheDocument();
+  expect(await screen.findByText('Hail to the Thief (Live)')).toBeInTheDocument();
   expect(screen.queryByText('OK Computer')).toBeNull();
 });
 
@@ -674,9 +677,8 @@ test('hides a matched Spotify artist but still shows that artist\'s unmatched al
 
   renderSearch('radiohead');
 
-  await screen.findByText('From Spotify');
+  expect(await screen.findByRole('link', { name: 'Open Unowned Album in Spotify' })).toBeInTheDocument();
   expect(screen.queryByRole('link', { name: 'Open Radiohead in Spotify' })).toBeNull();
-  expect(screen.getByRole('link', { name: 'Open Unowned Album in Spotify' })).toBeInTheDocument();
 });
 
 test('omits the whole section when every Spotify result is already in the library', async () => {
@@ -735,7 +737,7 @@ test('the Spotify pill hides local results and shows every Spotify result, libra
 
   renderSearch('spot');
 
-  await screen.findByText('From Spotify');
+  await screen.findByText('New Album');
   expect(screen.queryByText('Owned Album')).toBeNull();
   const pill = screen.getByRole('button', { name: 'Spotify 4' });
   expect(pill).not.toHaveClass('active');
@@ -744,13 +746,14 @@ test('the Spotify pill hides local results and shows every Spotify result, libra
 
   expect(pill).toHaveClass('active');
   expect(screen.queryByText('Local Artist')).toBeNull();
-  expect(screen.queryByText('Results (1)')).toBeNull();
-  expect(screen.queryByText('Tracks (1)')).toBeNull();
+  expect(screen.queryByText(/^Results/)).toBeNull();
+  expect(screen.queryByText(/^Tracks \(/)).toBeNull();
+  expect(screen.getByText('From Spotify')).toBeInTheDocument();
   expect(screen.getByText('Owned Album')).toBeInTheDocument();
   expect(screen.getByText('New Album')).toBeInTheDocument();
   expect(screen.getByText('Spotify Artist')).toBeInTheDocument();
-  // Type pills stay available to switch back.
-  expect(screen.getByRole('button', { name: 'Artists 1' })).toBeInTheDocument();
+  // Type pills stay available to switch back (their counts include the mixed-in Spotify items).
+  expect(screen.getByRole('button', { name: 'Artists 2' })).toBeInTheDocument();
 
   fireEvent.click(pill);
 
@@ -764,25 +767,25 @@ test('choosing a type pill turns Spotify-only off', async () => {
 
   renderSearch('spot');
 
-  await screen.findByText('From Spotify');
+  await screen.findByText('Spotify Artist');
   fireEvent.click(screen.getByRole('button', { name: 'Spotify 3' }));
   expect(screen.queryByText('Local Artist')).toBeNull();
 
-  fireEvent.click(screen.getByRole('button', { name: 'Artists 1' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Artists 2' }));
 
   expect(screen.getByText('Local Artist')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Spotify 3' })).not.toHaveClass('active');
-  expect(screen.getByRole('button', { name: 'Artists 1' })).toHaveClass('active');
+  expect(screen.getByRole('button', { name: 'Artists 2' })).toHaveClass('active');
 });
 
-test('in Spotify-only mode the local "No results" message is hidden', async () => {
+test('no "No results" message when only Spotify matched, in the mixed view or Spotify-only mode', async () => {
   apiService.search.mockResolvedValue({ data: { results: [], tracks: [], count: 0 } });
   apiService.searchSpotify.mockResolvedValue(spotifyResponse());
 
   renderSearch('onlyspotify');
 
-  await screen.findByText('From Spotify');
-  expect(screen.getByText('No results found for "onlyspotify"')).toBeInTheDocument();
+  await screen.findByText('Spotify Track');
+  expect(screen.queryByText('No results found for "onlyspotify"')).toBeNull();
 
   fireEvent.click(screen.getByRole('button', { name: 'Spotify 3' }));
 
@@ -806,15 +809,14 @@ test('tolerates null imageUrl, empty/missing artists arrays, and missing fields'
 
   renderSearch('sparse');
 
-  expect(await screen.findByText('From Spotify')).toBeInTheDocument();
-  expect(screen.getByText('Imageless Artist')).toBeInTheDocument();
+  expect(await screen.findByText('Imageless Artist')).toBeInTheDocument();
   expect(screen.getByText('Artistless Album')).toBeInTheDocument();
   expect(screen.getByText('Bare Track')).toBeInTheDocument();
   expect(screen.getByText('No Artists Key')).toBeInTheDocument();
   // No externalUrl → no link rendered rather than a dead href.
   expect(screen.queryByRole('link', { name: 'Open Imageless Artist in Spotify' })).toBeNull();
-  // Local "no results" message still shows alongside the Spotify section.
-  expect(screen.getByText('No results found for "sparse"')).toBeInTheDocument();
+  // Spotify items count as results, so there's no "no results" message.
+  expect(screen.queryByText('No results found for "sparse"')).toBeNull();
 });
 
 test('does not refetch Spotify when loading more local results', async () => {
@@ -832,7 +834,10 @@ test('does not refetch Spotify when loading more local results', async () => {
 
   renderSearch('paged');
   await screen.findByText('Page One Artist');
-  await screen.findByText('From Spotify');
+  await waitFor(() => expect(apiService.searchSpotify).toHaveBeenCalled());
+  await act(async () => {});
+  // These Spotify items carry no score, so they wait for the last library page.
+  expect(screen.queryByText('Spotify Artist')).toBeNull();
 
   apiService.search.mockResolvedValueOnce({
     data: {
@@ -850,7 +855,7 @@ test('does not refetch Spotify when loading more local results', async () => {
   await screen.findByText('Page Two Artist');
   expect(apiService.search).toHaveBeenCalledTimes(2);
   expect(apiService.searchSpotify).toHaveBeenCalledTimes(1);
-  expect(screen.getByText('From Spotify')).toBeInTheDocument();
+  expect(screen.getByText('Spotify Artist')).toBeInTheDocument();
 });
 
 test('ignores a stale Spotify response from a previous query', async () => {
@@ -890,4 +895,136 @@ test('ignores a stale Spotify response from a previous query', async () => {
 
   expect(screen.getByText('New Query Track')).toBeInTheDocument();
   expect(screen.queryByText('Spotify Artist')).toBeNull();
+});
+
+// ---------------------------------------------------------------------------
+// Ordering, profile filter and type pills with mixed results
+// ---------------------------------------------------------------------------
+
+const scoredLocal = (results, extra = {}) => ({
+  data: {
+    results,
+    hasMore: false,
+    resultCounts: {
+      album: results.filter((r) => r.type === 'album').length,
+      artist: results.filter((r) => r.type === 'artist').length,
+      playlist: 0,
+      collection: 0,
+    },
+    tracks: [],
+    count: results.length,
+    pageSize: 30,
+    ...extra,
+  },
+});
+const localAlbum = (id, title, score) => ({ type: 'album', data: { id, title, image_path: 'x.jpg', artist: { id: 1, name: 'Somebody' } }, score });
+const localArtist = (id, name, score) => ({ type: 'artist', data: { id, name, image_path: 'a.jpg' }, score });
+const spArtist = (id, name, score) => ({ uri: `spotify:artist:${id}`, id, name, imageUrl: null, externalUrl: `https://open.spotify.com/artist/${id}`, localId: null, score });
+const spAlbum = (id, name, score) => ({ uri: `spotify:album:${id}`, id, name, artists: [{ id: 'z', name: 'Z' }], releaseYear: null, imageUrl: null, externalUrl: `https://open.spotify.com/album/${id}`, localId: null, score });
+
+test('Spotify artist with a higher score renders before a lower-scoring library album in the results grid', async () => {
+  apiService.search.mockResolvedValue(scoredLocal([localAlbum(1, 'High Library Album', 0.9), localAlbum(2, 'Low Library Album', 0.3)]));
+  apiService.searchSpotify.mockResolvedValue(spotifyResponse({ artists: [spArtist('s1', 'Middle Spotify Artist', 0.6)], albums: [], tracks: [] }));
+
+  renderSearch('ordering');
+
+  const spotifyArtist = await screen.findByText('Middle Spotify Artist');
+  expect(follows(screen.getByText('High Library Album'), spotifyArtist)).toBe(true);
+  expect(follows(spotifyArtist, screen.getByText('Low Library Album'))).toBe(true);
+});
+
+test('owned Spotify items (localId set) are not shown in the mixed view', async () => {
+  apiService.search.mockResolvedValue(scoredLocal([localArtist(1, 'Local Artist', 2)]));
+  apiService.searchSpotify.mockResolvedValue(spotifyResponse({
+    artists: [{ ...spArtist('s1', 'Owned Spotify Artist', 2), localId: 1 }],
+    albums: [spAlbum('s2', 'Unowned Spotify Album', 2)],
+    tracks: [],
+  }));
+
+  renderSearch('owned');
+
+  await screen.findByText('Unowned Spotify Album');
+  expect(screen.queryByText('Owned Spotify Artist')).toBeNull();
+});
+
+test('Spotify pill still shows only Spotify results, including owned ones', async () => {
+  apiService.search.mockResolvedValue(scoredLocal([localArtist(1, 'Local Artist', 2)]));
+  apiService.searchSpotify.mockResolvedValue(spotifyResponse({
+    artists: [{ ...spArtist('s1', 'Owned Spotify Artist', 2), localId: 1 }],
+    albums: [spAlbum('s2', 'Unowned Spotify Album', 2)],
+    tracks: [],
+  }));
+
+  renderSearch('owned');
+  await screen.findByText('Unowned Spotify Album');
+
+  fireEvent.click(screen.getByRole('button', { name: 'Spotify 2' }));
+
+  expect(screen.getByText('From Spotify')).toBeInTheDocument();
+  expect(screen.getByText('Owned Spotify Artist')).toBeInTheDocument();
+  expect(screen.queryByText('Local Artist')).toBeNull();
+});
+
+test('with a profile filter active, searchSpotify is not called and no Spotify items render', async () => {
+  useProfileFilterStore.setState({ activeProfileId: 7 });
+  apiService.search.mockResolvedValue(scoredLocal([localArtist(1, 'Local Artist', 2)]));
+  apiService.searchSpotify.mockResolvedValue(spotifyResponse());
+
+  renderSearch('profiled');
+
+  await screen.findByText('Local Artist');
+  await act(async () => {});
+  expect(apiService.searchSpotify).not.toHaveBeenCalled();
+  expect(screen.queryByText('Spotify Artist')).toBeNull();
+  expect(screen.queryByRole('button', { name: /^Spotify/ })).toBeNull();
+});
+
+test('Albums type pill hides Spotify artists and the heading counts library + Spotify albums', async () => {
+  apiService.search.mockResolvedValue(scoredLocal([localArtist(1, 'Local Artist', 2), localAlbum(2, 'Local Album', 2)]));
+  apiService.searchSpotify.mockResolvedValue(spotifyResponse({
+    artists: [spArtist('s1', 'Spotify Artist', 2)],
+    albums: [spAlbum('s2', 'Spotify Album', 2)],
+    tracks: [],
+  }));
+
+  renderSearch('pills');
+  await screen.findByText('Spotify Album');
+  expect(screen.getByText('Results (4)')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Albums 2' }));
+
+  expect(screen.getByText('Results (2)')).toBeInTheDocument();
+  expect(screen.getByText('Local Album')).toBeInTheDocument();
+  expect(screen.getByText('Spotify Album')).toBeInTheDocument();
+  expect(screen.queryByText('Spotify Artist')).toBeNull();
+  expect(screen.queryByText('Local Artist')).toBeNull();
+});
+
+test('Spotify results that arrive after page 2 loaded are placed by score without reordering library results', async () => {
+  apiService.search.mockResolvedValueOnce(scoredLocal(
+    [localArtist(1, 'Page One Top', 2), localAlbum(2, 'Page One Low', 0.3)],
+    { hasMore: true },
+  ));
+  let resolveSpotify;
+  apiService.searchSpotify.mockReturnValue(new Promise((resolve) => { resolveSpotify = resolve; }));
+
+  renderSearch('late');
+  await screen.findByText('Page One Top');
+
+  apiService.search.mockResolvedValueOnce(scoredLocal([localAlbum(3, 'Page Two Lowest', 0.25)]));
+  await waitFor(() => expect(intersectionCallback).not.toBeNull());
+  triggerIntersection();
+  await screen.findByText('Page Two Lowest');
+
+  await act(async () => {
+    resolveSpotify(spotifyResponse({ artists: [spArtist('s1', 'Late Spotify Artist', 0.5)], albums: [], tracks: [] }));
+  });
+
+  const late = await screen.findByText('Late Spotify Artist');
+  const top = screen.getByText('Page One Top');
+  const low = screen.getByText('Page One Low');
+  const lowest = screen.getByText('Page Two Lowest');
+  expect(follows(top, late)).toBe(true);
+  expect(follows(late, low)).toBe(true);
+  expect(follows(low, lowest)).toBe(true);
 });

@@ -104,7 +104,7 @@ describe('canPlay', () => {
       { id: 'a', uri: 'spotify:track:a', name: 'One', artists: [], durationMs: 0 },
       { id: 'b', uri: 'spotify:track:b', name: 'Two', artists: [], durationMs: 1000 },
     ] } });
-    render(<SpotifyResults canPlay albums={[album]} />);
+    render(<MemoryRouter><SpotifyResults canPlay albums={[album]} /></MemoryRouter>);
     fireEvent.click(screen.getByRole('button', { name: 'Add Some Album to queue' }));
     await waitFor(() => expect(usePlayerStore.getState().addTracks).toHaveBeenCalled());
     const [entries, next, opts] = usePlayerStore.getState().addTracks.mock.calls[0];
@@ -121,7 +121,7 @@ describe('canPlay', () => {
   ])('album fetch failure (%s) enqueues nothing and does not throw', async (_n, impl) => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     apiService.getSpotifyAlbumTracks.mockImplementation(impl);
-    render(<SpotifyResults canPlay albums={[album]} />);
+    render(<MemoryRouter><SpotifyResults canPlay albums={[album]} /></MemoryRouter>);
     fireEvent.click(screen.getByRole('button', { name: 'Play Some Album' }));
     await waitFor(() => expect(warn).toHaveBeenCalled());
     expect(usePlayerStore.getState().addTracks).not.toHaveBeenCalled();
@@ -147,5 +147,20 @@ describe('artist links', () => {
   test('a library artist (localId) opens its library page either way', () => {
     routed(<SpotifyResults artists={[{ ...artist, localId: 40 }]} />);
     expect(screen.getByRole('link', { name: 'SZA' })).toHaveAttribute('href', '/artist/40');
+  });
+});
+
+describe('album links (#72)', () => {
+  const album = { id: 'al1', name: 'Linked Album', artists: [], releaseYear: '1997', imageUrl: null, externalUrl: 'https://open.spotify.com/album/al1' };
+
+  test('album title links to /spotify/album/:id when canPlay', () => {
+    render(<MemoryRouter><SpotifyResults canPlay albums={[album]} /></MemoryRouter>);
+    expect(screen.getByRole('link', { name: 'Linked Album' })).toHaveAttribute('href', '/spotify/album/al1');
+  });
+
+  test('album title is plain text without canPlay', () => {
+    render(<MemoryRouter><SpotifyResults albums={[album]} /></MemoryRouter>);
+    expect(screen.queryByRole('link', { name: 'Linked Album' })).toBeNull();
+    expect(screen.getByText('Linked Album')).toBeInTheDocument();
   });
 });
