@@ -16,7 +16,7 @@ const spotifyAlbum = (name: string, artists: string[]) => ({
   uri: '', id: name, name, artists: refs(artists), releaseYear: null, totalTracks: null, imageUrl: null, externalUrl: null,
 })
 const spotifyTrack = (name: string, artists: string[]) => ({
-  uri: '', id: name, name, artists: refs(artists), album: { id: '', name: '', imageUrl: null }, durationMs: 0, explicit: false, externalUrl: null,
+  uri: '', id: name, name, artists: refs(artists), album: { id: '', name: '', imageUrl: null }, durationMs: 0, explicit: false, externalUrl: null, discNumber: null, trackNumber: null,
 })
 
 test('annotate finds artists, albums (primary or artist_albums credit) and approved tracks across the library', async () => {

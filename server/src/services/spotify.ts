@@ -31,6 +31,9 @@ export interface SpotifyTrack {
   durationMs: number
   explicit: boolean
   externalUrl: string | null
+  // Position on its release; null when Spotify didn't send an integer.
+  discNumber: number | null
+  trackNumber: number | null
 }
 
 export interface SpotifyAlbum {
@@ -131,11 +134,13 @@ interface RawTrack {
   artists?: RawArtist[] | null; album?: RawAlbum | null
   duration_ms?: number | null; explicit?: boolean | null
   external_urls?: { spotify?: string } | null
+  disc_number?: number | null; track_number?: number | null
 }
 interface RawPage<T> { items?: (T | null)[] | null }
 interface RawSearchResponse { tracks?: RawPage<RawTrack> | null; albums?: RawPage<RawAlbum> | null; artists?: RawPage<RawArtist> | null }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
+const int = (v: unknown): number | null => (Number.isInteger(v) ? (v as number) : null)
 
 export function pickImageUrl(images: RawImage[] | null | undefined): string | null {
   const usable = (images ?? []).filter((i): i is RawImage & { url: string } => !!i && typeof i.url === 'string' && !!i.url)
@@ -159,6 +164,8 @@ function mapTrack(t: RawTrack): SpotifyTrack {
     durationMs: typeof t.duration_ms === 'number' ? t.duration_ms : 0,
     explicit: t.explicit === true,
     externalUrl: t.external_urls?.spotify || null,
+    discNumber: int(t.disc_number),
+    trackNumber: int(t.track_number),
   }
 }
 
@@ -227,6 +234,15 @@ export async function searchSpotify(
     limit: String(opts.limit ?? DEFAULT_LIMIT),
   })
   return mapSearchResponse(await spotifyGet<RawSearchResponse>(`${API}/search?${qs}`, 'search'))
+}
+
+// Albums by title and artist (Spotify's field filters), for matching a library
+// album to its Spotify release. Quotes are dropped so they can't end the filter.
+export async function searchSpotifyAlbums(title: string, artist: string, limit = DEFAULT_LIMIT): Promise<SpotifyAlbum[]> {
+  if (!isSpotifyConfigured()) throw new SpotifyNotConfiguredError()
+  const unquote = (v: string) => v.replace(/"/g, '')
+  const qs = new URLSearchParams({ q: `album:"${unquote(title)}" artist:"${unquote(artist)}"`, type: 'album', limit: String(limit) })
+  return mapSearchResponse(await spotifyGet<RawSearchResponse>(`${API}/search?${qs}`, 'album search')).albums
 }
 
 export interface SpotifyAlbumTracks {

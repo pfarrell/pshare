@@ -12,7 +12,7 @@ const album = (name: any) => ({
   uri: '', id: String(name), name, artists: [], releaseYear: null, totalTracks: null, imageUrl: null, externalUrl: null,
 })
 const track = (name: any) => ({
-  uri: '', id: String(name), name, artists: [], album: { id: '', name: '', imageUrl: null }, durationMs: 0, explicit: false, externalUrl: null,
+  uri: '', id: String(name), name, artists: [], album: { id: '', name: '', imageUrl: null }, durationMs: 0, explicit: false, externalUrl: null, discNumber: null, trackNumber: null,
 })
 
 const result = (r: { artists?: any[]; albums?: any[]; tracks?: any[] }): AnnotatedSpotifyResult =>

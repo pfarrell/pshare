@@ -3,7 +3,7 @@ import { test, after, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   searchSpotify, getSpotifyAlbumTracks, findSpotifyArtistByName, getSpotifyArtistAlbums, dedupeAlbumsByTitle,
-  hasSpotifySinglesOrCompilations, getSpotifyGuestTracks, MAX_GUEST_RELEASES,
+  hasSpotifySinglesOrCompilations, getSpotifyGuestTracks, MAX_GUEST_RELEASES, searchSpotifyAlbums,
   releaseYearFrom, MAX_ARTIST_ALBUM_PAGES, type SpotifyArtistAlbum, mapSearchResponse, pickImageUrl, isSpotifyConfigured, resetSpotifyTokenCache,
   SpotifyNotConfiguredError, SpotifyRateLimitError, SpotifyApiError,
 } from './spotify.js'
@@ -200,6 +200,7 @@ test('mapSearchResponse maps the full shape', () => {
     uri: 'spotify:track:t1', id: 't1', name: 'Airbag', artists: [{ id: 'ar1', name: 'Radiohead' }],
     album: { id: 'al1', name: 'OK Computer', imageUrl: 'img300' },
     durationMs: 284000, explicit: false, externalUrl: 'https://open.spotify.com/track/t1',
+    discNumber: null, trackNumber: null,
   }])
   assert.deepEqual(out.albums, [{
     uri: 'spotify:album:al1', id: 'al1', name: 'OK Computer', artists: [{ id: 'ar1', name: 'Radiohead' }],
@@ -218,7 +219,7 @@ test('mapSearchResponse is defensive about null/missing fields', () => {
   })
   assert.deepEqual(out.tracks, [{
     uri: '', id: 't1', name: '', artists: [], album: { id: '', name: '', imageUrl: null },
-    durationMs: 0, explicit: false, externalUrl: null,
+    durationMs: 0, explicit: false, externalUrl: null, discNumber: null, trackNumber: null,
   }])
   assert.deepEqual(out.albums, [{
     uri: '', id: 'al1', name: '', artists: [{ id: 'x', name: '' }],
@@ -432,4 +433,43 @@ test('getSpotifyGuestTracks opens at most MAX_GUEST_RELEASES releases and none w
   stubFetch(() => json({ items: [], next: null }))
   assert.deepEqual(await getSpotifyGuestTracks('kg'), [])
   assert.equal(searchCalls().length, 1)
+})
+
+test('mapSearchResponse maps disc and track numbers, null when missing or not integers', () => {
+  const out = mapSearchResponse({ tracks: { items: [
+    { id: 'a', disc_number: 1, track_number: 10 } as any,
+    { id: 'b', disc_number: 'x', track_number: 2.5 } as any,
+    { id: 'c' },
+  ] } })
+  assert.deepEqual(out.tracks.map((t) => [t.discNumber, t.trackNumber]), [[1, 10], [null, null], [null, null]])
+})
+
+test('getSpotifyAlbumTracks carries disc and track numbers', async () => {
+  stubFetch(() => json({ id: 'alb1', name: 'Album', images: [], tracks: { items: [
+    { ...rawTrack(1), disc_number: 1, track_number: 1 }, { ...rawTrack(2), disc_number: 1, track_number: 2 },
+  ], next: null } }))
+  const { tracks } = await getSpotifyAlbumTracks('alb1')
+  assert.deepEqual(tracks.map((t) => [t.discNumber, t.trackNumber]), [[1, 1], [1, 2]])
+})
+
+test('searchSpotifyAlbums sends album/artist field filters and maps albums', async () => {
+  stubFetch(() => json({ albums: { items: [{ id: 'gh', name: 'Greatest Hits', release_date: '1973-03-12', artists: [{ id: 'jg', name: 'James Gang' }] }] } }))
+  const albums = await searchSpotifyAlbums('Greatest Hits', 'James Gang')
+  assert.deepEqual(albums.map((a) => [a.id, a.name, a.releaseYear]), [['gh', 'Greatest Hits', '1973']])
+  const url = new URL(searchCalls()[0].url)
+  assert.equal(url.pathname, '/v1/search')
+  assert.equal(url.searchParams.get('type'), 'album')
+  assert.equal(url.searchParams.get('q'), 'album:"Greatest Hits" artist:"James Gang"')
+  assert.equal(url.searchParams.get('limit'), '10')
+
+  calls = []
+  stubFetch(() => json({ albums: { items: [] } }))
+  await searchSpotifyAlbums('The "Best" Of', 'Ar"tist')
+  assert.equal(new URL(searchCalls()[0].url).searchParams.get('q'), 'album:"The Best Of" artist:"Artist"')
+})
+
+test('searchSpotifyAlbums throws when unconfigured, without calling fetch', async () => {
+  delete process.env.SPOTIFY_CLIENT_ID
+  stubFetch(() => { throw new Error('should not be called') })
+  await assert.rejects(searchSpotifyAlbums('a', 'b'), SpotifyNotConfiguredError)
 })
