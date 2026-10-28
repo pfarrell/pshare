@@ -87,3 +87,13 @@ describe('SpotifyAlbumCard — green play (#72)', () => {
     expect(screen.getByRole('button', { name: 'Play Lover' })).not.toHaveClass('play-button-spotify');
   });
 });
+
+describe('SpotifyAlbumCard — green tinge (#72)', () => {
+  test('an unowned Spotify album card is tinted; an owned one is a plain library card', () => {
+    const { container, unmount } = renderCard();
+    expect(container.querySelector('.artist-card.spotify-tint')).toBeInTheDocument();
+    unmount();
+    const owned = renderCard({ ...album, localId: 9 });
+    expect(owned.container.querySelector('.spotify-tint')).toBeNull();
+  });
+});

@@ -18,6 +18,7 @@ const ResultRow = ({
   onTouchEnd,
   play,
   triggerProps,
+  className,
 }) => {
   const isMobile = useIsMobile();
   const trigger = triggerProps ?? { onContextMenu, onTouchStart, onTouchMove, onTouchEnd };
@@ -111,7 +112,7 @@ const ResultRow = ({
 
   return (
     <div
-      className="result-row"
+      className={`result-row${className ? ` ${className}` : ''}`}
       onClick={onClick}
       {...trigger}
     >

@@ -25,6 +25,7 @@ const EntityCard = ({
   actions = [],
   shouldIgnore,
   menuTestId,
+  className,
 }) => {
   const isMobile = useIsMobile();
   const viewMode = useViewModeStore((s) => s.mode);
@@ -49,9 +50,10 @@ const EntityCard = ({
           onImageError={handleSmallImageError}
           triggerProps={ctxMenu.triggerProps}
           play={play}
+          className={className}
         />
       ) : (
-        <div className="artist-card" onClick={handleClick} {...ctxMenu.triggerProps}>
+        <div className={`artist-card${className ? ` ${className}` : ''}`} onClick={handleClick} {...ctxMenu.triggerProps}>
           <div className="artist-card-image">
             <img src={imageUrl} alt={imageAlt ?? title} style={cardImageStyle} onError={handleSmallImageError} />
             {imageBadge}

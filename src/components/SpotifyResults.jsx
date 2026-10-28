@@ -58,14 +58,15 @@ const SpotifyActions = ({ source, name }) => {
 // Card on desktop card mode, compact row on mobile / desktop list mode —
 // same split EntityCard uses, built on the same .artist-card / .result-row
 // classes so it sits naturally in a CardGrid next to local results.
-const SpotifyItem = ({ title, subtitle, imageUrl, imageShape = 'square', glyph, externalUrl, asRow, actionsSource, to, linkState }) => {
+// `tint` (#72): the faint Spotify-green background Spotify album cards and track rows carry.
+const SpotifyItem = ({ title, subtitle, imageUrl, imageShape = 'square', glyph, externalUrl, asRow, actionsSource, to, linkState, tint = false }) => {
   const isMobile = useIsMobile();
   const viewMode = useViewModeStore((s) => s.mode);
   const titleNode = to ? <Link to={to} state={linkState} className="spotify-result-link">{title}</Link> : title;
 
   if (asRow || isMobile || viewMode === 'list') {
     return (
-      <div className="result-row spotify-result">
+      <div className={`result-row spotify-result${tint ? ' spotify-tint' : ''}`}>
         <div className={`result-row-image result-row-image-${imageShape}`}>
           <SpotifyImage imageUrl={imageUrl} alt={title} glyph={glyph} />
         </div>
@@ -80,7 +81,7 @@ const SpotifyItem = ({ title, subtitle, imageUrl, imageShape = 'square', glyph, 
   }
 
   return (
-    <div className="artist-card spotify-result" style={{ position: 'relative' }}>
+    <div className={`artist-card spotify-result${tint ? ' spotify-tint' : ''}`} style={{ position: 'relative' }}>
       <span className="search-result-type-badge spotify-badge">SPOTIFY</span>
       <div className="artist-card-image">
         <SpotifyImage imageUrl={imageUrl} alt={title} glyph={glyph} />
@@ -126,6 +127,7 @@ export const SpotifyResultCard = ({ kind, item, canPlay = false }) => {
       actionsSource={canPlay && albumId ? albumQueueTracks(item) : null}
       to={canPlay && albumId ? `/spotify/album/${albumId}` : null}
       linkState={{ year: text(item.releaseYear) || null }}
+      tint
     />
   );
 };
@@ -134,6 +136,7 @@ export const SpotifyResultCard = ({ kind, item, canPlay = false }) => {
 export const SpotifyTrackRow = ({ item, canPlay = false }) => (
   <SpotifyItem
     asRow
+    tint
     title={text(item.name)}
     subtitle={[
       joinArtistNames(item.artists),
