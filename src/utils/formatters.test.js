@@ -1,6 +1,11 @@
 import { formatDuration, formatCount, getAlbumYear, formatPlaybackTime } from './formatters';
 
 describe('formatDuration', () => {
+  test('drops fractional seconds (Spotify durations are durationMs / 1000)', () => {
+    expect(formatDuration(238.733)).toBe('3:58');
+    expect(formatDuration(65.9)).toBe('1:05');
+  });
+
   test('returns empty string for 0', () => {
     expect(formatDuration(0)).toBe('');
   });

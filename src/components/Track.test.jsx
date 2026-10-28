@@ -869,6 +869,12 @@ describe('Track component — row layout', () => {
     expect(container.querySelector('.track-row-image img')).toHaveAttribute('src', 'https://i.scdn.co/image/x');
   });
 
+  test('Spotify row shows a whole-second duration for a non-round durationMs', () => {
+    const { container } = renderTrack({ layout: 'row', track: { ...spotifyEntry, duration: 238733 / 1000 } });
+    expect(container.querySelector('.track-row-subtitle')).toHaveTextContent('Spotify Artist · Spotify Album · 3:58');
+    expect(container.querySelector('.track-row-subtitle').textContent).not.toMatch(/\d:\d\d\./);
+  });
+
   test('Spotify row with playable=false has no Play button but has the Open in Spotify link', () => {
     renderTrack({ layout: 'row', track: spotifyEntry, playable: false, externalUrl: 'https://open.spotify.com/track/abc' });
     expect(screen.queryByRole('button', { name: 'Play Spotify Song' })).not.toBeInTheDocument();
