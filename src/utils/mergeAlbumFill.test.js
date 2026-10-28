@@ -37,6 +37,13 @@ describe('mergeAlbumFill', () => {
     expect(keys(merged)).toEqual(['sp1', 'lib1', 'lib2', 'sp6', 'lib3']);
   });
 
+  test('a custom entry builder shapes the Spotify entries and can skip some', () => {
+    const merged = mergeAlbumFill([{ id: 1 }], {
+      spotifyAlbum, tracks: [fillTrack(1), fillTrack(2)], libraryPositions: { 1: 5 },
+    }, (item) => (item.position === 2 ? null : { raw: item.uri }));
+    expect(merged).toEqual([{ raw: 'spotify:track:t1' }, { id: 1 }]);
+  });
+
   test('tolerates a missing library list and non-object fill items', () => {
     expect(keys(mergeAlbumFill(undefined, { spotifyAlbum, tracks: [null, 'x', fillTrack(1)], libraryPositions: {} }))).toEqual(['sp1']);
   });

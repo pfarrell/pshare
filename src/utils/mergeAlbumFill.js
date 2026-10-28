@@ -10,14 +10,16 @@ const isObject = (v) => v && typeof v === 'object';
 /**
  * @param {Array} libraryTracks - the album's library tracks, in today's order
  * @param {{ spotifyAlbum, tracks, libraryPositions }} fill - from useSpotifyAlbumFill
- * @returns {Array} library tracks (unchanged objects) and Spotify queue entries;
+ * @param {(item, spotifyAlbum) => any} toEntry - builds each Spotify entry (null skips
+ *   it); defaults to a player queue entry
+ * @returns {Array} library tracks (unchanged objects) and Spotify entries;
  *   libraryTracks itself when there is nothing to fill
  */
-export function mergeAlbumFill(libraryTracks, fill) {
+export function mergeAlbumFill(libraryTracks, fill, toEntry = toSpotifyQueueTrack) {
   const library = Array.isArray(libraryTracks) ? libraryTracks : [];
   const fills = (Array.isArray(fill?.tracks) ? fill.tracks : [])
     .filter((t) => isObject(t) && Number.isInteger(t.position))
-    .map((t) => ({ position: t.position, entry: toSpotifyQueueTrack(t, fill.spotifyAlbum) }))
+    .map((t) => ({ position: t.position, entry: toEntry(t, fill.spotifyAlbum) }))
     .filter((f) => f.entry);
   if (fills.length === 0) return libraryTracks;
 
