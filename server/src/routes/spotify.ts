@@ -11,7 +11,7 @@ import {
   createSpotifyArtistAlbumsCache, SPOTIFY_ARTIST_ALBUMS_TTL_MS, SPOTIFY_ARTIST_ALBUMS_MAX_ENTRIES,
 } from '../services/spotifyArtistAlbumsCache.js'
 import { spotifyLibraryMatcher, normalizeForMatch } from '../services/spotifyLibraryMatch.js'
-import { candidateMatchesAlbum, matchAlbumFill, narrowByYear, titleKey } from '../services/spotifyAlbumFill.js'
+import { candidateMatchesAlbum, matchAlbumFill, preferredCandidates, titleKey } from '../services/spotifyAlbumFill.js'
 import type { FillCandidate, LibraryAlbumForFill } from '../services/spotifyAlbumFill.js'
 import { db } from '../db/database.js'
 import { parseIntParam } from '../utils/http.js'
@@ -193,12 +193,12 @@ const fillCacheKey = (albumId: number, library: LibraryAlbumForFill) =>
   [albumId, titleKey(library.title), normalizeForMatch(library.artistName), (library.releaseYear ?? '').slice(0, 4)].join('|')
 
 // The candidates worth matching against: search, keep same title/artist
-// (same year first), then open at most MAX_FILL_CANDIDATES. Any failed fetch
+// (exact title, then same year, first), then open at most MAX_FILL_CANDIDATES. Any failed fetch
 // fails the whole lookup: a missing candidate might have disagreed.
 async function findFillCandidates(library: LibraryAlbumForFill): Promise<FillCandidate[]> {
   const found = await searchSpotifyAlbums(library.title, library.artistName)
   const matching = found.filter((album) => candidateMatchesAlbum(library, album))
-  const opened = await Promise.allSettled(narrowByYear(library.releaseYear, matching, (a) => a.releaseYear)
+  const opened = await Promise.allSettled(preferredCandidates(library, matching, (a) => a)
     .slice(0, MAX_FILL_CANDIDATES)
     .map(async (album) => ({ album, tracks: (await getSpotifyAlbumTracks(album.id)).tracks })))
   const failed = opened.find((r): r is PromiseRejectedResult => r.status === 'rejected')

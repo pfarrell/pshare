@@ -143,3 +143,40 @@ test('narrowByYear keeps same-year items only when there are some', () => {
   assert.deepEqual(narrowByYear('1980', items, (i) => i.y), items)
   assert.deepEqual(narrowByYear(null, items, (i) => i.y), items)
 })
+
+// --- Dr. John "Duke Elegant" and Daughtry "Daughtry" (library disc_number 0, junk track numbers) ---
+
+const DUKE = ['On the Wrong Side of the Railroad Tracks', "I'm Gonna Go Fishin", "It Don't Mean a Thing (If It Ain't Got That Swing)",
+  'Perdido', "Don't Get Around Much Anymore", 'Solitude', 'Satin Doll', 'Mood Indigo', "Do Nothing 'Til You Hear from Me",
+  "Things Ain't What They Used to Be", 'Caravan', 'The Flaming Sword']
+const DAUGHTRY = ["It's Not Over", 'Used To', 'Home', 'Over You', 'Crashed', 'Feels Like Tonight', 'What I Want (feat. Slash)',
+  'Breakdown', 'Gone', 'There And Back Again', 'All These Lives', 'What About Now']
+const named = (c: FillCandidate, name: string): FillCandidate => ({ ...c, album: { ...c.album, name } })
+
+test('a library disc_number of 0 means disc 1', () => {
+  const lib = library([{ id: 9, title: 'Satin Doll', trackNumber: '07' }], { title: 'Duke Elegant', artistName: 'Dr. John', releaseYear: '1999', discNumber: 0 })
+  const fill = matchAlbumFill(lib, [named(candidate('duke', DUKE, { year: '2000' }), 'Duke Elegant')])
+  assert.equal(fill?.tracks.length, 11)
+  assert.deepEqual(fill?.libraryPositions, { 9: 7 })
+})
+
+test('a track number past the end of the release is matched by exact title instead', () => {
+  const lib = library([{ id: 1, title: 'Home', trackNumber: '33' }, { id: 2, title: 'Over You', trackNumber: '96' }],
+    { title: 'Daughtry', artistName: 'Daughtry', releaseYear: '2006', discNumber: 0 })
+  const fill = matchAlbumFill(lib, [named(candidate('std', DAUGHTRY, { year: '2006' }), 'Daughtry')])
+  assert.deepEqual(fill?.libraryPositions, { 1: 3, 2: 4 })
+  assert.equal(fill?.tracks.length, 10)
+  // A number inside the release that disagrees still blocks the fill.
+  assert.equal(matchAlbumFill(library([{ id: 1, title: 'Home', trackNumber: '5' }]), [candidate('std', DAUGHTRY)]), null)
+})
+
+test('releases whose full title equals the library title win over other editions', () => {
+  const lib = library([{ id: 1, title: 'Home', trackNumber: '33' }, { id: 2, title: 'Over You', trackNumber: '96' }],
+    { title: 'Daughtry', artistName: 'Daughtry', releaseYear: '2006', discNumber: 0 })
+  const deluxe = named(candidate('dlx', [...DAUGHTRY, 'Feels Like The First Time', "It's Not Over - Live", 'Home - Acoustic Version'], { year: '2006' }), 'Daughtry (Deluxe Edition)')
+  const standard = named(candidate('std', DAUGHTRY, { year: '2006' }), 'Daughtry')
+  assert.equal(matchAlbumFill(lib, [standard, deluxe])?.spotifyAlbum.id, 'std')
+  // With no exact-title release, two passing editions that differ still mean no fill.
+  const longer = named(candidate('dlx2', [...DAUGHTRY, 'Feels Like The First Time'], { year: '2006' }), 'Daughtry (Deluxe Edition)')
+  assert.equal(matchAlbumFill(lib, [named(standard, 'Daughtry (Remastered)'), longer]), null)
+})

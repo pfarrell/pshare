@@ -66,6 +66,15 @@ export function narrowByYear<T>(releaseYear: string | null, items: T[], yearOf: 
   return same.length > 0 ? same : items
 }
 
+// Candidates in the order worth trusting: releases whose full title is the
+// library title's (so "Daughtry" beats "Daughtry (Deluxe Edition)") when there
+// are any, then narrowed to the library year when any match it.
+export function preferredCandidates<T>(library: LibraryAlbumForFill, items: T[], albumOf: (item: T) => SpotifyAlbum): T[] {
+  const title = normalizeForMatch(library.title)
+  const exact = items.filter((item) => normalizeForMatch(albumOf(item).name) === title)
+  return narrowByYear(library.releaseYear, exact.length > 0 ? exact : items, (item) => albumOf(item).releaseYear)
+}
+
 const positionOf = (trackNumber: string | null): number | null => {
   const n = parseInt(trackNumber ?? '', 10)
   return Number.isInteger(n) && n > 0 ? n : null
@@ -83,8 +92,12 @@ function discTracks(candidate: FillCandidate, disc: number): Map<number, Spotify
 // Every library track's position on this disc, or null when any doesn't fit.
 function placeLibraryTracks(library: LibraryAlbumForFill, onDisc: Map<number, SpotifyTrack>): Record<number, number> | null {
   const positions: Record<number, number> = {}
+  const last = Math.max(0, ...onDisc.keys())
   for (const t of library.tracks) {
-    const position = positionOf(t.trackNumber)
+    // A number past the end of the release ("33" on a 12-track album) is junk
+    // metadata, so the track is placed by its title like an unnumbered one.
+    const numbered = positionOf(t.trackNumber)
+    const position = numbered !== null && numbered <= last ? numbered : null
     if (position !== null) {
       const spotify = onDisc.get(position)
       if (!spotify || !titlesAgree(t.title, spotify.name)) return null
@@ -110,8 +123,9 @@ const sameTrackList = (a: Map<number, SpotifyTrack>, b: Map<number, SpotifyTrack
 
 export function matchAlbumFill(library: LibraryAlbumForFill, candidates: FillCandidate[]): AlbumFill | null {
   if (library.tracks.length === 0 || candidates.length === 0) return null
-  const pool = narrowByYear(library.releaseYear, candidates, (c) => c.album.releaseYear)
-  const disc = library.discNumber ?? 1
+  const pool = preferredCandidates(library, candidates, (c) => c.album)
+  // Spotify numbers discs from 1; the library often stores 0 for "not set".
+  const disc = library.discNumber && library.discNumber > 0 ? library.discNumber : 1
 
   const passing = pool
     .map((candidate) => {
