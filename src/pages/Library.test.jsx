@@ -102,3 +102,16 @@ test('renders a favorited album with no artist (orphaned album, artist: null) wi
 
   expect(screen.getByText('Orphaned Album')).toBeInTheDocument();
 });
+
+test('favorited tracks render with the row layout and no position numbers', () => {
+  useFavoritesStore.setState({
+    items: [{ id: 3, kind: 'track', target_id: 4, item: { id: 4, title: 'Fave Track', duration: 100, artist: { id: 1, name: 'A' }, album: { id: 2, title: 'B' } } }],
+    loading: false,
+    loaded: true,
+    load: vi.fn(),
+  });
+  const { container } = renderLibrary();
+  fireEvent.click(screen.getByRole('button', { name: /Tracks/ }));
+  expect(container.querySelector('.track-row')).toBeInTheDocument();
+  expect(screen.queryByText(/01\./)).not.toBeInTheDocument();
+});

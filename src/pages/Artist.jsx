@@ -306,6 +306,7 @@ const Artist = () => {
                 track={track}
                 index={index}
                 trackCount={singles.length}
+                layout="row"
                 isPlaying={currentTrack?.id === track.id}
                 showEdit={isAdmin}
               />

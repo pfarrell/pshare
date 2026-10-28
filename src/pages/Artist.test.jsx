@@ -375,8 +375,18 @@ describe('Artist page — Shuffle All', () => {
     const single = { id: 5, title: 'A Single', url: '/stream/5', artist: { id: 1, name: 'Test Artist' }, album: { id: 9, title: 'Singles' } };
     apiService.getArtist.mockResolvedValue({ data: { ...artistData, albums: [], singles: [single] } });
     renderArtist();
-    await screen.findByText('Test Artist');
+    // The single's row subtitle names the artist too, hence findAll.
+    await screen.findAllByText('Test Artist');
     expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument();
+  });
+
+  test('singles render with the row layout and no position numbers', async () => {
+    const single = { id: 5, title: 'A Single', url: '/stream/5', artist: { id: 1, name: 'Test Artist' }, album: { id: 9, title: 'Singles' } };
+    apiService.getArtist.mockResolvedValue({ data: { ...artistData, albums: [], singles: [single] } });
+    const { container } = renderArtist();
+    await screen.findByText(/A Single/);
+    expect(container.querySelector('.track-row')).toBeInTheDocument();
+    expect(screen.queryByText(/01\./)).not.toBeInTheDocument();
   });
 });
 
