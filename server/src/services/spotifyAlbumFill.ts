@@ -40,11 +40,20 @@ export function titlesAgree(a: string, b: string): boolean {
   return x === y || y.startsWith(`${x} `) || x.startsWith(`${y} `)
 }
 
-// A search result worth opening: same title (editions ignored) by the same artist.
+// Words that mark a different recording of the same songs. titleKey drops
+// " - Live" / "(Live)", so an edition carrying one must be asked for by name.
+const VERSION_WORDS = new Set(['live', 'acoustic', 'demo', 'demos', 'instrumental', 'instrumentals', 'karaoke', 'unplugged', 'remix', 'remixes'])
+const versionWords = (name: string) => normalizeForMatch(name).split(' ').filter((w) => VERSION_WORDS.has(w))
+
+// A search result worth opening: same title by the same artist. Reissue tails
+// ("(Remastered)") are ignored; live/acoustic/demo-style editions only match a
+// library title that names the same version.
 export function candidateMatchesAlbum(library: LibraryAlbumForFill, album: SpotifyAlbum): boolean {
   const title = titleKey(library.title)
   const artist = normalizeForMatch(library.artistName)
+  const wanted = new Set(versionWords(library.title))
   return !!title && !!artist && titleKey(album.name) === title
+    && versionWords(album.name).every((w) => wanted.has(w))
     && album.artists.some((a) => normalizeForMatch(a.name) === artist)
 }
 
@@ -72,7 +81,9 @@ function placeLibraryTracks(library: LibraryAlbumForFill, onDisc: Map<number, Sp
       if (!spotify || !titlesAgree(t.title, spotify.name)) return null
       positions[t.id] = position
     } else {
-      const agreeing = [...onDisc.entries()].filter(([, s]) => titlesAgree(t.title, s.name))
+      // Without a position to confirm it, a prefix ("Live" for "Live Forever") is too weak.
+      const key = titleKey(t.title)
+      const agreeing = key ? [...onDisc.entries()].filter(([, s]) => titleKey(s.name) === key) : []
       if (agreeing.length !== 1) return null
       positions[t.id] = agreeing[0][0]
     }
@@ -80,10 +91,12 @@ function placeLibraryTracks(library: LibraryAlbumForFill, onDisc: Map<number, Sp
   return positions
 }
 
+// Full names, suffixes included: a live and a studio edition of the same
+// songs must count as different track lists.
 const sameTrackList = (a: Map<number, SpotifyTrack>, b: Map<number, SpotifyTrack>) =>
   a.size === b.size && [...a.entries()].every(([position, t]) => {
     const other = b.get(position)
-    return !!other && titlesAgree(t.name, other.name)
+    return !!other && normalizeForMatch(t.name) === normalizeForMatch(other.name)
   })
 
 export function matchAlbumFill(library: LibraryAlbumForFill, candidates: FillCandidate[]): AlbumFill | null {

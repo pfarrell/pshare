@@ -105,3 +105,27 @@ test('candidateMatchesAlbum requires the title and an artist', () => {
   assert.equal(candidateMatchesAlbum(lib, album('c', 'Greatest Hits Live')), false)
   assert.equal(candidateMatchesAlbum(library([], { title: '' }), album('d', '')), false)
 })
+
+// --- Final review fixes: alternate editions and short unnumbered titles ---
+
+test('candidateMatchesAlbum rejects a live or other version edition unless the library title names it', () => {
+  const lib = library([])
+  assert.equal(candidateMatchesAlbum(lib, album('l1', 'Greatest Hits - Live')), false)
+  assert.equal(candidateMatchesAlbum(lib, album('l2', 'Greatest Hits (Live)')), false)
+  assert.equal(candidateMatchesAlbum(lib, album('l3', 'Greatest Hits (Acoustic Version)')), false)
+  assert.equal(candidateMatchesAlbum(lib, album('r', 'Greatest Hits (Remastered)')), true)
+  assert.equal(candidateMatchesAlbum(library([], { title: 'Greatest Hits (Live)' }), album('l4', 'Greatest Hits - Live')), true)
+})
+
+test('two passing editions whose track titles differ only by a version suffix: no fill', () => {
+  const lib = library([{ id: 1, title: 'Love', trackNumber: '3' }], { releaseYear: null })
+  const studio = candidate('studio', ['A', 'B', 'Love', 'D'])
+  const live = candidate('live', ['A - Live', 'B - Live', 'Love - Live', 'D - Live'])
+  assert.equal(matchAlbumFill(lib, [live, studio]), null)
+})
+
+test('an unnumbered library track needs an equal title, not a prefix', () => {
+  assert.equal(matchAlbumFill(library([{ id: 7, title: 'Live', trackNumber: null }]), [candidate('gh', ['Intro', 'Live Forever', 'Outro'])]), null)
+  const fill = matchAlbumFill(library([{ id: 7, title: 'Live Forever (Remastered)', trackNumber: null }]), [candidate('gh', ['Intro', 'Live Forever', 'Outro'])])
+  assert.deepEqual(fill?.libraryPositions, { 7: 2 })
+})
