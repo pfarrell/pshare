@@ -110,10 +110,15 @@ test('listForTrack works for a track with no artist of its own', async () => {
 test('randomFactoids returns display rows with subjects', async () => {
   const { album, generationId } = await scaffold('store-random')
   await insertFactoids([fact({ targetId: album.id, text: 'Random-able fact.' })], 'm', generationId)
-  const rows = await randomFactoids(10)
+  // Ask for more rows than exist so this test's row is always in the sample:
+  // the dev database holds other factoids, and a fixed limit of 10 left it out
+  // whenever there were more than 10.
+  const total = Number((await db.selectFrom('factoids').select(db.fn.countAll().as('n')).executeTakeFirstOrThrow()).n)
+  const rows = await randomFactoids(total + 10)
   const mine = rows.find((r) => r.text === 'Random-able fact.')
   assert.ok(mine)
   assert.equal(mine.subject, album.title)
+  assert.equal((await randomFactoids(1)).length, 1, 'the limit is respected')
 })
 
 test('deleteFactoid removes the row and reports whether it existed', async () => {
