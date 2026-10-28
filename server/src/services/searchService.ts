@@ -6,8 +6,8 @@ import { streamBase } from '../db/streamUrl.js'
 import { countsService } from './countsService.js'
 import { albumTagMatchSql, playlistTagMatchSql, collectionTagMatchSql } from './profileFilter.js'
 
-const EXACT_MATCH_SCORE = 2.0
-const FUZZY_SIMILARITY_THRESHOLD = 0.24
+export const EXACT_MATCH_SCORE = 2.0
+export const FUZZY_SIMILARITY_THRESHOLD = 0.24
 export const RESULT_LIMIT = 30
 
 function buildSearchClauses(exactOnly: boolean, tagParamIndex: number | null): { exactClauses: string; fuzzyClauses: string } {

@@ -65,13 +65,14 @@ async function buildRankedResults(likeParam: string, filteredQ: string, exactOnl
   // Dedup by (type, id), keeping the first occurrence — since pageRows is already
   // ordered by score DESC and an exact-branch row (score 2.0) always sorts before a
   // fuzzy-branch row for the same entity, this keeps the exact-match row.
-  const orderedRefs: { type: string; id: number }[] = []
+  const orderedRefs: { type: string; id: number; score: number }[] = []
   const seen = new Set<string>()
   for (const row of pageRows) {
     const key = `${row.model_type}:${row.id}`
     if (!seen.has(key)) {
       seen.add(key)
-      orderedRefs.push({ type: row.model_type, id: row.id })
+      // pg returns the exact branch's numeric literal as a string.
+      orderedRefs.push({ type: row.model_type, id: row.id, score: Number(row.similarity_score) })
     }
   }
 
@@ -97,9 +98,9 @@ async function buildRankedResults(likeParam: string, filteredQ: string, exactOnl
   const results = orderedRefs
     .map((ref) => {
       const data = byType[ref.type].get(ref.id)
-      return data ? { type: TYPE_KEY_MAP[ref.type], data } : null
+      return data ? { type: TYPE_KEY_MAP[ref.type], data, score: ref.score } : null
     })
-    .filter((r): r is { type: 'album' | 'artist' | 'playlist' | 'collection'; data: any } => r !== null)
+    .filter((r): r is { type: 'album' | 'artist' | 'playlist' | 'collection'; data: any; score: number } => r !== null)
 
   return { results, hasMore }
 }
