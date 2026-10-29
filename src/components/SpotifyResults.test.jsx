@@ -174,14 +174,17 @@ describe('SpotifyResults — green play (#72)', () => {
 });
 
 describe('SpotifyResultCard — green tinge (#72)', () => {
-  test('Spotify album results are tinted, artist results are not', () => {
+  test('Spotify album and artist results are tinted, library artists are not', () => {
     const { container } = render(<MemoryRouter>
-      <SpotifyResultCard kind="album" item={{ id: 'al', name: 'Tinted', artists: [], imageUrl: null }} />
-      <SpotifyResultCard kind="artist" item={{ id: 'ar', name: 'Plain', imageUrl: null }} />
+      <SpotifyResultCard kind="album" item={{ id: 'al', name: 'Tinted album', artists: [], imageUrl: null }} />
+      <SpotifyResultCard kind="artist" item={{ id: 'ar', name: 'Tinted artist', imageUrl: null }} />
+      <SpotifyResultCard kind="artist" item={{ id: 'lib', name: 'Plain', localId: 7, imageUrl: null }} />
     </MemoryRouter>);
     const tinted = [...container.querySelectorAll('.spotify-tint')].map((el) => el.textContent);
-    expect(tinted).toHaveLength(1);
-    expect(tinted[0]).toContain('Tinted');
+    expect(tinted).toHaveLength(2);
+    expect(tinted.join(' ')).toContain('Tinted album');
+    expect(tinted.join(' ')).toContain('Tinted artist');
+    expect(tinted.join(' ')).not.toContain('Plain');
   });
 });
 
