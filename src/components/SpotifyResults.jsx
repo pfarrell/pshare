@@ -113,6 +113,7 @@ export const SpotifyResultCard = ({ kind, item, canPlay = false }) => {
         glyph="♫"
         externalUrl={item.externalUrl}
         to={artistPath(item, canPlay)}
+        tint={!Number.isInteger(item.localId)}
       />
     );
   }
