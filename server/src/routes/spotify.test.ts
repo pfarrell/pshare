@@ -98,7 +98,8 @@ mock.method(spotifyLibraryMatcher, 'annotate', async (r: SpotifySearchResult) =>
     albums: r.albums.map((a) => ({ ...a, localId: ownedAlbumIds.has(a.id) ? 77 : null })),
   }
 })
-mock.method(localArtistLookup, 'findName', async (id: number) => (id === 5 ? 'Taylor Swift' : null))
+let artistFiveName = 'Taylor Swift'
+mock.method(localArtistLookup, 'findName', async (id: number) => (id === 5 ? artistFiveName : null))
 
 const artistApi = (opts: { artists?: unknown[]; albums?: unknown[]; singlesTotal?: number; appearsOn?: unknown[]; releaseTracks?: Record<string, unknown[]> } = {}) => (url: string) => {
   if (url.includes('/search?')) {
@@ -128,6 +129,7 @@ const albumRaw = (id: string, name: string) => ({ id, name, uri: `spotify:album:
 
 beforeEach(() => {
   resetSpotifyArtistAlbumsCache()
+  artistFiveName = 'Taylor Swift'
   matcherCalls = 0
   ownedAlbumIds = new Set()
 })
@@ -223,6 +225,16 @@ test('artist albums: no releases of their own → hasOwnReleases false with gues
   assert.equal(apiCalls.length, callsAfterFirst)
   assert.deepEqual(again.guestTracks.map((t: any) => t.id), ['g1'])
   assert.equal(again.hasOwnReleases, false)
+})
+
+test('artist albums: renaming the local artist looks Spotify up again under the new name', async () => {
+  artistFiveName = 'The Taylor Swift'
+  stubArtistSpotify(artistApi({ albums: [albumRaw('a', 'Lover')] }))
+  assert.equal((await (await app.request('/spotify/artists/5/albums')).json()).spotifyArtist, null)
+  artistFiveName = 'Taylor Swift'
+  const body = await (await app.request('/spotify/artists/5/albums')).json()
+  assert.deepEqual(body.spotifyArtist, { id: 'ts', name: 'Taylor Swift' })
+  assert.deepEqual(body.albums.map((a: any) => a.id), ['a'])
 })
 
 test('artist albums: 429 passes through with Retry-After', async () => {

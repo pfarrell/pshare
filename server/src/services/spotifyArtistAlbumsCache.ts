@@ -1,6 +1,7 @@
 // server/src/services/spotifyArtistAlbumsCache.ts
 // In-memory cache of an artist's Spotify albums (artist page, #72), keyed by
-// local artist id or, for the in-app Spotify artist view, Spotify artist id:
+// `name:<normalized local artist name>` or, for the in-app Spotify artist view,
+// Spotify artist id:
 // Development Mode quotas are per developer account, so repeat visits must not
 // re-page the catalogue. Lost on restart, which is fine.
 import type { SpotifyArtistAlbum, SpotifyTrack } from './spotify.js'
@@ -14,7 +15,7 @@ export interface CachedArtistAlbums {
   guestTracks?: SpotifyTrack[]
 }
 
-// Local artist ids are numbers, Spotify ids are strings, so the two never collide.
+// Spotify ids are base62, so they never collide with a `name:` key.
 type CacheKey = number | string
 
 // Generic over the cached value so other per-entity Spotify lookups (album

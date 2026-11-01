@@ -147,8 +147,9 @@ export function resetSpotifyArtistAlbumsCache() {
 // library doesn't own, for the artist page grid. hasOwnReleases: false means
 // Spotify lists nothing of theirs (some artists have pulled their catalogue);
 // guestTracks are then the tracks they appear on in other artists' releases.
-// The Spotify list is cached per artist; library matching re-runs every time
-// so a fresh upload hides at once.
+// The Spotify list is cached per normalized artist name (not id), so renaming
+// the local artist to match Spotify's spelling takes effect at once; library
+// matching re-runs every time so a fresh upload hides at once.
 spotify.get('/artists/:localArtistId/albums', async (c) => {
   const localArtistId = parseIntParam(c.req.param('localArtistId'))
   if (localArtistId === null) return c.json({ error: 'Invalid artist id' }, 400)
@@ -156,7 +157,8 @@ spotify.get('/artists/:localArtistId/albums', async (c) => {
   if (name === null) return c.json({ error: 'Artist not found' }, 404)
   if (!isSpotifyConfigured()) return c.json({ configured: false, spotifyArtist: null, albums: [] })
 
-  let entry = artistAlbumsCache.get(localArtistId)
+  const cacheKey = `name:${normalizeForMatch(name)}`
+  let entry = artistAlbumsCache.get(cacheKey)
   if (!entry) {
     try {
       const spotifyArtist = await findSpotifyArtistByName(name)
@@ -167,7 +169,7 @@ spotify.get('/artists/:localArtistId/albums', async (c) => {
         : albums.length > 0 || await hasSpotifySinglesOrCompilations(spotifyArtist.id)
       const guestTracks = spotifyArtist && hasOwnReleases === false ? await getSpotifyGuestTracks(spotifyArtist.id) : []
       entry = { spotifyArtist, albums, hasOwnReleases, guestTracks }
-      artistAlbumsCache.set(localArtistId, entry)
+      artistAlbumsCache.set(cacheKey, entry)
     } catch (err) {
       return upstreamFailure(c, err, 'Spotify artist albums failed')
     }
