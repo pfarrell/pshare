@@ -6,7 +6,8 @@
 // The hook (useSpotifyPlayback) additionally uses setDeviceId, getState and isSettled.
 // Availability depends on the device only: a failed token fetch isn't sticky, since start()
 // fetches its own fresh token and a failure there just skips the track.
-export const createSpotifySource = (adapter, { onDisplaced } = {}) => {
+// `reconnect` (optional): rebuilds the SDK player and resolves to its new device id.
+export const createSpotifySource = (adapter, { onDisplaced, reconnect } = {}) => {
   let deviceId = null;
   let displaced = false;
   // True once a start() has landed (and until paused): only then does a null SDK state mean
@@ -72,7 +73,19 @@ export const createSpotifySource = (adapter, { onDisplaced } = {}) => {
       const run = startChain.catch(() => {}).then(async () => {
         if (gen !== generation) return; // superseded before its turn
         if (!deviceId) throw new Error('Spotify device is not ready');
-        await adapter.playUri(track.uri, deviceId);
+        try {
+          await adapter.playUri(track.uri, deviceId);
+        } catch (error) {
+          // The SDK player can go stale silently (no not_ready) in a long-open tab: Spotify
+          // stops routing to it, so plays time out or 404. Rebuild it and retry once.
+          if (!error?.staleDevice || !reconnect) throw error;
+          console.warn('Spotify device looks stale, reconnecting:', error);
+          deviceId = null;
+          deviceId = (await reconnect()) ?? null;
+          if (gen !== generation) return; // superseded while reconnecting
+          if (!deviceId) throw new Error('Spotify device is not ready');
+          await adapter.playUri(track.uri, deviceId);
+        }
         if (gen === generation) playing = true;
       });
       startChain = run;

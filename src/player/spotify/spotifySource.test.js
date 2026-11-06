@@ -224,3 +224,83 @@ test('playback that was asked for, or is still starting, is left alone', async (
   adapter.emitState(playingState); // resumed
   expect(adapter.pause).toHaveBeenCalledTimes(1); // only the explicit pause()
 });
+
+describe('stale device: rebuild the player and retry once', () => {
+  const staleError = () => Object.assign(new Error('Spotify did not start in time'), { staleDevice: true });
+
+  test('a stale-device failure reconnects and retries the same track on the new device', async () => {
+    const adapter = fakeAdapter({
+      playUri: vi.fn()
+        .mockImplementationOnce(() => Promise.reject(staleError()))
+        .mockImplementation(() => Promise.resolve()),
+    });
+    const reconnect = vi.fn(() => Promise.resolve('device-2'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const source = readySource(adapter, { reconnect });
+
+    await source.start(spotifyTrack(1));
+    warn.mockRestore();
+
+    expect(reconnect).toHaveBeenCalledTimes(1);
+    expect(adapter.playUri).toHaveBeenNthCalledWith(1, 'spotify:track:1', 'device-1');
+    expect(adapter.playUri).toHaveBeenNthCalledWith(2, 'spotify:track:1', 'device-2');
+    expect(source.isAvailable()).toBe(true);
+  });
+
+  test('retries only once: a second stale failure rejects', async () => {
+    const adapter = fakeAdapter({ playUri: vi.fn(() => Promise.reject(staleError())) });
+    const reconnect = vi.fn(() => Promise.resolve('device-2'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const source = readySource(adapter, { reconnect });
+
+    await expect(source.start(spotifyTrack(1))).rejects.toThrow();
+    warn.mockRestore();
+    expect(reconnect).toHaveBeenCalledTimes(1);
+    expect(adapter.playUri).toHaveBeenCalledTimes(2);
+  });
+
+  test('other failures do not reconnect', async () => {
+    const adapter = fakeAdapter({ playUri: vi.fn(() => Promise.reject(new Error('403'))) });
+    const reconnect = vi.fn(() => Promise.resolve('device-2'));
+    const source = readySource(adapter, { reconnect });
+
+    await expect(source.start(spotifyTrack(1))).rejects.toThrow('403');
+    expect(reconnect).not.toHaveBeenCalled();
+    expect(adapter.playUri).toHaveBeenCalledTimes(1);
+  });
+
+  test('a failed reconnect rejects with the reconnect error and leaves no device', async () => {
+    const adapter = fakeAdapter({ playUri: vi.fn(() => Promise.reject(staleError())) });
+    const reconnect = vi.fn(() => Promise.reject(new Error('refused to connect')));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const source = readySource(adapter, { reconnect });
+
+    await expect(source.start(spotifyTrack(1))).rejects.toThrow('refused to connect');
+    warn.mockRestore();
+    expect(adapter.playUri).toHaveBeenCalledTimes(1);
+    expect(source.isAvailable()).toBe(false);
+  });
+
+  test('a start superseded while reconnecting is not retried', async () => {
+    const reconnecting = deferred();
+    const adapter = fakeAdapter({
+      playUri: vi.fn()
+        .mockImplementationOnce(() => Promise.reject(staleError()))
+        .mockImplementation(() => Promise.resolve()),
+    });
+    const reconnect = vi.fn(() => reconnecting.promise);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const source = readySource(adapter, { reconnect });
+
+    const first = source.start(spotifyTrack(1));
+    await flush();
+    const second = source.start(spotifyTrack(2));
+    reconnecting.resolve('device-2');
+    await first.catch(() => {});
+    await second;
+    warn.mockRestore();
+
+    expect(adapter.playUri.mock.calls.map(([uri]) => uri)).toEqual(['spotify:track:1', 'spotify:track:2']);
+    expect(adapter.playUri).toHaveBeenLastCalledWith('spotify:track:2', 'device-2');
+  });
+});

@@ -451,3 +451,22 @@ test('clears the source on unmount', async () => {
   expect(usePlayerStore.getState().spotifySource).toBeNull();
   expect(adapter.disconnect).toHaveBeenCalled();
 });
+
+test('a stale device is rebuilt (disconnect, load, connect) and the track retried on the new device', async () => {
+  await mount();
+  const source = usePlayerStore.getState().spotifySource;
+  adapter.playUri
+    .mockImplementationOnce(() => Promise.reject(Object.assign(new Error('timed out'), { staleDevice: true })))
+    .mockImplementation(() => Promise.resolve());
+  adapter.connect.mockImplementation(() => Promise.resolve('device-2'));
+  adapter.load.mockClear();
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+  await act(async () => { await source.start(spotifyTrack); });
+  warn.mockRestore();
+
+  expect(adapter.disconnect).toHaveBeenCalledTimes(1);
+  expect(adapter.load).toHaveBeenCalledTimes(1);
+  expect(adapter.playUri).toHaveBeenLastCalledWith('spotify:track:1', 'device-2');
+  expect(usePlayerStore.getState().spotifySource).toBe(source);
+});
