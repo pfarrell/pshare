@@ -88,7 +88,15 @@ export const useSpotifyPlayback = () => {
       if (!canPlaySpotify({ status, isSecureContext: window.isSecureContext, isIOS: isIOSDevice() })) return;
 
       adapter = createSpotifySdkAdapter({ name: isJukeboxMode() ? 'P·Share Jukebox' : 'P·Share', getOAuthToken });
-      source = createSpotifySource(adapter, { onDisplaced: handleDisplaced });
+      // Replaces a stale SDK player with a fresh one (same adapter and listeners); resolves to
+      // the new device id. The onReady listener below also re-registers the source.
+      const reconnect = async () => {
+        adapter.disconnect();
+        await adapter.load();
+        if (cancelled) throw new Error('Spotify playback was unmounted');
+        return adapter.connect();
+      };
+      source = createSpotifySource(adapter, { onDisplaced: handleDisplaced, reconnect });
       await adapter.load();
       if (cancelled) return;
       adapter.onNotReady(loseDevice('device went offline'));

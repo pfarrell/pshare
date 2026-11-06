@@ -83,19 +83,23 @@ export const createSpotifySdkAdapter = ({ name, getOAuthToken }) => {
     load: async () => {
       await loadSdk();
       if (player) return;
-      player = new window.Spotify.Player({
+      const created = new window.Spotify.Player({
         name,
         volume: 1,
         // A fresh token on every call; failures are reported by getOAuthToken itself.
         getOAuthToken: (cb) => { getOAuthToken().then(cb, () => {}); },
       });
-      player.addListener('player_state_changed', (s) => emit('state', toState(s)));
-      player.addListener('ready', ({ device_id: deviceId }) => emit('ready', deviceId));
-      player.addListener('not_ready', ({ device_id: deviceId }) => emit('notReady', deviceId));
-      player.addListener('initialization_error', (e) => emit('initError', e));
-      player.addListener('authentication_error', (e) => emit('authError', e));
-      player.addListener('account_error', (e) => emit('accountError', e));
-      player.addListener('playback_error', (e) => emit('playbackError', e));
+      // Events from a player that has since been disconnected (e.g. replaced by a reconnect)
+      // are dropped, so its late not_ready or null state can't clobber the new one.
+      const listen = (event, fn) => created.addListener(event, (e) => { if (player === created) fn(e); });
+      listen('player_state_changed', (s) => emit('state', toState(s)));
+      listen('ready', ({ device_id: deviceId }) => emit('ready', deviceId));
+      listen('not_ready', ({ device_id: deviceId }) => emit('notReady', deviceId));
+      listen('initialization_error', (e) => emit('initError', e));
+      listen('authentication_error', (e) => emit('authError', e));
+      listen('account_error', (e) => emit('accountError', e));
+      listen('playback_error', (e) => emit('playbackError', e));
+      player = created;
     },
 
     connect: () => new Promise((resolve, reject) => {
@@ -111,8 +115,9 @@ export const createSpotifySdkAdapter = ({ name, getOAuthToken }) => {
     }),
 
     disconnect: () => {
-      player?.disconnect();
-      player = null;
+      const old = player;
+      player = null; // first, so events the old player fires while disconnecting are dropped
+      old?.disconnect();
     },
 
     activate: () => player?.activateElement(),
@@ -130,14 +135,20 @@ export const createSpotifySdkAdapter = ({ name, getOAuthToken }) => {
           body: JSON.stringify({ uris: [uri] }),
           signal: controller.signal,
         });
-        if (!response.ok) throw new Error(`Spotify play request failed: ${response.status}`);
+        if (!response.ok) {
+          // 404 = Spotify no longer knows this device id: the player went stale.
+          throw Object.assign(new Error(`Spotify play request failed: ${response.status}`), {
+            staleDevice: response.status === 404,
+          });
+        }
         await waiter.promise;
       })();
       let timer;
       const timeout = new Promise((_, reject) => {
         timer = setTimeout(() => {
           controller.abort();
-          reject(new Error(`Spotify did not start ${uri} in time`));
+          // Usually a stale player: the request went out but nothing ever played here.
+          reject(Object.assign(new Error(`Spotify did not start ${uri} in time`), { staleDevice: true }));
         }, PLAY_TIMEOUT_MS);
       });
       return Promise.race([request, timeout]).finally(() => {
