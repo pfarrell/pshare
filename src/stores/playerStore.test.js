@@ -1536,3 +1536,59 @@ describe('spotify source routing', () => {
     expect(active.src).toBe('/stream/1');
   });
 });
+
+describe('volume', () => {
+  afterEach(() => usePlayerStore.setState({ volume: 1, spotifySource: null }));
+
+  test('defaults to full volume', () => {
+    expect(usePlayerStore.getState().volume).toBe(1);
+  });
+
+  test('setVolume applies to both audio elements so a gapless handoff keeps the level', () => {
+    const a = mockAudioElement();
+    const b = mockAudioElement();
+    usePlayerStore.setState({ audioElementA: a, audioElementB: b });
+    usePlayerStore.getState().setVolume(0.4);
+    expect(usePlayerStore.getState().volume).toBe(0.4);
+    expect(a.volume).toBe(0.4);
+    expect(b.volume).toBe(0.4);
+  });
+
+  test('setVolume clamps to 0..1 and ignores non-numbers', () => {
+    usePlayerStore.getState().setVolume(1.5);
+    expect(usePlayerStore.getState().volume).toBe(1);
+    usePlayerStore.getState().setVolume(-0.2);
+    expect(usePlayerStore.getState().volume).toBe(0);
+    usePlayerStore.getState().setVolume(Number.NaN);
+    expect(usePlayerStore.getState().volume).toBe(0);
+  });
+
+  test('an audio element bound later picks up the current volume', () => {
+    usePlayerStore.getState().setVolume(0.3);
+    const a = mockAudioElement();
+    usePlayerStore.getState().setAudioElement('a', a);
+    expect(a.volume).toBe(0.3);
+  });
+
+  test('setVolume forwards to the registered Spotify source', () => {
+    const source = { setVolume: vi.fn(() => Promise.resolve()) };
+    usePlayerStore.setState({ spotifySource: source });
+    usePlayerStore.getState().setVolume(0.5);
+    expect(source.setVolume).toHaveBeenCalledWith(0.5);
+  });
+
+  test('a Spotify source registered later picks up the current volume', () => {
+    usePlayerStore.getState().setVolume(0.25);
+    const source = { setVolume: vi.fn(() => Promise.resolve()) };
+    usePlayerStore.getState().setSpotifySource(source);
+    expect(source.setVolume).toHaveBeenCalledWith(0.25);
+  });
+
+  test('a Spotify setVolume failure only warns', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    usePlayerStore.setState({ spotifySource: { setVolume: () => { throw new Error('boom'); } } });
+    expect(() => usePlayerStore.getState().setVolume(0.5)).not.toThrow();
+    expect(usePlayerStore.getState().volume).toBe(0.5);
+    warn.mockRestore();
+  });
+});

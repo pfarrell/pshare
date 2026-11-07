@@ -304,3 +304,16 @@ describe('stale device: rebuild the player and retry once', () => {
     expect(adapter.playUri).toHaveBeenLastCalledWith('spotify:track:2', 'device-2');
   });
 });
+
+test('setVolume forwards to the adapter without counting as an in-flight command', async () => {
+  const adapter = fakeAdapter({ setVolume: vi.fn(() => new Promise(() => {})) });
+  const source = readySource(adapter);
+  source.setVolume(0.4);
+  expect(adapter.setVolume).toHaveBeenCalledWith(0.4);
+  expect(source.isSettled()).toBe(true);
+});
+
+test('setVolume is a no-op on an adapter without volume support', async () => {
+  const source = readySource(fakeAdapter());
+  await expect(source.setVolume(0.4)).resolves.toBeUndefined();
+});

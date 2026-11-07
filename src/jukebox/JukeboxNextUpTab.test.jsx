@@ -275,3 +275,18 @@ test('each tap of "Show previous" reveals one more earlier track', () => {
   // Fully scrolled back — nothing earlier left to reveal.
   expect(screen.queryByRole('button', { name: /show previous/i })).not.toBeInTheDocument();
 });
+
+test('shows the volume slider with the current level', () => {
+  usePlayerStore.mockImplementation((selector) => selector({ playlist: [], currentTrackIndex: -1, volume: 0.4, setVolume: vi.fn() }));
+  renderTab();
+  expect(screen.getByRole('slider', { name: 'Volume' })).toHaveValue('40');
+  expect(screen.getByText('40%')).toBeInTheDocument();
+});
+
+test('dragging the volume slider sets the store volume', () => {
+  const setVolume = vi.fn();
+  usePlayerStore.mockImplementation((selector) => selector({ playlist: [], currentTrackIndex: -1, volume: 0.4, setVolume }));
+  renderTab();
+  fireEvent.change(screen.getByRole('slider', { name: 'Volume' }), { target: { value: '65' } });
+  expect(setVolume).toHaveBeenCalledWith(0.65);
+});

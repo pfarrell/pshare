@@ -4265,6 +4265,9 @@ body:has(.jukebox-app) {
   color: rgba(255, 255, 255, 0.7);
   text-align: center;
 }
+.jukebox-app svg.jukebox-next-up-time {
+  flex: 0 0 2.75rem;
+}
 .jukebox-app .jukebox-next-up-actions {
   display: flex;
   gap: 0.5rem;

@@ -46,6 +46,8 @@ const toState = (sdkState) => {
 
 export const createSpotifySdkAdapter = ({ name, getOAuthToken }) => {
   let player = null;
+  // Kept here so a rebuilt player (reconnect after going stale) starts at the same level.
+  let volume = 1;
   const listeners = {
     state: new Set(), ready: new Set(), notReady: new Set(), initError: new Set(),
     authError: new Set(), accountError: new Set(), playbackError: new Set(),
@@ -85,7 +87,7 @@ export const createSpotifySdkAdapter = ({ name, getOAuthToken }) => {
       if (player) return;
       const created = new window.Spotify.Player({
         name,
-        volume: 1,
+        volume,
         // A fresh token on every call; failures are reported by getOAuthToken itself.
         getOAuthToken: (cb) => { getOAuthToken().then(cb, () => {}); },
       });
@@ -160,6 +162,10 @@ export const createSpotifySdkAdapter = ({ name, getOAuthToken }) => {
     pause: () => requirePlayer().pause(),
     resume: () => requirePlayer().resume(),
     seek: (ms) => requirePlayer().seek(ms),
+    setVolume: (value) => {
+      volume = value;
+      return player ? player.setVolume(value) : Promise.resolve();
+    },
     getState: async () => (player ? toState(await player.getCurrentState()) : null),
 
     onStateChange: on('state'),
