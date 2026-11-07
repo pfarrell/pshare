@@ -9,6 +9,7 @@ import JukeboxKeyboard from './JukeboxKeyboard';
 import { useJukeboxKeyboardFocus } from './useJukeboxKeyboardFocus';
 import { useJukeboxQueueEvents } from './useJukeboxQueueEvents';
 import { useJukeboxStatePublisher } from './jukeboxStatePublisher';
+import { useJukeboxVolume } from './useJukeboxVolume';
 import MusicPlayerWrapper from '../components/player/MusicPlayerWrapper';
 import { useJukeboxScreensaverStore } from '../stores/jukeboxScreensaverStore';
 import JukeboxScreensaver from './JukeboxScreensaver';
@@ -68,6 +69,8 @@ const JukeboxApp = () => {
   useJukeboxQueueEvents(jukeboxDeviceId);
   // Publishes the queue for the phone Queue page. Same null-until-known rule.
   useJukeboxStatePublisher(jukeboxDeviceId);
+  // Applies the kiosk's saved software volume before anything can play.
+  useJukeboxVolume();
   const screensaverMode = useJukeboxScreensaverStore((s) => s.mode);
 
   // Enqueueing something (a track, an album, an artist/collection shuffle)

@@ -6,8 +6,8 @@ import { getPlaybackModeDisplay } from './jukeboxPlayerGlyphs';
 import JukeboxSavePlaylistModal from './JukeboxSavePlaylistModal';
 import { localTrackIds, trackKey } from '../utils/trackSource';
 
-// A slim action header is pinned at the top (save as playlist, AI Mix,
-// playback mode, and Clear with its two-step confirm), with the queue below.
+// A slim action header is pinned at the top (seek, volume, save as playlist,
+// AI Mix, playback mode, and Clear with its two-step confirm), with the queue below.
 // Play/pause/prev/next live in the footer strip, not here. The queue only needs the core "see what's queued, tap one to
 // jump to it" behavior, which Track already does on its own (tapping a track
 // already in the queue jumps straight to playing it — see Track.jsx's
@@ -43,6 +43,15 @@ const SparkleIcon = () => (
   </svg>
 );
 
+// Speaker glyph for the volume row.
+const SpeakerIcon = () => (
+  <svg className="jukebox-next-up-time" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" aria-hidden="true">
+    <path d="M4 9h4l5-4v14l-5-4H4z" />
+    <path d="M16.5 8.5a5 5 0 0 1 0 7" />
+    <path d="M19 6a8.5 8.5 0 0 1 0 12" />
+  </svg>
+);
+
 const JukeboxNextUpTab = ({ onSaved, onOpenAiMix }) => {
   const playlist = usePlayerStore((s) => s.playlist);
   const currentTrackIndex = usePlayerStore((s) => s.currentTrackIndex);
@@ -54,6 +63,8 @@ const JukeboxNextUpTab = ({ onSaved, onOpenAiMix }) => {
   const currentTime = usePlayerStore((s) => s.currentTime);
   const duration = usePlayerStore((s) => s.duration);
   const seek = usePlayerStore((s) => s.seek);
+  const volume = usePlayerStore((s) => s.volume) ?? 1;
+  const setVolume = usePlayerStore((s) => s.setVolume);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [backOffset, setBackOffset] = useState(0);
   // Which row (by its React key below) is currently swiped open, if any —
@@ -121,6 +132,18 @@ const JukeboxNextUpTab = ({ onSaved, onOpenAiMix }) => {
             aria-label="Seek"
           />
           <span className="jukebox-next-up-time">{formatPlaybackTime(duration)}</span>
+        </div>
+        <div className="jukebox-next-up-seek jukebox-next-up-volume">
+          <SpeakerIcon />
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={Math.round(volume * 100)}
+            onChange={(e) => setVolume?.(Number(e.target.value) / 100)}
+            aria-label="Volume"
+          />
+          <span className="jukebox-next-up-time">{Math.round(volume * 100)}%</span>
         </div>
         <div className="jukebox-next-up-actions">
         <button

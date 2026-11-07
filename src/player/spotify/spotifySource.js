@@ -1,7 +1,7 @@
 // The SpotifySource the player store drives (see playerStore's "Spotify source plumbing"),
 // implemented over an SDK adapter (spotifySdk.js in the app, a fake in tests).
 //
-// Contract used by the store: start(track) / pause() / resume() / seek(seconds) return
+// Contract used by the store: start(track) / pause() / resume() / seek(seconds) / setVolume(0..1) return
 // Promises; isAvailable(), isDisplaced(), clearDisplaced() and activate() are synchronous.
 // The hook (useSpotifyPlayback) additionally uses setDeviceId, getState and isSettled.
 // Availability depends on the device only: a failed token fetch isn't sticky, since start()
@@ -107,6 +107,9 @@ export const createSpotifySource = (adapter, { onDisplaced, reconnect } = {}) =>
       playing = true;
       return tracked(() => adapter.resume());
     },
+
+    // Not tracked: a volume change says nothing about what the SDK is playing.
+    setVolume: (volume) => Promise.resolve(adapter.setVolume?.(volume)).then(() => {}),
 
     seek: (seconds) => tracked(() => adapter.seek(Math.max(0, Math.round(seconds * 1000)))),
 

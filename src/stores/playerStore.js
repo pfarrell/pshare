@@ -238,7 +238,21 @@ export const usePlayerStore = create((set, get) => ({
   audioElementA: null,
   audioElementB: null,
   activeSlot: 'a',
-  setAudioElement: (slot, audioElement) => set(slot === 'a' ? { audioElementA: audioElement } : { audioElementB: audioElement }),
+  setAudioElement: (slot, audioElement) => {
+    if (audioElement) audioElement.volume = get().volume;
+    set(slot === 'a' ? { audioElementA: audioElement } : { audioElementB: audioElement });
+  },
+
+  // Software volume, 0..1, for every engine at once: both <audio> elements (so a gapless
+  // handoff keeps the level) and the Spotify source. Only Jukebox Mode changes it (see
+  // useJukeboxVolume); elsewhere it stays 1 and the device's own volume is used.
+  volume: 1,
+  setVolume: (value) => {
+    const volume = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
+    set({ volume });
+    [get().audioElementA, get().audioElementB].forEach((audio) => { if (audio) audio.volume = volume; });
+    callSpotify(get().spotifySource, 'setVolume', volume);
+  },
   getActiveAudio: () => (get().activeSlot === 'a' ? get().audioElementA : get().audioElementB),
   getStandbyAudio: () => (get().activeSlot === 'a' ? get().audioElementB : get().audioElementA),
 
@@ -264,6 +278,7 @@ export const usePlayerStore = create((set, get) => ({
   setSpotifySource: (spotifySource) => {
     const { activeSource, spotifySource: previous } = get();
     set({ spotifySource: spotifySource ?? null });
+    if (spotifySource) callSpotify(spotifySource, 'setVolume', get().volume);
     if (spotifySource || activeSource !== 'spotify') return;
     // The source playing the current track went away (hook unmount, SDK failure): silence it,
     // invalidate its pending start, hand the transport back to <audio> and move on silently.

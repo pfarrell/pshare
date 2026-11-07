@@ -70,6 +70,7 @@ vi.mock('./jukeboxStatePublisher', () => ({
   useJukeboxStatePublisher: vi.fn(),
   requestJukeboxStatePublish: vi.fn(),
 }));
+vi.mock('./useJukeboxVolume', () => ({ useJukeboxVolume: vi.fn() }));
 vi.mock('../stores/jukeboxScreensaverStore', () => ({ useJukeboxScreensaverStore: vi.fn() }));
 vi.mock('./JukeboxScreensaver', () => ({
   default: ({ mode, onDismiss, onView }) => (
@@ -105,6 +106,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useJukeboxKeyboardFocus } from './useJukeboxKeyboardFocus';
 import { usePlayerStore } from '../stores/playerStore';
 import { useJukeboxStatePublisher } from './jukeboxStatePublisher';
+import { useJukeboxVolume } from './useJukeboxVolume';
 import { useJukeboxScreensaverStore } from '../stores/jukeboxScreensaverStore';
 
 const renderApp = () => render(<MemoryRouter><JukeboxApp /></MemoryRouter>);
@@ -135,6 +137,11 @@ afterEach(() => {
 test('mounts the queue publisher for phones once authenticated', () => {
   renderApp();
   expect(useJukeboxStatePublisher).toHaveBeenCalled();
+});
+
+test('applies the saved kiosk volume', () => {
+  renderApp();
+  expect(useJukeboxVolume).toHaveBeenCalled();
 });
 
 test('shows JukeboxLogin when not authenticated', () => {
