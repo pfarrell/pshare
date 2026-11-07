@@ -3,7 +3,8 @@ import { useState } from 'react';
 // Jukebox-only artist tile for Search results — a circular photo, name and
 // album count that opens the artist view on tap. Deliberately not ArtistCard,
 // which is shared with the normal site and carries a play button and menu.
-const JukeboxArtistTile = ({ artist, imageUrl, onSelect }) => {
+// `badge` (e.g. the Spotify logo, #72) sits over the photo's corner.
+const JukeboxArtistTile = ({ artist, imageUrl, onSelect, badge }) => {
   const [imageFailed, setImageFailed] = useState(false);
   // The search API returns album_count as a string, so coerce before comparing.
   const count = Number(artist.album_count);
@@ -24,6 +25,7 @@ const JukeboxArtistTile = ({ artist, imageUrl, onSelect }) => {
           {artist.name?.trim()?.[0]?.toUpperCase() ?? '?'}
         </div>
       )}
+      {badge}
       <span className="jukebox-artist-tile-name">{artist.name}</span>
       {albumCount && <span className="jukebox-artist-tile-meta">{albumCount}</span>}
     </button>

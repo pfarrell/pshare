@@ -4836,6 +4836,22 @@ body:has(.jukebox-app) {
   color: #93c5fd;
 }
 
+/* Kiosk search: Spotify logo on a Spotify artist tile's photo (#72). The
+   photo is a circle, so the badge is inset to sit on its rim, not the
+   empty corner of its bounding box. */
+.jukebox-app .jukebox-artist-tile:has(> .jukebox-artist-tile-badge) {
+  position: relative;
+}
+
+.jukebox-app .jukebox-artist-tile-badge {
+  position: absolute;
+  top: 6%;
+  right: 6%;
+  width: 1.75rem;
+  height: 1.75rem;
+  pointer-events: none;
+}
+
 /* Kiosk artist view: Spotify logo in the album tile's corner (#72). */
 .jukebox-app .jukebox-album-tile:has(> .jukebox-album-tile-badge) {
   position: relative;

@@ -7,10 +7,12 @@ import { albumQueueTracks } from '../player/spotify/albumQueue';
 import { visibleSpotifyResults } from '../utils/spotifyResults';
 import { toSpotifyQueueTrack } from '../utils/trackSource';
 import { SpotifyLogo } from '../components/OpenInSpotify';
+import JukeboxArtistTile from './JukeboxArtistTile';
 
 // Spotify results at the bottom of the kiosk's search tab (#72). Only when the
 // kiosk can play Spotify; hides artists/albums/tracks the library already has.
-// An artist tap opens the Spotify artist view (onSelectArtist, with
+// Artists render as the same circular tiles as library artists (with a logo
+// badge); albums/tracks are rows. An artist tap opens the Spotify artist view (onSelectArtist, with
 // source: 'spotify'); an album/track tap *adds* to the queue (like tapping a
 // local track here) — never play-now, so a guest's pick can't cut off the
 // current song. Any failure renders nothing.
@@ -41,22 +43,6 @@ const SpotifyRow = ({ source, title, subtitle, onEnqueue }) => {
     </button>
   );
 };
-
-const SpotifyArtistRow = ({ artist, onSelect }) => (
-  <button
-    type="button"
-    className="jukebox-spotify-row"
-    aria-label={`Open ${artist.name}`}
-    onClick={() => onSelect?.({ id: artist.id, name: artist.name, source: 'spotify' })}
-  >
-    <SpotifyLogo className="jukebox-spotify-logo" />
-    <span className="jukebox-spotify-row-text">
-      <span className="jukebox-spotify-row-title">{artist.name}</span>
-      <span className="jukebox-spotify-row-subtitle">Artist</span>
-    </span>
-    <span className="jukebox-spotify-row-add" aria-hidden="true">›</span>
-  </button>
-);
 
 const JukeboxSpotifySection = ({ query, onEnqueue, onSelectArtist }) => {
   const canPlay = useCanPlaySpotify();
@@ -89,9 +75,19 @@ const JukeboxSpotifySection = ({ query, onEnqueue, onSelectArtist }) => {
       <div className="jukebox-search-section-header">
         <h3>More from Spotify</h3>
       </div>
-      {shownArtists.map((artist) => (
-        <SpotifyArtistRow key={`artist-${artist.id}`} artist={artist} onSelect={onSelectArtist} />
-      ))}
+      {shownArtists.length > 0 && (
+        <div className="jukebox-artist-grid">
+          {shownArtists.map((artist) => (
+            <JukeboxArtistTile
+              key={`artist-${artist.id}`}
+              artist={{ id: artist.id, name: artist.name, source: 'spotify' }}
+              imageUrl={text(artist.imageUrl)}
+              onSelect={(a) => onSelectArtist?.(a)}
+              badge={<SpotifyLogo className="jukebox-spotify-logo jukebox-artist-tile-badge" />}
+            />
+          ))}
+        </div>
+      )}
       {shownAlbums.map((album) => (
         <SpotifyRow
           key={`album-${album.id}`}

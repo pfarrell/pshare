@@ -110,9 +110,22 @@ describe('JukeboxSpotifySection', () => {
       ],
     } });
     render(<JukeboxSpotifySection query="sza" onSelectArtist={onSelectArtist} />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Open SZA' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'SZA' }));
     expect(onSelectArtist).toHaveBeenCalledWith({ id: 'sza1', name: 'SZA', source: 'spotify' });
-    expect(screen.queryByRole('button', { name: 'Open Taylor Swift' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Taylor Swift' })).toBeNull();
     expect(addTracks).not.toHaveBeenCalled();
+  });
+
+  test('Spotify artists render as artist tiles (circular photo, logo badge) like library artists', async () => {
+    apiService.searchSpotify.mockResolvedValue({ data: {
+      ...searchBody,
+      artists: [{ id: 'sza1', name: 'SZA', imageUrl: 'https://i.scdn.co/sza.jpg', localId: null }],
+    } });
+    render(<JukeboxSpotifySection query="sza" />);
+    const tile = await screen.findByRole('button', { name: 'SZA' });
+    expect(tile).toHaveClass('jukebox-artist-tile');
+    expect(tile.closest('.jukebox-artist-grid')).not.toBeNull();
+    expect(tile.querySelector('img')).toHaveAttribute('src', 'https://i.scdn.co/sza.jpg');
+    expect(tile.querySelector('.jukebox-artist-tile-badge')).not.toBeNull();
   });
 });
