@@ -89,10 +89,14 @@ export const apiService = {
   getRandomArtists: (size = 60, profileId = null) => api.get(`/artists/random${qs({ size, profileId })}`),
   // Returns { artist, summary, albums }. `{ summary: false }` skips the Wikipedia lookup for callers (the jukebox) that never show it.
   getArtist: (id, { summary = true } = {}) => api.get(`/artist/${id}${qs({ summary: summary ? null : 0 })}`),
+  // Returns { summary }. No page-load deadline: the Artist page's retry when getArtist came back without one.
+  getArtistSummary: (id) => api.get(`/artist/${id}/summary`),
 
   // Albums
   // Returns { artist, album, tracks, summary }. `{ summary: false }` skips the Wikipedia lookup, as for getArtist.
   getAlbum: (id, { summary = true } = {}) => api.get(`/album/${id}${qs({ summary: summary ? null : 0 })}`),
+  // Returns { summary }. No page-load deadline: the Album page's retry when getAlbum came back without one.
+  getAlbumSummary: (id) => api.get(`/album/${id}/summary`),
   getRandomAlbums: (size = 30, profileId = null) => api.get(`/albums/random${qs({ size, profileId })}`),
   getRecentAlbums: (size = 20, profileId = null) => api.get(`/albums/recent${qs({ size, profileId })}`),
   getRecentCollections: (size = 20) => api.get(`/collections/recent${qs({ size })}`),

@@ -19,6 +19,7 @@ vi.mock('../services/api', () => ({
     getImageUrl: () => 'http://example.com/image.jpg',
     makeTrackSingle: vi.fn(),
     getSpotifyAlbumFill: vi.fn(),
+    getAlbumSummary: vi.fn(),
   },
 }));
 
@@ -49,6 +50,7 @@ const renderAlbum = (initialEntries = ['/album/10']) =>
 beforeEach(() => {
   apiService.getAlbum.mockResolvedValue({ data: albumData });
   apiService.getAdjacentAlbums.mockResolvedValue({ data: { prev: null, next: null } });
+  apiService.getAlbumSummary.mockClear().mockResolvedValue({ data: { summary: null } });
   useAuthStore.setState({ isAdmin: false, isAuthenticated: true });
   useFavoritesStore.setState({ isFavorite: () => false, toggleFavorite: vi.fn() });
   Element.prototype.scrollIntoView.mockClear();
@@ -548,5 +550,28 @@ describe('Album page — Spotify fill (#72)', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(apiService.getSpotifyAlbumFill).not.toHaveBeenCalled();
     expect(screen.queryByText(/Spot One/)).toBeNull();
+  });
+});
+
+describe('Album page — Wikipedia summary retry', () => {
+  test('shows the summary fetched again when the album response came back without one', async () => {
+    apiService.getAlbum.mockResolvedValue({ data: { ...albumData, summary: null } });
+    apiService.getAlbumSummary.mockResolvedValue({
+      data: { summary: { summary: 'Test Album is an album by Album Artist.', url: 'https://en.wikipedia.org/wiki/Test_Album' } },
+    });
+    renderAlbum();
+
+    expect(await screen.findByText(/Test Album is an album by Album Artist\./)).toBeInTheDocument();
+    expect(apiService.getAlbumSummary).toHaveBeenCalledWith('10');
+  });
+
+  test('does not fetch the summary again when the album response already has one', async () => {
+    apiService.getAlbum.mockResolvedValue({
+      data: { ...albumData, summary: { summary: 'Already here.', url: 'https://en.wikipedia.org/wiki/X' } },
+    });
+    renderAlbum();
+
+    expect(await screen.findByText(/Already here\./)).toBeInTheDocument();
+    expect(apiService.getAlbumSummary).not.toHaveBeenCalled();
   });
 });

@@ -25,6 +25,7 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import { useSpotifyAlbumFill } from '../player/spotify/useSpotifyAlbumFill';
 import { mergeAlbumFill } from '../utils/mergeAlbumFill';
 import { isSpotifyTrack } from '../utils/trackSource';
+import { useSummaryRetry } from '../hooks/useSummaryRetry';
 
 const Album = () => {
   const { id } = useParams();
@@ -45,6 +46,12 @@ const Album = () => {
   const { data: albumData, setData: setAlbumData, loading, error, reload } = useFetch(
     () => apiService.getAlbum(id).then((response) => response.data),
     [id]
+  );
+  // The page response gives up on a slow Wikipedia after ~1s; ask again if it came back without a summary.
+  const summary = useSummaryRetry(
+    albumData?.summary,
+    () => apiService.getAlbumSummary(id).then((response) => response.data.summary),
+    { loaded: !loading && !!albumData, key: id }
   );
   // #72: Spotify tracks for the positions this library album is missing
   // (desktop sessions that can play Spotify only; otherwise the library list as-is).
@@ -127,7 +134,7 @@ const Album = () => {
     return <PageError message={error ? 'Failed to load album' : 'Album not found'} />;
   }
 
-  const { artist, album, summary, secondary_artists, compilation_artists, collections, notes } = albumData;
+  const { artist, album, secondary_artists, compilation_artists, collections, notes } = albumData;
 
   // Collaborators are folded into the primary artist heading itself
   // ("Elton John, Ray Charles"); every other non-primary role (featured,

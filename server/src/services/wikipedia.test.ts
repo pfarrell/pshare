@@ -65,3 +65,40 @@ test('a fetch is given an abort signal so a hung Wikipedia cannot hang the looku
   await getArtistSummary('Signal Test Artist')
   assert.ok(signals.length > 0 && signals.every((s) => s instanceof AbortSignal))
 })
+
+test('a Wikipedia server error is not cached, so the next lookup tries again', async () => {
+  let failing = true
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    if (failing) return new Response('', { status: 503 })
+    return pageResponse(String(input))
+  }) as typeof fetch
+
+  assert.equal(await getArtistSummary('Transient Server Error Artist'), null)
+  failing = false
+  assert.ok(await getArtistSummary('Transient Server Error Artist'), 'second lookup should refetch and hit')
+})
+
+test('a thrown fetch (timeout, network error) is not cached, so the next lookup tries again', async () => {
+  let failing = true
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    if (failing) throw new DOMException('The operation was aborted due to timeout', 'TimeoutError')
+    return pageResponse(String(input))
+  }) as typeof fetch
+
+  assert.equal(await getArtistSummary('Transient Timeout Artist'), null)
+  failing = false
+  assert.ok(await getArtistSummary('Transient Timeout Artist'), 'second lookup should refetch and hit')
+})
+
+test('a 404 is cached: the same lookup does not hit Wikipedia again', async () => {
+  let calls = 0
+  globalThis.fetch = (async () => {
+    calls++
+    return new Response('', { status: 404 })
+  }) as typeof fetch
+
+  assert.equal(await getArtistSummary('Definitive Miss Artist'), null)
+  const afterFirst = calls
+  assert.equal(await getArtistSummary('Definitive Miss Artist'), null)
+  assert.equal(calls, afterFirst)
+})

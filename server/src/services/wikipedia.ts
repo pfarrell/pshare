@@ -43,7 +43,16 @@ function truncateToSummary(raw: string): string {
   return sentences.length > 4 ? sentences.slice(0, 4).join('. ') : raw
 }
 
-async function fetchWikipedia(title: string): Promise<WikiSummary | null> {
+// `cacheable: false` marks a failure that says nothing about whether the page
+// exists (timeout, network error, rate limit, 5xx). Those must not be cached:
+// the in-memory cache lives as long as the process, so one Wikipedia hiccup
+// would otherwise hide a real article until the next restart.
+interface FetchOutcome {
+  result: WikiSummary | null
+  cacheable: boolean
+}
+
+async function fetchWikipedia(title: string): Promise<FetchOutcome> {
   const encoded = encodeURIComponent(title)
   const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encoded}`
 
@@ -52,18 +61,26 @@ async function fetchWikipedia(title: string): Promise<WikiSummary | null> {
       headers: { 'User-Agent': 'bemused-music-app/1.0' },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     })
-    if (!res.ok) return null
+    // 404 is the normal "no such page" answer for a guessed candidate title.
+    if (res.status === 404) return { result: null, cacheable: true }
+    if (!res.ok) {
+      errorLogService.record({ source: 'wikipedia', message: `HTTP ${res.status}`, context: title })
+      return { result: null, cacheable: false }
+    }
 
     const data = await res.json() as any
     const raw: string = (data.extract ?? '').trim()
-    if (!raw) return null
+    if (!raw) return { result: null, cacheable: true }
 
     const summary = truncateToSummary(raw)
 
-    return { summary, url: data.content_urls?.desktop?.page ?? `https://en.wikipedia.org/wiki/${encoded}` }
+    return {
+      result: { summary, url: data.content_urls?.desktop?.page ?? `https://en.wikipedia.org/wiki/${encoded}` },
+      cacheable: true,
+    }
   } catch (err) {
     errorLogService.record({ source: 'wikipedia', message: (err as Error).message, context: title })
-    return null
+    return { result: null, cacheable: false }
   }
 }
 
@@ -166,8 +183,8 @@ async function tryTitles(titles: string[]): Promise<WikiSummary | null> {
   const lookups = titles.map(async (title) => {
     const key = title.toLowerCase()
     if (cache.has(key)) return cache.get(key) ?? null
-    const result = await fetchWikipedia(title)
-    cache.set(key, result)
+    const { result, cacheable } = await fetchWikipedia(title)
+    if (cacheable) cache.set(key, result)
     return result
   })
   for (const lookup of lookups) {

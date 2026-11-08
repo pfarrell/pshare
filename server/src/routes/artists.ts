@@ -163,6 +163,21 @@ artists.get('/random', requireAuth, async (c) => {
   return c.json(await fetchRandomArtists(size, tagIds))
 })
 
+// GET /artist/:id/summary
+// The page's second chance at a Wikipedia summary; see GET /album/:id/summary.
+artists.get('/:id/summary', async (c) => {
+  const id = parseInt(c.req.param('id'))
+  if (!Number.isInteger(id)) return c.json({ error: 'Not found' }, 404)
+  const artist = await db
+    .selectFrom('artists')
+    .select(['name', 'wikipedia'])
+    .where('id', '=', id)
+    .executeTakeFirst()
+  if (!artist) return c.json({ error: 'Not found' }, 404)
+  const summary = await getArtistSummary(artist.name, artist.wikipedia)
+  return c.json({ summary })
+})
+
 // GET /artist/:id
 artists.get('/:id', async (c) => {
   const id = parseInt(c.req.param('id'))

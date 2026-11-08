@@ -28,6 +28,7 @@ import { SpotifyTrackRow } from '../components/SpotifyResults';
 import { useSpotifyArtistCatalog } from '../player/spotify/useSpotifyArtistAlbums';
 import { isSpotifyTrack, toSpotifyQueueTrack } from '../utils/trackSource';
 import { mergeArtistAlbums } from '../utils/mergeArtistAlbums';
+import { useSummaryRetry } from '../hooks/useSummaryRetry';
 
 const Artist = () => {
   const { id } = useParams();
@@ -38,6 +39,12 @@ const Artist = () => {
   const { data: artistData, loading, error } = useFetch(
     () => apiService.getArtist(id).then((response) => response.data),
     [id]
+  );
+  // The page response gives up on a slow Wikipedia after ~1s; ask again if it came back without a summary.
+  const summary = useSummaryRetry(
+    artistData?.summary,
+    () => apiService.getArtistSummary(id).then((response) => response.data.summary),
+    { loaded: !loading && !!artistData, key: id }
   );
   const queue = useQueueActions(
     () => apiService.getRandomScopeTracks('artist', artistData.artist.id).then((response) => response.data.tracks),
@@ -74,7 +81,7 @@ const Artist = () => {
     return <PageError message={error ? 'Failed to load artist' : 'Artist not found'} />;
   }
 
-  const { artist, summary, albums, singles, appears_on, performances, related_artists, members, group_albums, similar_artists } = artistData;
+  const { artist, albums, singles, appears_on, performances, related_artists, members, group_albums, similar_artists } = artistData;
   const mergedAlbums = mergeArtistAlbums(albums, spotifyAlbums);
 
   const handlePlaySingles = () => {

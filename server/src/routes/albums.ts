@@ -63,6 +63,21 @@ albums.get('/recent', requireAuth, async (c) => {
   })))
 })
 
+// GET /album/:id/summary
+// The page's second chance at a Wikipedia summary: GET /album/:id only waits
+// SUMMARY_DEADLINE_MS for it, so a slow Wikipedia leaves that response without
+// one and the frontend asks here. No deadline; the fetch timeout bounds it.
+albums.get('/:id/summary', async (c) => {
+  const id = parseInt(c.req.param('id'))
+  if (!Number.isInteger(id)) return c.json({ error: 'Not found' }, 404)
+  const album = await albumsService.findAlbumById(id)
+  if (!album) return c.json({ error: 'Not found' }, 404)
+  const artist = await albumsService.findArtistById(album.artist_id)
+  if (!artist) return c.json({ error: 'Artist not found' }, 404)
+  const summary = await getAlbumSummary(artist.name, album.title, artist.wikipedia, album.wikipedia)
+  return c.json({ summary })
+})
+
 // GET /album/:id
 albums.get('/:id', async (c) => {
   const id = parseInt(c.req.param('id'))

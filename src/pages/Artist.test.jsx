@@ -15,6 +15,7 @@ vi.mock('../services/api', () => ({
     getImageUrl: () => 'http://example.com/image.jpg',
     getRandomScopeTracks: vi.fn(),
     getSpotifyArtistAlbums: vi.fn(),
+    getArtistSummary: vi.fn(),
   },
 }));
 
@@ -57,6 +58,7 @@ beforeEach(() => {
   useFavoritesStore.setState({ isFavorite: () => false, toggleFavorite: vi.fn() });
   usePlayerStore.setState({ addTracks: vi.fn(), setQueueSource: vi.fn() });
   apiService.getRandomScopeTracks.mockResolvedValue({ data: { tracks: [] } });
+  apiService.getArtistSummary.mockClear().mockResolvedValue({ data: { summary: null } });
 });
 
 describe('Artist page — Overtone menu item', () => {
@@ -478,5 +480,18 @@ describe('Artist page — not on Spotify (#72)', () => {
     renderArtist();
     await screen.findByText('Test Artist');
     expect(screen.queryByText(/aren't on Spotify/)).toBeNull();
+  });
+});
+
+describe('Artist page — Wikipedia summary retry', () => {
+  test('shows the summary fetched again when the artist response came back without one', async () => {
+    apiService.getArtist.mockResolvedValue({ data: { ...artistData, summary: null, albums: [] } });
+    apiService.getArtistSummary.mockResolvedValue({
+      data: { summary: { summary: 'Test Artist is a band.', url: 'https://en.wikipedia.org/wiki/Test_Artist' } },
+    });
+    renderArtist();
+
+    expect(await screen.findByText(/Test Artist is a band\./)).toBeInTheDocument();
+    expect(apiService.getArtistSummary).toHaveBeenCalledWith('1');
   });
 });

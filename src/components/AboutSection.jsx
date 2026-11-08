@@ -1,7 +1,5 @@
 import Wikipedia from './Wikipedia';
-
-const hasWikipediaContent = (summary) =>
-  !!summary && Object.keys(summary).length > 0 && !!summary.summary && summary.summary.trim() !== '';
+import { hasWikipediaContent } from '../utils/wikipediaSummary';
 
 // Promotes the Wikipedia excerpt out of the header's action row and into its
 // own content section — it's a fact about the album/artist, not a playback
