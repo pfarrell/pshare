@@ -50,6 +50,7 @@ import MusicPlayerWrapper from './components/player/MusicPlayerWrapper';
 import NowPlaying from './components/NowPlaying';
 import { applyJukeboxModeFromUrl, isJukeboxMode } from './jukebox/jukeboxMode';
 import JukeboxApp from './jukebox/JukeboxApp';
+import { useNasWarmup } from './hooks/useNasWarmup';
 import GuestApp from './jukebox/guest/GuestApp';
 
 // Handle scroll to top on route changes
@@ -82,6 +83,9 @@ function App() {
     applyJukeboxModeFromUrl();
     return isJukeboxMode();
   });
+
+  // Wake the music NAS early (every tree: browser, kiosk and phone guests)
+  useNasWarmup();
 
   // Initialize auth on app startup
   useEffect(() => {

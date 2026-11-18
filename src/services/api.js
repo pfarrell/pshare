@@ -190,6 +190,9 @@ export const apiService = {
   markJukeboxDelivered: (deviceId, submissionId) => api.post(`/jukebox/devices/${deviceId}/queue/${submissionId}/delivered`),
   rotateJukeboxToken: (deviceId) => api.post(`/jukebox/devices/${deviceId}/rotate-token`),
 
+  // Wake the music NAS before anything is played (fire-and-forget; see useNasWarmup)
+  warmMusicStore: () => api.post('/stream/warm'),
+
   // log
   log: (id, playlistId = null, collectionId = null) => api.get(`/log/${id}${qs({ playlist: playlistId, collection: collectionId })}`),
   getLogs: (page = 1, limit = 25, source = 'all') => api.get(`/log/admin${qs({ page, limit, source })}`), // source: all | library | spotify (#72)
