@@ -7,6 +7,7 @@ import { requireAuth } from '../middleware/auth.js'
 import type { Variables } from '../types.js'
 import { pipeFile } from '../utils/pipeFile.js'
 import { id3v2TagLength, parseByteRange } from '../utils/audioRange.js'
+import { musicStoreWarmer } from '../services/musicStoreWarmup.js'
 
 const streams = new Hono()
 export const downloads = new Hono<{ Variables: Variables }>()
@@ -31,6 +32,14 @@ function buildContentDisposition(artistName: string, title: string, fileType: st
   const encoded = encodeURIComponent(rawName)
   return `attachment; filename="${asciiName}"; filename*=UTF-8''${encoded}`
 }
+
+// POST /stream/warm — wake the music NAS ahead of playback (see services/musicStoreWarmup.ts).
+// Answers immediately; the read runs in the background, throttled server-side. Public like
+// /stream itself. A no-op in dev mode when streams are proxied to production.
+streams.post('/warm', (c) => {
+  const started = process.env.BEMUSED_DEV ? false : musicStoreWarmer.warm()
+  return c.json({ started }, 202)
+})
 
 // GET /stream/:id  — stream an audio file with range request support
 streams.get('/:id', async (c) => {

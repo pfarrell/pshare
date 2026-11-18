@@ -102,3 +102,10 @@ test('a tag that claims to fill the whole file is ignored rather than serving an
   assert.equal(res.status, 200)
   assert.equal(body.length, 100)
 })
+
+test('POST /stream/warm answers immediately with 202', async () => {
+  const res = await app.request('/stream/warm', { method: 'POST' })
+  assert.equal(res.status, 202)
+  const body = await res.json() as { started: boolean }
+  assert.equal(typeof body.started, 'boolean')
+})
