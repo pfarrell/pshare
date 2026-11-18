@@ -23,8 +23,11 @@ const makeAudioRef = () => {
   return { current: audio };
 };
 
+const realRecoverStream = usePlayerStore.getState().recoverStream;
+
 beforeEach(() => {
   usePlayerStore.setState({
+    recoverStream: realRecoverStream, streamRecovery: null,
     audioElementA: null, audioElementB: null, activeSlot: 'a',
     currentTrack: null, currentTime: 0, duration: 0, isPlaying: false, isBuffering: false,
     nextTrackIndex: -1, playlist: [], playlistFinished: false, queueSource: null,
@@ -117,6 +120,48 @@ test('ended on the standby element does not call playNext', () => {
   renderHook(() => usePlayerEngine(audioRefA, audioRefB));
   audioRefB.current.dispatchEvent(new Event('ended'));
   expect(playNext).not.toHaveBeenCalled();
+});
+
+test('a broken-stream ended is recovered instead of advancing', () => {
+  const audioRefA = makeAudioRef();
+  const audioRefB = makeAudioRef();
+  const playNext = vi.fn();
+  const recoverStream = vi.fn(() => true);
+  usePlayerStore.setState({ playNext, recoverStream });
+  renderHook(() => usePlayerEngine(audioRefA, audioRefB));
+  audioRefA.current.dispatchEvent(new Event('ended'));
+  expect(recoverStream).toHaveBeenCalledWith('ended');
+  expect(playNext).not.toHaveBeenCalled();
+});
+
+test('an ended that is not recovered advances as usual', () => {
+  const audioRefA = makeAudioRef();
+  const audioRefB = makeAudioRef();
+  const playNext = vi.fn();
+  usePlayerStore.setState({ playNext, recoverStream: vi.fn(() => false) });
+  renderHook(() => usePlayerEngine(audioRefA, audioRefB));
+  audioRefA.current.dispatchEvent(new Event('ended'));
+  expect(playNext).toHaveBeenCalled();
+});
+
+test('an error on the active element asks the store to recover the stream', () => {
+  const audioRefA = makeAudioRef();
+  const audioRefB = makeAudioRef();
+  const recoverStream = vi.fn(() => true);
+  usePlayerStore.setState({ recoverStream });
+  renderHook(() => usePlayerEngine(audioRefA, audioRefB));
+  audioRefA.current.dispatchEvent(new Event('error'));
+  expect(recoverStream).toHaveBeenCalledWith('error');
+});
+
+test('an error on the standby (prefetching) element is ignored', () => {
+  const audioRefA = makeAudioRef();
+  const audioRefB = makeAudioRef();
+  const recoverStream = vi.fn(() => true);
+  usePlayerStore.setState({ recoverStream });
+  renderHook(() => usePlayerEngine(audioRefA, audioRefB));
+  audioRefB.current.dispatchEvent(new Event('error'));
+  expect(recoverStream).not.toHaveBeenCalled();
 });
 
 test('after activeSlot flips to b, events are read from B, not A', () => {
