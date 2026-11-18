@@ -20,6 +20,11 @@ StandardError=journal
 # Environment — production values go here or in EnvironmentFile
 EnvironmentFile=/var/www/bemused-node/shared/.env
 Environment=NODE_ENV=production
+# libuv's file-I/O thread pool (default 4). The music share is a hard NFS mount: while the NAS
+# wakes (30s+), each pending read holds a pool thread, and with only 4 a few cold reads would
+# also stall every other fs call, bcrypt (login) and DNS. Production sets this in the
+# EnvironmentFile above (shared/.env), since this unit file is installed by hand.
+Environment=UV_THREADPOOL_SIZE=16
 
 [Install]
 WantedBy=multi-user.target
