@@ -3,6 +3,7 @@ import { apiService } from '../services/api';
 import { isSpotifyTrack, localTrackIds } from '../utils/trackSource';
 import { markOutgoingEnd, markIncomingAudible, isTransitionTimingEnabled, clearPendingTransition } from '../player/spotify/transitionTimer';
 import { SPOTIFY_END_LEAD_MS } from '../player/spotify/constants';
+import { isPrematureEnd, nextRecovery, retryDelayMs } from '../player/streamRecovery';
 
 // "Shuffle scope" (collection, artist, ...) fetches tracks from the scope in batches rather
 // than all at once (a scope can be large) — an initial batch on entry, then another whenever
@@ -117,6 +118,9 @@ const activateSpotifyOnGesture = (source) => {
 // after the user has moved on is recognized as stale (index alone isn't enough — trimQueueHistory
 // shifts indices).
 let playAttempt = 0;
+
+// The pending stream-recovery retry (see recoverStream), at most one at a time.
+let recoveryTimer = null;
 
 // Silences the <audio> pair when a Spotify track takes over. For an auto advance, an element
 // still playing (the outgoing track's last few hundred ms, see usePlayerEngine's local→Spotify
@@ -327,6 +331,51 @@ export const usePlayerStore = create((set, get) => ({
   setBuffering: (isBuffering) => set({ isBuffering }),
   setCurrentTime: (currentTime) => set({ currentTime }),
   setDuration: (duration) => set({ duration }),
+
+  // Last stream-recovery attempt ({ url, position, attempts }), see src/player/streamRecovery.js.
+  streamRecovery: null,
+  // A local track's stream broke: 'ended' arrived well before the track's known length, or the
+  // element reported an 'error' (typically the NAS waking from sleep and a request dying).
+  // Reloads the same track and resumes at the position it stopped at, after a short backoff.
+  // Returns true when a retry was scheduled; false means "not a broken stream, or out of
+  // retries": the caller carries on as before (advance on 'ended', stop on 'error').
+  recoverStream: (reason) => {
+    const audio = get().getActiveAudio();
+    const { currentTrack: track, currentTrackIndex: index, activeSource } = get();
+    if (!audio || !track?.url || isSpotifyTrack(track) || activeSource !== 'local') return false;
+    const position = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+    if (reason === 'ended') {
+      const expected = Number(track.duration) > 0 ? Number(track.duration) : get().duration;
+      if (!isPrematureEnd(position, expected)) return false;
+    }
+    const recovery = nextRecovery(get().streamRecovery, { url: track.url, position });
+    if (recovery.giveUp) {
+      console.warn(`Stream for "${track.title}" kept failing at ${Math.round(position)}s; giving up`);
+      set({ streamRecovery: null });
+      return false;
+    }
+    console.warn(`Stream for "${track.title}" broke (${reason}) at ${Math.round(position)}s; retry ${recovery.attempts}`);
+    // 'ended' always means it was playing; an 'error' while paused reloads without playing.
+    const resumePlaying = reason === 'ended' || !audio.paused;
+    set({ streamRecovery: recovery, isBuffering: true });
+    clearTimeout(recoveryTimer);
+    recoveryTimer = setTimeout(() => {
+      recoveryTimer = null;
+      const still = () => get().currentTrackIndex === index && get().currentTrack === track
+        && get().getActiveAudio() === audio && get().activeSource === 'local';
+      if (!still()) return;
+      const seekToPosition = () => {
+        if (still() && audio.src.endsWith(track.url)) audio.currentTime = position;
+      };
+      audio.addEventListener('loadedmetadata', seekToPosition, { once: true });
+      audio.src = track.url;
+      audio.load();
+      if (resumePlaying) {
+        audio.play().catch((error) => console.error('Playback failed:', error));
+      }
+    }, retryDelayMs(recovery.attempts));
+    return true;
+  },
   // Internal — recomputed at the end of every action that changes what "next" resolves to.
   syncNextTrackIndex: () => set({ nextTrackIndex: computeNextIndex(get()) }),
 

@@ -134,7 +134,15 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
     };
     const handleEnded = (event) => {
       if (!isActive(event.target)) return;
+      // A stream cut off by a slow (sleeping) NAS often surfaces as an early 'ended':
+      // resume the same track rather than skipping the rest of it.
+      if (usePlayerStore.getState().recoverStream('ended')) return;
       usePlayerStore.getState().playNext();
+    };
+    const handleError = (event) => {
+      if (!isActive(event.target)) return;
+      usePlayerStore.getState().setBuffering(false);
+      usePlayerStore.getState().recoverStream('error');
     };
 
     [audioA, audioB].forEach((audio) => {
@@ -144,7 +152,7 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
       audio.addEventListener('waiting', handleBufferingStart);
       audio.addEventListener('playing', handleBufferingEnd);
       audio.addEventListener('canplay', handleBufferingEnd);
-      audio.addEventListener('error', handleBufferingEnd);
+      audio.addEventListener('error', handleError);
       audio.addEventListener('play', handlePlay);
       audio.addEventListener('pause', handlePause);
       audio.addEventListener('ended', handleEnded);
@@ -168,7 +176,7 @@ export const usePlayerEngine = (audioRefA, audioRefB) => {
         audio.removeEventListener('waiting', handleBufferingStart);
         audio.removeEventListener('playing', handleBufferingEnd);
         audio.removeEventListener('canplay', handleBufferingEnd);
-        audio.removeEventListener('error', handleBufferingEnd);
+        audio.removeEventListener('error', handleError);
         audio.removeEventListener('play', handlePlay);
         audio.removeEventListener('pause', handlePause);
         audio.removeEventListener('ended', handleEnded);

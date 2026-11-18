@@ -63,9 +63,12 @@ streams.get('/:id', async (c) => {
 
   const filePath = path.resolve(track.absolute_path)
 
+  // Async on purpose: the music share is a `hard` NFS mount, so while the NAS spins its disks
+  // up (30s+ after idle) a file access blocks until it answers. statSync would block Node's
+  // only thread for all of that, stalling every other request and stream behind this one.
   let stat: fs.Stats
   try {
-    stat = fs.statSync(filePath)
+    stat = await fs.promises.stat(filePath)
   } catch {
     return c.json({ error: 'File not found' }, 404)
   }
@@ -115,7 +118,7 @@ downloads.get('/:id', requireAuth, async (c) => {
 
   let stat: fs.Stats
   try {
-    stat = fs.statSync(file.absolutePath)
+    stat = await fs.promises.stat(file.absolutePath)
   } catch {
     return c.json({ error: 'File not found' }, 404)
   }

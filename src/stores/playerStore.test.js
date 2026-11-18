@@ -1592,3 +1592,114 @@ describe('volume', () => {
     warn.mockRestore();
   });
 });
+
+describe('recoverStream (a local stream that broke mid-play)', () => {
+  const listeningAudio = (overrides = {}) => {
+    const listeners = {};
+    return {
+      ...mockAudioElement(),
+      addEventListener: vi.fn((type, fn) => { (listeners[type] ||= []).push(fn); }),
+      removeEventListener: vi.fn(),
+      fire: (type) => { const fns = listeners[type] || []; listeners[type] = []; fns.forEach((fn) => fn()); },
+      ...overrides,
+    };
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    usePlayerStore.setState({ streamRecovery: null, activeSource: 'local' });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const playing = (audio, t = track(1)) => {
+    setActiveAudio(audio, { playlist: [t, track(2)], currentTrackIndex: 0, currentTrack: t });
+  };
+
+  test('a premature ended reloads the same track and resumes where it stopped', () => {
+    const audio = listeningAudio({ src: 'http://x/stream/1', currentTime: 42 });
+    playing(audio);
+    expect(usePlayerStore.getState().recoverStream('ended')).toBe(true);
+    expect(usePlayerStore.getState().isBuffering).toBe(true);
+    expect(audio.load).not.toHaveBeenCalled();
+
+    vi.runAllTimers();
+    expect(audio.src).toBe('/stream/1');
+    expect(audio.load).toHaveBeenCalled();
+    expect(audio.play).toHaveBeenCalled();
+    audio.currentTime = 0;
+    audio.fire('loadedmetadata');
+    expect(audio.currentTime).toBe(42);
+  });
+
+  test('an ended at the real end of the track is not recovered', () => {
+    const audio = listeningAudio({ currentTime: 179 });
+    playing(audio);
+    expect(usePlayerStore.getState().recoverStream('ended')).toBe(false);
+    vi.runAllTimers();
+    expect(audio.load).not.toHaveBeenCalled();
+  });
+
+  test('without a DB duration, the element-reported duration from load is used', () => {
+    const audio = listeningAudio({ currentTime: 42 });
+    playing(audio, track(1, { duration: null }));
+    usePlayerStore.setState({ duration: 200 });
+    expect(usePlayerStore.getState().recoverStream('ended')).toBe(true);
+  });
+
+  test('an error while playing reloads and keeps playing', () => {
+    const audio = listeningAudio({ currentTime: 12, paused: false });
+    playing(audio);
+    expect(usePlayerStore.getState().recoverStream('error')).toBe(true);
+    vi.runAllTimers();
+    expect(audio.load).toHaveBeenCalled();
+    expect(audio.play).toHaveBeenCalled();
+  });
+
+  test('an error while paused reloads but stays paused', () => {
+    const audio = listeningAudio({ currentTime: 12, paused: true });
+    playing(audio);
+    expect(usePlayerStore.getState().recoverStream('error')).toBe(true);
+    vi.runAllTimers();
+    expect(audio.load).toHaveBeenCalled();
+    expect(audio.play).not.toHaveBeenCalled();
+  });
+
+  test('gives up after repeated failures at the same spot', () => {
+    const audio = listeningAudio({ currentTime: 42 });
+    playing(audio);
+    const { recoverStream } = usePlayerStore.getState();
+    expect(recoverStream('ended')).toBe(true);
+    expect(recoverStream('ended')).toBe(true);
+    expect(recoverStream('ended')).toBe(true);
+    expect(recoverStream('ended')).toBe(false);
+  });
+
+  test('a pending retry is dropped if the user moves to another track', () => {
+    const audio = listeningAudio({ currentTime: 42 });
+    playing(audio);
+    usePlayerStore.getState().recoverStream('ended');
+    usePlayerStore.getState().playTrackAtIndex(1);
+    audio.load.mockClear();
+    vi.runAllTimers();
+    expect(audio.load).not.toHaveBeenCalled();
+    expect(audio.src).toBe('/stream/2');
+  });
+
+  test('the resume seek does not apply to a different track loaded meanwhile', () => {
+    const audio = listeningAudio({ currentTime: 42 });
+    playing(audio);
+    usePlayerStore.getState().recoverStream('ended');
+    vi.runAllTimers();
+    usePlayerStore.getState().playTrackAtIndex(1);
+    audio.currentTime = 0;
+    audio.fire('loadedmetadata');
+    expect(audio.currentTime).toBe(0);
+  });
+
+  test('Spotify tracks are never recovered here', () => {
+    const audio = listeningAudio({ currentTime: 42 });
+    const spotify = { title: 'S', uri: 'spotify:track:x', source: 'spotify', duration: 180 };
+    playing(audio, spotify);
+    expect(usePlayerStore.getState().recoverStream('ended')).toBe(false);
+  });
+});
